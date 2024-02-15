@@ -1,9 +1,9 @@
-package ru.mngerasimenko.shoppinglist.utils;
+package ru.mngerasimenko.todolist.model.status;
 
-public class Status {
+public class StatusTrue {
     private boolean status;
 
-    public Status() {
+    public StatusTrue() {
         this.status = true;
     }
 

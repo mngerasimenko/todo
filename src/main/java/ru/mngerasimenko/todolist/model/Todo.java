@@ -1,6 +1,8 @@
-package ru.mngerasimenko.shoppinglist.entity;
+package ru.mngerasimenko.todolist.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -19,39 +21,45 @@ import org.hibernate.annotations.OnDeleteAction;
 
 @JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"})
 @Entity
-@Table(name = "shopping")
-public class Shopping {
+@Table(name = "todo")
+public class Todo {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @Column(name = "name", nullable = false)
     @NotBlank
     @Size(min = 2, max = 120)
-    private String name;
+    private String title;
     @Column(name = "date_time", nullable = false)
     @NotNull
-    private Date dateTime = new Date();
+    private Date dateTime;
+    @Column(name = "done", nullable = false)
+    @NotNull
+    private boolean done;
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "user_id", nullable = false)
     @OnDelete(action = OnDeleteAction.CASCADE)
     private User user;
 
-    public Shopping() {
+    private Long authKey;
+
+    public Todo() {
     }
 
-    public Shopping(String name) {
-        this(null, name, null);
+    public Todo(String title) {
+        this(null, title, null, false);
     }
 
-    public Shopping(String name, User user) {
-        this(null, name, user);
+    public Todo(String title, User user) {
+        this(null, title, user, false);
     }
 
-    public Shopping(Long id, String name, User user) {
+    public Todo(Long id, String title, User user, boolean done) {
         this.id = id;
-        this.name = name;
+        this.title = title;
         this.user = user;
+        this.done = done;
     }
 
     public void setId(Long id) {
@@ -62,14 +70,15 @@ public class Shopping {
         return id;
     }
 
-    public String getName() {
-        return name;
+    public String getTitle() {
+        return title;
     }
 
-    public void setName(String name) {
-        this.name = name;
+    public void setTitle(String name) {
+        this.title = name;
     }
 
+    @JsonIgnore
     public User getUser() {
         return user;
     }
@@ -86,6 +95,24 @@ public class Shopping {
         this.dateTime = dateTime;
     }
 
+    public boolean isDone() {
+        return done;
+    }
+
+    public void setDone(boolean done) {
+        this.done = done;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public Long getAuthKey() {
+        return authKey;
+    }
+
+    public void setAuthKey(Long authKey) {
+        this.authKey = authKey;
+    }
+
+    @JsonIgnore
     public boolean isNew() {
         return id == null;
     }

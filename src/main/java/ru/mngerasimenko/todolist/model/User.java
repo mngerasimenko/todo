@@ -1,4 +1,4 @@
-package ru.mngerasimenko.shoppinglist.entity;
+package ru.mngerasimenko.todolist.model;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -36,12 +36,13 @@ public class User {
     @NotBlank
     @Size(min = 5, max = 128)
     private String password;
+    @Column(name = "name")
     private String name;
 
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "user")
     @OrderBy("dateTime DESC")
     @OnDelete(action = OnDeleteAction.CASCADE)
-    private List<Shopping> shoppingList = new ArrayList<>();
+    private List<Todo> todoList = new ArrayList<>();
 
     public User() {
     }
@@ -90,11 +91,11 @@ public class User {
     }
 
     @JsonBackReference
-    public List<Shopping> getShoppingList() {
-        return shoppingList;
+    public List<Todo> getShoppingList() {
+        return todoList;
     }
 
-    public void setShoppingList(List<Shopping> shoppingList) {
-        this.shoppingList = shoppingList;
+    public void setShoppingList(List<Todo> todoList) {
+        this.todoList = todoList;
     }
 }

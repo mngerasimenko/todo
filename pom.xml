@@ -11,8 +11,8 @@
 	<groupId>ru.mngerasimenko</groupId>
 	<artifactId>todo</artifactId>
 	<version>1</version>
-	<name>shoppinglist</name>
-	<description>shoppinglist</description>
+	<name>todolist</name>
+	<description>todolist</description>
 	<properties>
 		<java.version>17</java.version>
 	</properties>

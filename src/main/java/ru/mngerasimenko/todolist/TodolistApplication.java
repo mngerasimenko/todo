@@ -1,13 +1,12 @@
-package ru.mngerasimenko.shoppinglist;
+package ru.mngerasimenko.todolist;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class ShoppinglistApplication {
-
+public class TodolistApplication {
     public static void main(String[] args) {
-        SpringApplication.run(ShoppinglistApplication.class, args);
+        SpringApplication.run(TodolistApplication.class, args);
     }
 
 }
