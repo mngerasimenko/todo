@@ -12,7 +12,9 @@ public interface Constants {
     String EMPTY_AUTHKEY = "Empty authKey";
     String EMPTY_TODO_ID = "Empty id";
     String EMPTY_TITLE = "Empty title";
+    String EMPTY_DONE = "Empty done";
+    String FAIL = "Fail";
+    String DELETED = "Deleted";
     String APP_NAME = "СПИСОК ЗАДАЧ";
-
 
 }

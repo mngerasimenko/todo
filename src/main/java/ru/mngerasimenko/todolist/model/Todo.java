@@ -35,7 +35,7 @@ public class Todo {
     private Date dateTime;
     @Column(name = "done", nullable = false)
     @NotNull
-    private boolean done;
+    private Boolean done;
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "user_id", nullable = false)
@@ -55,7 +55,7 @@ public class Todo {
         this(null, title, user, false);
     }
 
-    public Todo(Long id, String title, User user, boolean done) {
+    public Todo(Long id, String title, User user, Boolean done) {
         this.id = id;
         this.title = title;
         this.user = user;
@@ -95,7 +95,7 @@ public class Todo {
         this.dateTime = dateTime;
     }
 
-    public boolean isDone() {
+    public Boolean isDone() {
         return done;
     }
 

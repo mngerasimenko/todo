@@ -25,9 +25,11 @@ public class TodoService {
                 return null;
             } else {
                 todo.setDateTime(oldTodo.getDateTime());
+                todo.setDone(oldTodo.isDone());
             }
         } else {
             todo.setDateTime(new Date());
+            todo.setDone(false);
         }
         todo.setUser(userRepository.getReferenceById(todo.getAuthKey()));
         return todoRepository.save(todo);
@@ -45,8 +47,9 @@ public class TodoService {
         return todoRepository.findAllByUserIdAndDoneOrderByDateTime(userId, true);
     }
 
-    public void delete(long userId, long shoppingId) {
-        todoRepository.deleteByUserIdAndId(userId, shoppingId);
+    public boolean delete(Todo todo) {
+        int delete = todoRepository.deleteByUserIdAndId(todo.getAuthKey(), todo.getId());
+        return delete == 1;
     }
 
     public Todo done(Todo todo) {
@@ -54,7 +57,7 @@ public class TodoService {
         if (foundTodo == null) {
             return null;
         }
-        foundTodo.setDone(true);
+        foundTodo.setDone(todo.isDone());
         return todoRepository.save(foundTodo);
     }
 }

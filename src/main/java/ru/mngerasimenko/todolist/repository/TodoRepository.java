@@ -13,6 +13,6 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
 
     @Modifying
     @Transactional
-    void deleteByUserIdAndId(long userId, long shoppingId);
+    int deleteByUserIdAndId(long userId, long todoId);
 
 }

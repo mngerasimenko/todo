@@ -17,4 +17,8 @@ public class ValidateUtils {
     public static boolean isTitleValid(Todo todo) {
         return !StringUtils.isBlank(todo.getTitle());
     }
+
+    public static boolean isDoneValid(Todo todo) {
+        return todo.isDone() != null;
+    }
 }

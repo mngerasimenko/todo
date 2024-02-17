@@ -1,5 +1,6 @@
 package ru.mngerasimenko.todolist.controller;
 
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -7,6 +8,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import ru.mngerasimenko.todolist.model.Todo;
+import ru.mngerasimenko.todolist.model.status.StatusMessage;
 import ru.mngerasimenko.todolist.service.TodoService;
 import ru.mngerasimenko.todolist.model.status.Status;
 import ru.mngerasimenko.todolist.model.status.StatusTodo;
@@ -33,7 +35,7 @@ public class TodoRestController {
         return new StatusTodo(LOADED, todoService.getAllDone(userId));
     }
 
-    @PostMapping("/todo-done")
+    @PostMapping("/done")
     public Status done(@RequestBody Todo todo) {
         if (!ValidateUtils.isAuthValid(todo)) {
             return new Status(EMPTY_AUTHKEY);
@@ -41,6 +43,10 @@ public class TodoRestController {
         if (!ValidateUtils.isIdValid(todo)) {
             return new Status(EMPTY_TODO_ID);
         }
+        if (!ValidateUtils.isDoneValid(todo)) {
+            return new Status(EMPTY_DONE);
+        }
+
         Todo modifiedTodo = todoService.done(todo);
         if (modifiedTodo == null) {
             return new Status(BAD_REQUEST);
@@ -81,4 +87,19 @@ public class TodoRestController {
         }
         return new StatusTodo(MODIFIED, updateTodo);
     }
+
+    @DeleteMapping("/todos")
+    public Status delete(@RequestBody Todo todo) {
+        if (!ValidateUtils.isAuthValid(todo)) {
+            return new Status(EMPTY_AUTHKEY);
+        }
+        if (!ValidateUtils.isIdValid(todo)) {
+            return new Status(EMPTY_TODO_ID);
+        }
+        if (todoService.delete(todo)) {
+            return new StatusMessage(DELETED, "Todo with id " + todo.getId() + " was delete successfully");
+        }
+        return new StatusMessage(FAIL, "Todo with id " + todo.getId() + " was NOT deleted");
+    }
+
 }
