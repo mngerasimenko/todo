@@ -40,11 +40,11 @@ public class TodoService {
     }
 
     public List<Todo> getAllNotDone(long userId) {
-        return todoRepository.findAllByUserIdAndDoneOrderByDateTime(userId, false);
+        return todoRepository.findAllByUserIdAndDoneOrderByIdDesc(userId, false);
     }
 
     public List<Todo> getAllDone(long userId) {
-        return todoRepository.findAllByUserIdAndDoneOrderByDateTime(userId, true);
+        return todoRepository.findAllByUserIdAndDoneOrderByIdDesc(userId, true);
     }
 
     public boolean delete(Todo todo) {
