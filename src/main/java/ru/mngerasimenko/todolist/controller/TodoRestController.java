@@ -3,6 +3,7 @@ package ru.mngerasimenko.todolist.controller;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -35,7 +36,7 @@ public class TodoRestController {
         return new StatusTodo(LOADED, todoService.getAllDone(userId));
     }
 
-    @PostMapping("/done")
+    @PutMapping("/done")
     public Status done(@RequestBody Todo todo) {
         if (!ValidateUtils.isAuthValid(todo)) {
             return new Status(EMPTY_AUTHKEY);
@@ -70,7 +71,7 @@ public class TodoRestController {
         return new StatusTodo(CREATED, savedTodo);
     }
 
-    @PostMapping("/todo-edit")
+    @PutMapping("/todo-edit")
     public Status update(@RequestBody Todo todo) {
         if (!ValidateUtils.isAuthValid(todo)) {
             return new Status(EMPTY_AUTHKEY);
