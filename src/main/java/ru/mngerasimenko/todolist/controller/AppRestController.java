@@ -8,7 +8,7 @@ import ru.mngerasimenko.todolist.model.status.StatusTrue;
 
 @RestController
 @RequestMapping("/api")
-public class AdditionalRestController {
+public class AppRestController {
     @GetMapping("/status")
     public StatusTrue getStatus() {
         return new StatusTrue();
