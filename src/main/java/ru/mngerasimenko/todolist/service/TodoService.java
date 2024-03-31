@@ -43,6 +43,10 @@ public class TodoService {
         return todoRepository.findAllByUserIdAndDoneOrderByIdDesc(userId, false);
     }
 
+    public List<Todo> getAll(long userId) {
+        return todoRepository.findAllByUserId(userId);
+    }
+
     public List<Todo> getAllDone(long userId) {
         return todoRepository.findAllByUserIdAndDoneOrderByIdDesc(userId, true);
     }

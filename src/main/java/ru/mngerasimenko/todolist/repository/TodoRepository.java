@@ -7,6 +7,9 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.mngerasimenko.todolist.model.Todo;
 
 public interface TodoRepository extends JpaRepository<Todo, Long> {
+
+    List<Todo> findAllByUserId(long userId);
+
     List<Todo> findAllByUserIdAndDoneOrderByIdDesc(long userId, boolean done);
 
     Todo findByIdAndUserId(long id, long userId);

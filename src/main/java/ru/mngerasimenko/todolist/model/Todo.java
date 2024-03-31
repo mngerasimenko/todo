@@ -47,6 +47,11 @@ public class Todo {
     public Todo() {
     }
 
+    public Todo(long userId) {
+        this();
+        this.setAuthKey(userId);
+    }
+
     public Todo(String title) {
         this(null, title, null, false);
     }
@@ -54,6 +59,8 @@ public class Todo {
     public Todo(String title, User user) {
         this(null, title, user, false);
     }
+
+
 
     public Todo(Long id, String title, User user, Boolean done) {
         this.id = id;
