@@ -59,8 +59,6 @@ public class ListView extends VerticalLayout {
         grid.addClassNames("todo-grid");
         grid.setSizeFull();
         grid.setColumns("title", "dateTime");
-        //grid.addColumn(todo -> todo.getTitle()).setHeader("Title");
-        //grid.addColumn(todo -> todo.getDateTime()).setHeader("Date");
         grid.getColumns().forEach(col -> col.setAutoWidth(true));
         grid.asSingleSelect().addValueChangeListener(event -> editTodo(event.getValue()));
     }
