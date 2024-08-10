@@ -11,20 +11,30 @@ import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 import ru.mngerasimenko.todolist.model.Todo;
+import ru.mngerasimenko.todolist.model.User;
+import ru.mngerasimenko.todolist.security.SecurityService;
 import ru.mngerasimenko.todolist.service.TodoService;
 
 @PermitAll
 @Route(value = "", layout = MainView.class)
 @PageTitle("Todo list")
 public class ListView extends VerticalLayout {
-    TodoService todoService;
-    Grid<Todo> grid = new Grid<>(Todo.class);
-    TextField filterText = new TextField();
-    TodoForm form;
+    private final SecurityService securityService;
+    private final TodoService todoService;
+    private final Grid<Todo> grid = new Grid<>(Todo.class);
+    private final TextField filterText = new TextField();
+    private TodoForm form;
+    private User authenticatedUser;
 
-    public ListView(TodoService todoService) {
+    public ListView(TodoService todoService, SecurityService securityService) {
         this.todoService = todoService;
+        this.securityService = securityService;
 
+        init();
+    }
+
+    private void init() {
+        authenticatedUser = securityService.getAuthenticatedUser();
         addClassName("list-view");
         setSizeFull();
         configureGrid();
@@ -52,7 +62,7 @@ public class ListView extends VerticalLayout {
     }
 
     private void updateList() {
-        grid.setItems(todoService.getAll(1));
+        grid.setItems(todoService.getAll(authenticatedUser.getId()));
     }
 
     private void configureGrid() {
@@ -80,7 +90,7 @@ public class ListView extends VerticalLayout {
 
     private void addTodo() {
         grid.asSingleSelect().clear();
-        editTodo(new Todo(1));
+        editTodo(new Todo(authenticatedUser.getId()));
     }
 
     private Component getContent() {

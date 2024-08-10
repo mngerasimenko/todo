@@ -10,10 +10,13 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.service.UserService;
 import ru.mngerasimenko.todolist.view.LoginView;
+import ru.mngerasimenko.todolist.view.MainView;
 
 
 @EnableWebSecurity
@@ -49,5 +52,25 @@ public class SecurityConfig extends VaadinWebSecurity {
         }
         return manager;
     }
+
+//    @Bean
+//    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+//        http.addFilterAfter(new LoginPageFilter(), UsernamePasswordAuthenticationFilter.class)
+//                .authorizeHttpRequests(authorizationManagerRequestMatcherRegistry ->
+//                        authorizationManagerRequestMatcherRegistry.requestMatchers(LOGIN_USER).permitAll()
+//                                .requestMatchers("/user*").hasRole("USER"))
+//                .formLogin(httpSecurityFormLoginConfigurer ->
+//                        httpSecurityFormLoginConfigurer.loginPage(LOGIN_USER)
+//                                .loginProcessingUrl("/user_login")
+//                                .failureUrl("/loginUser?error=loginError")
+//                                .defaultSuccessUrl("/userMainPage").permitAll())
+//                .logout(httpSecurityLogoutConfigurer ->
+//                        httpSecurityLogoutConfigurer
+//                                .logoutUrl("/user_logout")
+//                                .logoutSuccessUrl(LOGIN_USER)
+//                                .deleteCookies("JSESSIONID"))
+//                ;
+//        return http.build();
+//    }
 
 }

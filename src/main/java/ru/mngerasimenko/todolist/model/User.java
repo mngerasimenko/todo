@@ -36,7 +36,7 @@ public class User {
     @NotBlank
     @Size(min = 5, max = 128)
     private String password;
-    @Column(name = "name")
+    @Column(name = "name", nullable = false, unique = true)
     private String name;
 
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "user")
