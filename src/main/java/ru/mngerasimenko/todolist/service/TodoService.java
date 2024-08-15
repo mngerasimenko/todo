@@ -47,6 +47,10 @@ public class TodoService {
         return todoRepository.findAllByUserId(userId);
     }
 
+    public List<Todo> getAllByFilter(long userId, String filter) {
+        return todoRepository.findAllByUserIdAndTitleContainingIgnoreCase(userId, filter);
+    }
+
     public List<Todo> getAllDone(long userId) {
         return todoRepository.findAllByUserIdAndDoneOrderByIdDesc(userId, true);
     }

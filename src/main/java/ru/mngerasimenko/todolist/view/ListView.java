@@ -62,13 +62,13 @@ public class ListView extends VerticalLayout {
     }
 
     private void updateList() {
-        grid.setItems(todoService.getAll(authenticatedUser.getId()));
+        grid.setItems(todoService.getAllByFilter(authenticatedUser.getId(), filterText.getValue()));
     }
 
     private void configureGrid() {
         grid.addClassNames("todo-grid");
         grid.setSizeFull();
-        grid.setColumns("title", "dateTime");
+        grid.setColumns("title");
         grid.getColumns().forEach(col -> col.setAutoWidth(true));
         grid.asSingleSelect().addValueChangeListener(event -> editTodo(event.getValue()));
     }
