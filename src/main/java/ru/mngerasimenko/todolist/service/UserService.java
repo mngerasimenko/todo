@@ -1,11 +1,11 @@
 package ru.mngerasimenko.todolist.service;
 
 import io.micrometer.common.util.StringUtils;
-import java.util.List;
 import org.springframework.stereotype.Service;
 import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.repository.UserRepository;
-import ru.mngerasimenko.todolist.utils.Utils;
+
+import java.util.List;
 
 @Service
 public class UserService {
@@ -56,6 +56,13 @@ public class UserService {
             return null;
         }
         return repository.getUserByName(userName);
+    }
+
+    public User getUserByAuthId(String authId) {
+        if (StringUtils.isBlank(authId)) {
+            return null;
+        }
+        return repository.getUserByAuthId(authId);
     }
 
 }

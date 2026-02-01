@@ -6,11 +6,13 @@ import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.html.H1;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.theme.lumo.LumoUtility;
 import ru.mngerasimenko.todolist.security.SecurityService;
 
 
-public class MainView extends AppLayout {
+public class MainView extends AppLayout implements BeforeEnterObserver {
     private final SecurityService securityService;
 
     public MainView(SecurityService securityService) {
@@ -40,10 +42,11 @@ public class MainView extends AppLayout {
         addToNavbar(header);
     }
 
-//    private void createDrawer() {
-//        addToDrawer(new VerticalLayout(
-//                new RouterLink("List", ListView.class)
-//        ));
-//    }
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        if (securityService.getAuthenticatedUser() == null) {
+            event.rerouteTo(LoginView.class);
+        }
+    }
 
 }
