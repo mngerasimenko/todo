@@ -46,10 +46,21 @@ public class SecurityConfig extends VaadinWebSecurity {
 
         http.authorizeHttpRequests(auth ->
                 auth.requestMatchers(AntPathRequestMatcher.antMatcher(HttpMethod.GET, "/images/*.png"))
-                        .permitAll());
+                        .permitAll()
+                        .requestMatchers(AntPathRequestMatcher.antMatcher("/api/**"))
+                        .permitAll()
+                        .requestMatchers(AntPathRequestMatcher.antMatcher("/VAADIN/**"))
+                        .permitAll()
+                        .requestMatchers(AntPathRequestMatcher.antMatcher("/frontend/**"))
+                        .permitAll()
+        );
 
         super.configure(http);
         setLoginView(http, LoginView.class);
+
+        http.csrf(csrf -> csrf
+                .ignoringRequestMatchers(AntPathRequestMatcher.antMatcher("/api/**"))
+        );
     }
 
     @Bean
@@ -119,11 +130,11 @@ public class SecurityConfig extends VaadinWebSecurity {
 
             @Override
             protected boolean shouldNotFilter(HttpServletRequest request) {
-                // Не применяем фильтр для статических ресурсов
                 String path = request.getRequestURI();
                 return path.startsWith("/VAADIN/") ||
                         path.startsWith("/frontend/") ||
                         path.startsWith("/images/") ||
+                        path.startsWith("/api/") ||
                         path.contains("/login");
             }
 
