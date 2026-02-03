@@ -66,7 +66,7 @@
 					<execution>
 						<phase>package</phase>
 						<configuration>
-							<finalName>${project.artifactId}-${version}</finalName>
+							<finalName>${project.artifactId}-${project.version}</finalName>
 						</configuration>
 					</execution>
 				</executions>
