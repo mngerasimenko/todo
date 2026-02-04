@@ -18,7 +18,6 @@ import org.springframework.security.web.context.HttpSessionSecurityContextReposi
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 import ru.mngerasimenko.todolist.model.User;
-import ru.mngerasimenko.todolist.service.UserAuthService;
 import ru.mngerasimenko.todolist.service.UserService;
 import ru.mngerasimenko.todolist.view.LoginView;
 
@@ -28,11 +27,9 @@ import java.io.IOException;
 @Configuration
 public class SecurityConfig extends VaadinWebSecurity {
 
-    private final UserService userService;
     private final UserAuthService userAuthService;
 
-    public SecurityConfig(UserService userService, UserAuthService userAuthService) {
-        this.userService = userService;
+    public SecurityConfig(UserAuthService userAuthService) {
         this.userAuthService = userAuthService;
     }
 
@@ -98,14 +95,7 @@ public class SecurityConfig extends VaadinWebSecurity {
 
                     User authUser = userAuthService.getAuthUser(request);
                     if (authUser != null) {
-
-                        UserDetails userDetails = org.springframework.security.core.userdetails.User
-                                .withDefaultPasswordEncoder()
-                                .username(authUser.getName())
-                                .password(authUser.getPassword())
-                                .roles("USER", "ADMIN")
-                                .build();
-
+                        UserDetails userDetails = userAuthService.getUserDetailsByName(authUser.getName());
                         Authentication auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
                                 userDetails,
                                 null,
@@ -119,12 +109,21 @@ public class SecurityConfig extends VaadinWebSecurity {
                                 response
                         );
                         System.out.println("Auto-login performed for user: " + authUser.getName());
+                        response.sendRedirect(determineRedirectUrl(request));
 
                         return;
                     }
                 }
 
                 filterChain.doFilter(request, response);
+            }
+
+            private String determineRedirectUrl(HttpServletRequest request) {
+//                String requestURI = request.getRequestURI();
+//                if (requestURI.equals("/") || requestURI.equals("/login")) {
+//                    return request.getContextPath() + "/";
+//                }
+                return request.getContextPath() + "/";
             }
 
             @Override
