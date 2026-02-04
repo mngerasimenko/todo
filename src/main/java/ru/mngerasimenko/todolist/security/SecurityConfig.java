@@ -5,7 +5,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -13,8 +12,6 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.context.HttpRequestResponseHolder;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
@@ -26,7 +23,6 @@ import ru.mngerasimenko.todolist.service.UserService;
 import ru.mngerasimenko.todolist.view.LoginView;
 
 import java.io.IOException;
-import java.util.List;
 
 @EnableWebSecurity
 @Configuration
@@ -52,6 +48,7 @@ public class SecurityConfig extends VaadinWebSecurity {
                         .requestMatchers(AntPathRequestMatcher.antMatcher("/VAADIN/**"))
                         .permitAll()
                         .requestMatchers(AntPathRequestMatcher.antMatcher("/frontend/**"))
+                        .permitAll().requestMatchers(AntPathRequestMatcher.antMatcher("/.well-known/**"))
                         .permitAll()
         );
 
@@ -63,21 +60,21 @@ public class SecurityConfig extends VaadinWebSecurity {
         );
     }
 
-    @Bean
-    public UserDetailsService userDetailsService() {
-        InMemoryUserDetailsManager manager = new InMemoryUserDetailsManager();
-        List<User> userList = userService.getAll();
-        for (User user : userList) {
-            UserDetails userDetails = org.springframework.security.core.userdetails.User
-                    .withDefaultPasswordEncoder()
-                    .username(user.getName())
-                    .password(user.getPassword())
-                    .roles("USER", "ADMIN")
-                    .build();
-            manager.createUser(userDetails);
-        }
-        return manager;
-    }
+//    @Bean
+//    public UserDetailsService userDetailsService() {
+//        InMemoryUserDetailsManager manager = new InMemoryUserDetailsManager();
+//        List<User> userList = userService.getAll();
+//        for (User user : userList) {
+//            UserDetails userDetails = org.springframework.security.core.userdetails.User
+//                    .withDefaultPasswordEncoder()
+//                    .username(user.getName())
+//                    .password(user.getPassword())
+//                    .roles("USER", "ADMIN")
+//                    .build();
+//            manager.createUser(userDetails);
+//        }
+//        return manager;
+//    }
 
     private OncePerRequestFilter autoLoginFilter() {
         return new OncePerRequestFilter() {
@@ -122,6 +119,8 @@ public class SecurityConfig extends VaadinWebSecurity {
                                 response
                         );
                         System.out.println("Auto-login performed for user: " + authUser.getName());
+
+                        return;
                     }
                 }
 

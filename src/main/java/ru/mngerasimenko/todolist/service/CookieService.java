@@ -29,8 +29,8 @@ public class CookieService {
         return null;
     }
 
-    public void setCookie(String value, int maxAgeMonth) {
-        setCookie(COOKIE_NAME, value, maxAgeMonth);
+    public void setCookie(String value, int maxAgeDay) {
+        setCookie(COOKIE_NAME, value, maxAgeDay);
     }
 
     public void setCookie(String name, String value, int maxAgeMonth) {

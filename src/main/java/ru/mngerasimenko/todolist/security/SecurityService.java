@@ -13,7 +13,6 @@ public class SecurityService {
     private final UserService userService;
     private final CookieService cookieService;
     private final AuthenticationContext authenticationContext;
-    private User authenticatedUser;
 
 
     public SecurityService(UserService userService, CookieService cookieService, AuthenticationContext authenticationContext) {
@@ -23,31 +22,16 @@ public class SecurityService {
     }
 
     public User getAuthenticatedUser() {
-        if (authenticatedUser != null) {
-            return authenticatedUser;
-        }
-
         UserDetails userDetails = authenticationContext.getAuthenticatedUser(UserDetails.class).get();
         User user = userService.getUserByUserName(userDetails.getUsername());
         cookieService.setCookie(user.getAuthId(), 30);
 
-        authenticatedUser = user;
         return user;
     }
 
-
     public void logout() {
-        authenticatedUser = null;
         authenticationContext.logout();
         cookieService.deleteCookie();
     }
 
-//    public User getUser() {
-//        String userName = getAuthenticatedUser().getUsername();
-//        User user = userService.getUserByUserName(userName);
-//        if (user == null) {
-//            throw new NullPointerException("User " + userName + " not found");
-//        }
-//        return user;
-//    }
 }
