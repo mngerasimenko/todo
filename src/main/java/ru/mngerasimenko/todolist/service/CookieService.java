@@ -41,7 +41,7 @@ public class CookieService {
         cookie.setMaxAge(maxAgeMonth * DAY);
         cookie.setPath("/");
         cookie.setHttpOnly(true);
-        cookie.setSecure(true);
+        //cookie.setSecure(true);
 
         response.addCookie(cookie);
     }
