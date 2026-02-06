@@ -1,0 +1,72 @@
+services:
+  # ========================================
+  # СЕРВИС 1: Spring Boot приложение todo
+  # ========================================
+  todo-app:
+    image: todo-app:1.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: todo-app
+    ports:
+      - "8090:8090"
+
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-db:3306/todo?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC
+      - SPRING_DATASOURCE_USERNAME=user
+      - SPRING_DATASOURCE_PASSWORD=user
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+
+    networks:
+      - todo-network
+
+    # Автоматически перезапускать контейнер при падении
+    restart: unless-stopped
+
+  # ========================================
+  # СЕРВИС 2: MySQL база данных
+  # ========================================
+  mysql-db:
+    image: mysql:8.0
+    container_name: mysql-db
+    ports:
+      - "3307:3306"
+
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=todo
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=user
+
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+    networks:
+      - todo-network
+
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "user", "-puser"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+    # Автоматически перезапускать контейнер при падении
+    restart: unless-stopped
+
+# ========================================
+# СЕТИ
+# ========================================
+networks:
+  todo-network:
+    driver: bridge
+
+# ========================================
+# ТОМЫ (для сохранения данных БД)
+# ========================================
+volumes:
+  mysql-data:

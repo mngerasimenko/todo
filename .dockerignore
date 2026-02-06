@@ -1,0 +1,30 @@
+# Исключаем папки сборки и тестов
+target/
+.mvn/
+.mvnw
+.mvnw.cmd
+
+# Исключаем IDE-файлы
+.idea/
+.vscode/
+*.iml
+
+# Исключаем системные файлы
+.git/
+.gitignore
+.gitattributes
+
+# Исключаем логи
+*.log
+logs/
+
+# Исключаем временные файлы
+*.tmp
+*.swp
+*.swo
+.DS_Store
+
+# Исключаем ненужные артефакты Maven
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
