@@ -42,6 +42,7 @@ jobs:
           script: |
             cd /root
             docker pull mngerasimenko/todo-app:${{ github.sha }}
+            docker network create todo-network 2>/dev/null || true
             docker stop todo-app || true
             docker rm todo-app || true
             docker run -d \
