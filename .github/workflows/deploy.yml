@@ -47,7 +47,7 @@ jobs:
             docker run -d \
               --name todo-app \
               -p 8090:8090 \
-              -e SPRING_DATASOURCE_URL=jdbc:mysql://mysql-db:3306/todo?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC \
+              -e SPRING_DATASOURCE_URL='jdbc:mysql://mysql-db:3306/todo?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC' -e SPRING_DATASOURCE_USERNAME=user -e SPRING_DATASOURCE_PASSWORD=user --network todo-network --restart unless-stopped mngerasimenko/todo-app:${{ github.sha }} \
               -e SPRING_DATASOURCE_USERNAME=user \
               -e SPRING_DATASOURCE_PASSWORD=user \
               --network todo-network \
