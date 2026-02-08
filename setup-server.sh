@@ -101,9 +101,13 @@ docker run -d \
   -e POSTGRES_DB=todo \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=postgres \
-  -v postgres-/var/lib/postgresql/data \
+  -v postgres-data:/var/lib/postgresql/data \
   --network todo-network \
   --restart unless-stopped \
+  --health-cmd="pg_isready -U postgres" \
+  --health-interval=10s \
+  --health-timeout=5s \
+  --health-retries=10 \
   postgres:17 > /dev/null 2>&1
 
 echo "   ✅ Контейнер postgres-db запущен"
