@@ -1,23 +1,17 @@
 package ru.mngerasimenko.todolist.model;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
-import java.util.Date;
+import jakarta.persistence.*;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
+
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
-import org.hibernate.annotations.OnDelete;
-import org.hibernate.annotations.OnDeleteAction;
+import java.time.LocalDateTime;
 
 @JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"})
 @Entity
@@ -29,16 +23,17 @@ public class Todo {
     @Column(name = "name", nullable = false)
     @NotBlank
     @Size(min = 2, max = 120)
-    private String title;
+    private String name;
     @Column(name = "date_time", nullable = false)
     @NotNull
-    private Date dateTime;
+    private LocalDateTime dateTime;
     @Column(name = "done", nullable = false)
     @NotNull
     private Boolean done;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
+    @JsonBackReference
     @OnDelete(action = OnDeleteAction.CASCADE)
     private User user;
 
@@ -61,10 +56,9 @@ public class Todo {
     }
 
 
-
     public Todo(Long id, String title, User user, Boolean done) {
         this.id = id;
-        this.title = title;
+        this.name = title;
         this.user = user;
         this.done = done;
     }
@@ -77,12 +71,12 @@ public class Todo {
         return id;
     }
 
-    public String getTitle() {
-        return title;
+    public String getName() {
+        return name;
     }
 
     public void setTitle(String name) {
-        this.title = name;
+        this.name = name;
     }
 
     @JsonIgnore
@@ -94,11 +88,11 @@ public class Todo {
         this.user = user;
     }
 
-    public Date getDateTime() {
+    public LocalDateTime getDateTime() {
         return dateTime;
     }
 
-    public void setDateTime(Date dateTime) {
+    public void setDateTime(LocalDateTime dateTime) {
         this.dateTime = dateTime;
     }
 

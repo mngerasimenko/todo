@@ -1,7 +1,8 @@
 package ru.mngerasimenko.todolist.model;
 
-import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
@@ -12,16 +13,16 @@ import javax.validation.constraints.Size;
 import java.util.ArrayList;
 import java.util.List;
 
-@JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"})
 @Entity
-@Table(name = "users")
+@Table(name = "todo_users")
+@JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"})
 public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "authId", nullable = false, unique = true)
+    @Column(name = "auth_id", nullable = false, unique = true)
     @NotBlank
     @Size(max = 128)
     private String authId;
@@ -40,6 +41,7 @@ public class User {
 
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "user")
     @OrderBy("dateTime DESC")
+    @JsonManagedReference
     @OnDelete(action = OnDeleteAction.CASCADE)
     private List<Todo> todoList = new ArrayList<>();
 
@@ -98,6 +100,7 @@ public class User {
         this.authId = authId;
     }
 
+    @JsonIgnore
     public List<Todo> getTodoList() {
         return todoList;
     }
@@ -106,12 +109,4 @@ public class User {
         this.todoList = todoList;
     }
 
-    @JsonBackReference
-    public List<Todo> getShoppingList() {
-        return todoList;
-    }
-
-    public void setShoppingList(List<Todo> todoList) {
-        this.todoList = todoList;
-    }
 }

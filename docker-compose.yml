@@ -13,13 +13,13 @@ services:
       - "8090:8090"
 
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-db:3306/todo?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC
-      - SPRING_DATASOURCE_USERNAME=user
-      - SPRING_DATASOURCE_PASSWORD=user
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-db:5432/todo
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
 
     depends_on:
-      mysql-db:
+      postgres-db:
         condition: service_healthy
 
     networks:
@@ -29,28 +29,27 @@ services:
     restart: unless-stopped
 
   # ========================================
-  # СЕРВИС 2: MySQL база данных
+  # СЕРВИС 2: postgres база данных
   # ========================================
-  mysql-db:
-    image: mysql:8.0
-    container_name: mysql-db
+  postgres-db:
+    image: postgres:17
+    container_name: postgres-db
     ports:
-      - "3307:3306"
+      - "5433:5432"
 
     environment:
-      - MYSQL_ROOT_PASSWORD=root
-      - MYSQL_DATABASE=todo
-      - MYSQL_USER=user
-      - MYSQL_PASSWORD=user
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=todo
+      - POSTGRES_USER=postgres
 
     volumes:
-      - mysql-data:/var/lib/mysql
+      - postgres-data:/var/lib/postgresql/data
 
     networks:
       - todo-network
 
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "user", "-puser"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -63,10 +62,10 @@ services:
 # ========================================
 networks:
   todo-network:
-    external: true
+#    external: true
 
 # ========================================
 # ТОМЫ (для сохранения данных БД)
 # ========================================
 volumes:
-  mysql-data:
+  postgres-data:

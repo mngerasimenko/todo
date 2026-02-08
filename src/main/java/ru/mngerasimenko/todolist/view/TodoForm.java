@@ -9,8 +9,9 @@ import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.shared.Registration;
-import java.util.List;
 import ru.mngerasimenko.todolist.model.Todo;
+
+import java.util.List;
 
 public class TodoForm extends FormLayout {
     Todo todo;
@@ -47,8 +48,8 @@ public class TodoForm extends FormLayout {
 
     public void setTodo(Todo todo) {
         this.todo = todo;
-        if (todo != null && todo.getTitle() != null) {
-            this.title.setValue(todo.getTitle());
+        if (todo != null && todo.getName() != null) {
+            this.title.setValue(todo.getName());
         } else {
             this.title.clear();
         }

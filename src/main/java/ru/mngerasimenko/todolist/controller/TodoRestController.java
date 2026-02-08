@@ -1,18 +1,11 @@
 package ru.mngerasimenko.todolist.controller;
 
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import ru.mngerasimenko.todolist.model.Todo;
-import ru.mngerasimenko.todolist.model.status.StatusMessage;
-import ru.mngerasimenko.todolist.service.TodoService;
 import ru.mngerasimenko.todolist.model.status.Status;
+import ru.mngerasimenko.todolist.model.status.StatusMessage;
 import ru.mngerasimenko.todolist.model.status.StatusTodo;
+import ru.mngerasimenko.todolist.service.TodoService;
 import ru.mngerasimenko.todolist.utils.ValidateUtils;
 
 import static ru.mngerasimenko.todolist.settings.Constants.*;
@@ -60,7 +53,7 @@ public class TodoRestController {
         if (!ValidateUtils.isAuthValid(todo)) {
             return new Status(EMPTY_AUTHKEY);
         }
-        if (!ValidateUtils.isTitleValid(todo)) {
+        if (!ValidateUtils.isNameValid(todo)) {
             return new Status(EMPTY_TITLE);
         }
         todo.setId(null);
@@ -79,7 +72,7 @@ public class TodoRestController {
         if (!ValidateUtils.isIdValid(todo)) {
             return new Status(EMPTY_TODO_ID);
         }
-        if (!ValidateUtils.isTitleValid(todo)) {
+        if (!ValidateUtils.isNameValid(todo)) {
             return new Status(EMPTY_TITLE);
         }
         Todo updateTodo = todoService.save(todo);

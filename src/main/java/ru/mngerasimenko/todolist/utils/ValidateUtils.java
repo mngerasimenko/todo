@@ -4,7 +4,8 @@ import io.micrometer.common.util.StringUtils;
 import ru.mngerasimenko.todolist.model.Todo;
 
 public class ValidateUtils {
-    private ValidateUtils() {}
+    private ValidateUtils() {
+    }
 
     public static boolean isAuthValid(Todo todo) {
         return todo.getAuthKey() != null;
@@ -14,8 +15,8 @@ public class ValidateUtils {
         return todo.getId() != null;
     }
 
-    public static boolean isTitleValid(Todo todo) {
-        return !StringUtils.isBlank(todo.getTitle());
+    public static boolean isNameValid(Todo todo) {
+        return !StringUtils.isBlank(todo.getName());
     }
 
     public static boolean isDoneValid(Todo todo) {
