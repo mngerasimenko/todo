@@ -11,7 +11,7 @@ jobs:
     # Запуск БД для интеграционных тестов
     services:
       postgres:
-        image: postgres:15
+        image: postgres:17
         env:
           POSTGRES_DB: todo
           POSTGRES_USER: postgres
@@ -26,10 +26,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -37,6 +37,7 @@ jobs:
 
       - name: Configure PostgreSQL connection for tests
         run: |
+          mkdir -p src/test/resources
           cat > src/test/resources/application.properties <<EOF
           spring.datasource.url=jdbc:postgresql://localhost:5432/todo
           spring.datasource.username=postgres
@@ -57,7 +58,7 @@ jobs:
         run: mvn package -DskipTests
 
       - name: Archive artifact (optional)
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: todo-app-jar
           path: target/*.jar
