@@ -1,8 +1,8 @@
-name: CD/CD Pipeline
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [master]
+    branches: [ master ]
 
 jobs:
   build-and-deploy:
@@ -10,10 +10,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up JDk 17
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -25,7 +25,7 @@ jobs:
         run: docker build -t mngerasimenko/todo-app:${{ github.sha }} .
 
       - name: Login to Docker Hub
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -34,25 +34,41 @@ jobs:
         run: docker push mngerasimenko/todo-app:${{ github.sha }}
 
       - name: Deploy to server via SSH
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.0.4
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd /root
-            docker pull mngerasimenko/todo-app:${{ github.sha }}
+            
             docker network create todo-network 2>/dev/null || true
-            docker stop todo-app || true
-            docker rm todo-app || true
+            
+            if [ ! "$(docker ps -q -f name=postgres-db)" ]; then
+             if [ "$(docker ps -aq -f status=exited -f name=postgres-db)" ]; then
+               docker rm postgres-db
+             fi
+             docker run -d \
+               --name postgres-db \
+               -e POSTGRES_DB=todo \
+               -e POSTGRES_USER=postgres \
+               -e POSTGRES_PASSWORD=postgres \
+               -v postgres-data:/var/lib/postgresql/data \
+               --network todo-network \
+               --restart unless-stopped \
+               postgres:15
+            fi
+            
+            docker pull mngerasimenko/todo-app:${{ github.sha }}
+            docker stop todo-app 2>/dev/null || true
+            docker rm todo-app 2>/dev/null || true
             docker run -d \
-              --name todo-app \
-              -p 8090:8090 \
-              -e SPRING_DATASOURCE_URL='jdbc:mysql://mysql-db:3306/todo?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC' -e SPRING_DATASOURCE_USERNAME=user -e SPRING_DATASOURCE_PASSWORD=user --network todo-network --restart unless-stopped mngerasimenko/todo-app:${{ github.sha }} \
-              -e SPRING_DATASOURCE_USERNAME=user \
-              -e SPRING_DATASOURCE_PASSWORD=user \
-              --network todo-network \
-              --restart unless-stopped \
-              mngerasimenko/todo-app:${{ github.sha }}
-
-
+             --name todo-app \
+             -p 8090:8090 \
+             -e SPRING_DATASOURCE_URL='jdbc:postgresql://postgres-db:5432/todo' \
+             -e SPRING_DATASOURCE_USERNAME=postgres \
+             -e SPRING_DATASOURCE_PASSWORD=postgres \
+             -e SPRING_JPA_HIBERNATE_DDL_AUTO=update \
+             --network todo-network \
+             --restart unless-stopped \
+             mngerasimenko/todo-app:${{ github.sha }}

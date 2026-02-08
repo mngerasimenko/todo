@@ -1,11 +1,12 @@
 package ru.mngerasimenko.todolist.service;
 
-import java.util.Date;
-import java.util.List;
 import org.springframework.stereotype.Service;
 import ru.mngerasimenko.todolist.model.Todo;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 public class TodoService {
@@ -28,7 +29,7 @@ public class TodoService {
                 todo.setDone(oldTodo.isDone());
             }
         } else {
-            todo.setDateTime(new Date());
+            todo.setDateTime(LocalDateTime.now());
             todo.setDone(false);
         }
         todo.setUser(userRepository.getReferenceById(todo.getAuthKey()));
@@ -48,7 +49,7 @@ public class TodoService {
     }
 
     public List<Todo> getAllByFilter(long userId, String filter) {
-        return todoRepository.findAllByUserIdAndTitleContainingIgnoreCase(userId, filter);
+        return todoRepository.findAllByUserIdAndNameContainingIgnoreCase(userId, filter);
     }
 
     public List<Todo> getAllDone(long userId) {
