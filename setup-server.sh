@@ -4,17 +4,18 @@ set -e
 # ============================================================================
 # setup-server.sh
 # ----------------------------------------------------------------------------
-# ПОЛНАЯ ИНИЦИАЛИЗАЦИЯ СЕРВЕРА ДЛЯ TODO-APP
+# ПОЛНАЯ ИНИЦИАЛИЗАЦИЯ СЕРВЕРА ДЛЯ TODO-APP (PostgreSQL)
 # ----------------------------------------------------------------------------
 # ⚠️ ВАЖНО: Запускать ТОЛЬКО ОДИН РАЗ на чистом сервере (Ubuntu/Debian)
 #           Требуются права root (запускать от пользователя root)
 #
 # Скрипт выполнит:
 #   ✅ Установку системных обновлений и сертификатов
-#   ✅ Установку Docker и Docker Compose
+#   ✅ Установку Docker
 #   ✅ Создание сети todo-network
-#   ✅ Запуск MySQL через docker-compose
+#   ✅ Запуск PostgreSQL контейнера
 #   ✅ Проверку готовности БД
+#   ✅ Создание администратора приложения (автоматически при первом запуске)
 #
 # После выполнения — просто пушите код в master, деплой будет автоматическим.
 # ============================================================================
@@ -44,7 +45,6 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
 
 # Обновляем корневые сертификаты для безопасного HTTPS-доступа
 update-ca-certificates --fresh > /dev/null 2>&1
-
 echo "   ✅ Система и сертификаты обновлены"
 
 # ============================================================================
@@ -73,26 +73,9 @@ else
 fi
 
 # ============================================================================
-# ШАГ 3: Установка Docker Compose
+# ШАГ 3: Создание сети
 # ============================================================================
-echo "📦 ШАГ 3: Установка Docker Compose..."
-
-if ! command -v docker-compose &> /dev/null; then
-  # Скачиваем последнюю версию Docker Compose Plugin
-  DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | \
-    grep '"tag_name"' | cut -d'"' -f4)
-  curl -SL "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" \
-    -o /usr/local/bin/docker-compose > /dev/null 2>&1
-  chmod +x /usr/local/bin/docker-compose
-  echo "   ✅ Docker Compose установлен (версия ${DOCKER_COMPOSE_VERSION:1})"
-else
-  echo "   ℹ️  Docker Compose уже установлен — пропускаем"
-fi
-
-# ============================================================================
-# ШАГ 4: Создание сети
-# ============================================================================
-echo "🕸️  ШАГ 4: Создание сети todo-network..."
+echo "🕸️  ШАГ 3: Создание сети todo-network..."
 
 if docker network inspect todo-network > /dev/null 2>&1; then
   echo "   ℹ️  Сеть todo-network уже существует"
@@ -102,29 +85,37 @@ else
 fi
 
 # ============================================================================
-# ШАГ 5: Запуск БД через docker-compose
+# ШАГ 4: Запуск PostgreSQL
 # ============================================================================
-echo "🗃️  ШАГ 5: Запуск MySQL через docker-compose..."
+echo "🗃️  ШАГ 4: Запуск PostgreSQL контейнера..."
 
-if [ ! -f "docker-compose.yml" ]; then
-  echo "   ⚠️  Файл docker-compose.yml не найден в текущей директории!"
-  echo "   💡 Совет: Склонируйте репозиторий перед запуском скрипта:"
-  echo "      git clone https://github.com/mngerasimenko/ваш-репозиторий.git"
-  echo "      cd ваш-репозиторий"
-  exit 1
+# Проверяем, запущен ли контейнер
+if [ "$(docker ps -q -f name=postgres-db)" ]; then
+  echo "   ℹ️  Контейнер postgres-db уже запущен — пропускаем"
+  exit 0
 fi
 
-docker-compose up -d mysql-db > /dev/null 2>&1
-echo "   ✅ Контейнер mysql-db запущен"
+# Запускаем контейнер
+docker run -d \
+  --name postgres-db \
+  -e POSTGRES_DB=todo \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -v postgres-/var/lib/postgresql/data \
+  --network todo-network \
+  --restart unless-stopped \
+  postgres:17 > /dev/null 2>&1
+
+echo "   ✅ Контейнер postgres-db запущен"
 
 # ============================================================================
-# ШАГ 6: Ожидание готовности БД
+# ШАГ 5: Ожидание готовности БД
 # ============================================================================
-echo "⏳ ШАГ 6: Ожидание готовности базы данных (макс. 60 секунд)..."
+echo "⏳ ШАГ 5: Ожидание готовности базы данных (макс. 60 секунд)..."
 
 timeout=60
 count=0
-until docker inspect mysql-db --format='{{.State.Health.Status}}' 2>/dev/null | grep -q "healthy" || [ $count -ge $timeout ]; do
+until docker inspect postgres-db --format='{{.State.Health.Status}}' 2>/dev/null | grep -q "healthy" || [ $count -ge $timeout ]; do
   sleep 1
   count=$((count + 1))
   printf "."
@@ -147,11 +138,14 @@ if [ $count -lt $timeout ]; then
   echo "      • отправит его в Docker Hub"
   echo "      • развернёт контейнер todo-app на сервере"
   echo ""
-  echo "💡 Повторный запуск этого скрипта НЕ ТРЕБУЕТСЯ!"
+  echo "💡 Администратор приложения будет создан автоматически"
+  echo "   при первом запуске приложения (если таблица users пуста)."
+  echo ""
+  echo "⚠️  Повторный запуск этого скрипта НЕ ТРЕБУЕТСЯ!"
   echo "   (Данные БД сохраняются в volume и не потеряются при перезапусках)"
   echo ""
 else
   echo "⚠️  База данных не стала здоровой за 60 секунд"
-  echo "   Проверьте логи: docker logs mysql-db"
+  echo "   Проверьте логи: docker logs postgres-db"
   exit 1
 fi
