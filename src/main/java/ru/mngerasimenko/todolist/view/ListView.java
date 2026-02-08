@@ -68,7 +68,7 @@ public class ListView extends VerticalLayout {
     private void configureGrid() {
         grid.addClassNames("todo-grid");
         grid.setSizeFull();
-        grid.setColumns("title");
+        grid.setColumns("name");
         grid.getColumns().forEach(col -> col.setAutoWidth(true));
         grid.asSingleSelect().addValueChangeListener(event -> editTodo(event.getValue()));
     }
