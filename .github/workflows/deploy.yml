@@ -40,35 +40,35 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-             cd /root
+            cd /root
             
-             docker network create todo-network 2>/dev/null || true
+            docker network create todo-network 2>/dev/null || true
             
-             if [ ! "$(docker ps -q -f name=postgres-db)" ]; then
-              if [ "$(docker ps -aq -f status=exited -f name=postgres-db)" ]; then
-                docker rm postgres-db
-              fi
-              docker run -d \
-                --name postgres-db \
-                -e POSTGRES_DB=todo \
-                -e POSTGRES_USER=postgres \
-                -e POSTGRES_PASSWORD=postgres \
-                -v postgres-data:/var/lib/postgresql/data \
-                --network todo-network \
-                --restart unless-stopped \
-                postgres:15
+            if [ ! "$(docker ps -q -f name=postgres-db)" ]; then
+             if [ "$(docker ps -aq -f status=exited -f name=postgres-db)" ]; then
+               docker rm postgres-db
+             fi
+             docker run -d \
+               --name postgres-db \
+               -e POSTGRES_DB=todo \
+               -e POSTGRES_USER=postgres \
+               -e POSTGRES_PASSWORD=postgres \
+               -v postgres-data:/var/lib/postgresql/data \
+               --network todo-network \
+               --restart unless-stopped \
+               postgres:15
             fi
             
             docker pull mngerasimenko/todo-app:${{ github.sha }}
             docker stop todo-app 2>/dev/null || true
             docker rm todo-app 2>/dev/null || true
             docker run -d \
-              --name todo-app \
-              -p 8090:8090 \
-              -e SPRING_DATASOURCE_URL='jdbc:postgresql://postgres-db:5432/todo' \
-              -e SPRING_DATASOURCE_USERNAME=postgres \
-              -e SPRING_DATASOURCE_PASSWORD=postgres \
-              -e SPRING_JPA_HIBERNATE_DDL_AUTO=update \
-              --network todo-network \
-              --restart unless-stopped \
-              mngerasimenko/todo-app:${{ github.sha }}
+             --name todo-app \
+             -p 8090:8090 \
+             -e SPRING_DATASOURCE_URL='jdbc:postgresql://postgres-db:5432/todo' \
+             -e SPRING_DATASOURCE_USERNAME=postgres \
+             -e SPRING_DATASOURCE_PASSWORD=postgres \
+             -e SPRING_JPA_HIBERNATE_DDL_AUTO=update \
+             --network todo-network \
+             --restart unless-stopped \
+             mngerasimenko/todo-app:${{ github.sha }}
