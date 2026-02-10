@@ -1,72 +1,32 @@
 package ru.mngerasimenko.todolist.service;
 
-import org.springframework.stereotype.Service;
-import ru.mngerasimenko.todolist.model.Todo;
-import ru.mngerasimenko.todolist.repository.TodoRepository;
-import ru.mngerasimenko.todolist.repository.UserRepository;
+import ru.mngerasimenko.todolist.dto.TodoDto;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
-@Service
-public class TodoService {
-    private final TodoRepository todoRepository;
-    private final UserRepository userRepository;
+public interface TodoService {
 
-    public TodoService(TodoRepository todoRepository, UserRepository userRepository) {
-        this.todoRepository = todoRepository;
-        this.userRepository = userRepository;
-    }
+    TodoDto createTodo(TodoDto todoDto);
 
-    public Todo save(Todo todo) {
-        Todo oldTodo;
-        if (!todo.isNew()) {
-            oldTodo = get(todo.getId(), todo.getAuthKey());
-            if (oldTodo == null) {
-                return null;
-            } else {
-                todo.setDateTime(oldTodo.getDateTime());
-                todo.setDone(oldTodo.isDone());
-            }
-        } else {
-            todo.setDateTime(LocalDateTime.now());
-            todo.setDone(false);
-        }
-        todo.setUser(userRepository.getReferenceById(todo.getAuthKey()));
-        return todoRepository.save(todo);
-    }
+    TodoDto updateTodo(Long id, TodoDto todoDto);
 
-    public Todo get(Long id, Long userId) {
-        return todoRepository.findByIdAndUserId(id, userId);
-    }
+    TodoDto getTodoById(Long id);
 
-    public List<Todo> getAllNotDone(long userId) {
-        return todoRepository.findAllByUserIdAndDoneOrderByIdDesc(userId, false);
-    }
+    List<TodoDto> getAllTodos();
 
-    public List<Todo> getAll(long userId) {
-        return todoRepository.findAllByUserId(userId);
-    }
+    List<TodoDto> getTodosByUserId(Long userId);
 
-    public List<Todo> getAllByFilter(long userId, String filter) {
-        return todoRepository.findAllByUserIdAndNameContainingIgnoreCase(userId, filter);
-    }
+    List<TodoDto> getActiveTodosByUserId(Long userId);
 
-    public List<Todo> getAllDone(long userId) {
-        return todoRepository.findAllByUserIdAndDoneOrderByIdDesc(userId, true);
-    }
+    List<TodoDto> getCompletedTodosByUserId(Long userId);
 
-    public boolean delete(Todo todo) {
-        int delete = todoRepository.deleteByUserIdAndId(todo.getAuthKey(), todo.getId());
-        return delete == 1;
-    }
+    void deleteTodo(Long id);
 
-    public Todo done(Todo todo) {
-        Todo foundTodo = todoRepository.findByIdAndUserId(todo.getId(), todo.getAuthKey());
-        if (foundTodo == null) {
-            return null;
-        }
-        foundTodo.setDone(todo.isDone());
-        return todoRepository.save(foundTodo);
-    }
+    void deleteTodosByUserId(Long userId);
+
+    TodoDto markAsDone(Long id);
+
+    TodoDto markAsUndone(Long id);
+
+    List<TodoDto> getFilteredTodosByUserId(Long id, String filter);
 }

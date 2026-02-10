@@ -1,99 +1,69 @@
 package ru.mngerasimenko.todolist.controller;
 
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-import ru.mngerasimenko.todolist.model.Todo;
-import ru.mngerasimenko.todolist.model.status.Status;
-import ru.mngerasimenko.todolist.model.status.StatusMessage;
-import ru.mngerasimenko.todolist.model.status.StatusTodo;
+import ru.mngerasimenko.todolist.dto.TodoDto;
+import ru.mngerasimenko.todolist.dto.TodoRequest;
+import ru.mngerasimenko.todolist.dto.TodoResponse;
+import ru.mngerasimenko.todolist.mapper.TodoMapper;
 import ru.mngerasimenko.todolist.service.TodoService;
-import ru.mngerasimenko.todolist.utils.ValidateUtils;
 
-import static ru.mngerasimenko.todolist.settings.Constants.*;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/todos")
+@RequiredArgsConstructor
+@Validated
 public class TodoRestController {
+
     private final TodoService todoService;
+    private final TodoMapper todoMapper;
 
-    public TodoRestController(TodoService todoService) {
-        this.todoService = todoService;
+    @PostMapping("/create")
+    public ResponseEntity<TodoResponse> create(@Valid @RequestBody TodoRequest request) {
+        TodoDto todoDto = todoMapper.toDto(request);
+        TodoDto createdTodo = todoService.createTodo(todoDto);
+        TodoResponse response = todoMapper.toResponse(createdTodo);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @GetMapping("/todos")
-    public Status getAllNotDone(@RequestParam("authKey") Long userId) {
-        return new StatusTodo(LOADED, todoService.getAllNotDone(userId));
+    @PutMapping("/{id}")
+    public ResponseEntity<TodoResponse> update(@PathVariable Long id,
+                                               @Valid @RequestBody TodoRequest request) {
+        TodoDto todoDto = todoMapper.toDto(request);
+        TodoDto updatedTodo = todoService.updateTodo(id, todoDto);
+        TodoResponse response = todoMapper.toResponse(updatedTodo);
+        return ResponseEntity.ok(response);
     }
 
-    @GetMapping("/done-todos")
-    public Status getAllDone(@RequestParam("authKey") Long userId) {
-        return new StatusTodo(LOADED, todoService.getAllDone(userId));
+    @GetMapping("/{id}")
+    public ResponseEntity<TodoResponse> getTodoById(@PathVariable Long id) {
+        TodoDto todoDto = todoService.getTodoById(id);
+        TodoResponse response = todoMapper.toResponse(todoDto);
+        return ResponseEntity.ok(response);
     }
 
-    @PutMapping("/done")
-    public Status done(@RequestBody Todo todo) {
-        if (!ValidateUtils.isAuthValid(todo)) {
-            return new Status(EMPTY_AUTHKEY);
-        }
-        if (!ValidateUtils.isIdValid(todo)) {
-            return new Status(EMPTY_TODO_ID);
-        }
-        if (!ValidateUtils.isDoneValid(todo)) {
-            return new Status(EMPTY_DONE);
-        }
-
-        Todo modifiedTodo = todoService.done(todo);
-        if (modifiedTodo == null) {
-            return new Status(BAD_REQUEST);
-        }
-        return new StatusTodo(MODIFIED, modifiedTodo);
+    @GetMapping("/all")
+    public ResponseEntity<List<TodoResponse>> getAllTodos() {
+        List<TodoDto> todos = todoService.getAllTodos();
+        List<TodoResponse> responses = todos.stream()
+                .map(todoMapper::toResponse)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(responses);
     }
 
-    @PostMapping("/todos")
-    public Status addNew(@RequestBody Todo todo) {
-        if (!ValidateUtils.isAuthValid(todo)) {
-            return new Status(EMPTY_AUTHKEY);
-        }
-        if (!ValidateUtils.isNameValid(todo)) {
-            return new Status(EMPTY_TITLE);
-        }
-        todo.setId(null);
-        Todo savedTodo = todoService.save(todo);
-        if (savedTodo == null) {
-            return new Status(BAD_REQUEST);
-        }
-        return new StatusTodo(CREATED, savedTodo);
-    }
-
-    @PutMapping("/todo-edit")
-    public Status update(@RequestBody Todo todo) {
-        if (!ValidateUtils.isAuthValid(todo)) {
-            return new Status(EMPTY_AUTHKEY);
-        }
-        if (!ValidateUtils.isIdValid(todo)) {
-            return new Status(EMPTY_TODO_ID);
-        }
-        if (!ValidateUtils.isNameValid(todo)) {
-            return new Status(EMPTY_TITLE);
-        }
-        Todo updateTodo = todoService.save(todo);
-        if (updateTodo == null) {
-            return new Status(BAD_REQUEST);
-        }
-        return new StatusTodo(MODIFIED, updateTodo);
-    }
-
-    @DeleteMapping("/todos")
-    public Status delete(@RequestBody Todo todo) {
-        if (!ValidateUtils.isAuthValid(todo)) {
-            return new Status(EMPTY_AUTHKEY);
-        }
-        if (!ValidateUtils.isIdValid(todo)) {
-            return new Status(EMPTY_TODO_ID);
-        }
-        if (todoService.delete(todo)) {
-            return new StatusMessage(DELETED, "Todo with id " + todo.getId() + " was delete successfully");
-        }
-        return new StatusMessage(FAIL, "Todo with id " + todo.getId() + " was NOT deleted");
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<List<TodoResponse>> getTodosByUserId(@PathVariable Long userId) {
+        List<TodoDto> todos = todoService.getTodosByUserId(userId);
+        List<TodoResponse> responses = todos.stream()
+                .map(todoMapper::toResponse)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(responses);
     }
 
 }

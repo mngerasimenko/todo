@@ -4,7 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.stereotype.Service;
-import ru.mngerasimenko.todolist.model.User;
+import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.service.CookieService;
 import ru.mngerasimenko.todolist.service.UserService;
 
@@ -20,7 +20,7 @@ public class UserAuthService {
         this.userDetailsService = userDetailsService;
     }
 
-    public User getAuthUser(HttpServletRequest request) {
+    public UserDto getAuthUser(HttpServletRequest request) {
         String authCookie = cookieService.getAuthCookieValue(request);
         if (authCookie == null) {
             return null;

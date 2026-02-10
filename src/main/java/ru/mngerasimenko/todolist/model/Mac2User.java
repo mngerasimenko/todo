@@ -1,11 +1,5 @@
 package ru.mngerasimenko.todolist.model;
 
-import jakarta.persistence.*;
-import org.hibernate.annotations.OnDelete;
-import org.hibernate.annotations.OnDeleteAction;
-
-import javax.validation.constraints.NotBlank;
-
 //@JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"})
 //@Entity
 //@Table(name = "mac2user")

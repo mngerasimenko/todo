@@ -5,7 +5,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
-import ru.mngerasimenko.todolist.model.User;
+import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.service.UserService;
 
 import java.util.Collections;
@@ -23,16 +23,16 @@ public class TodoUserDetailsService implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
 
-        User user = userService.getUserByUserName(username);
+        UserDto userDto = userService.getUserByUserName(username);
 
-        if (user == null) {
+        if (userDto == null) {
             throw new UsernameNotFoundException("User not found: " + username);
         }
 
         return org.springframework.security.core.userdetails.User
                 .withDefaultPasswordEncoder()
-                .username(user.getName())
-                .password(user.getPassword())
+                .username(userDto.getName())
+                .password(userDto.getPassword())
                 .roles("USER", "ADMIN")
                 .build();
     }
@@ -40,7 +40,7 @@ public class TodoUserDetailsService implements UserDetailsService {
     /**
      * Получение ролей/прав пользователя
      */
-    private List<SimpleGrantedAuthority> getAuthorities(User user) {
+    private List<SimpleGrantedAuthority> getAuthorities(UserDto userDto) {
 
         // if (user.isAdmin()) {
         //     return List.of(
