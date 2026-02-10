@@ -17,8 +17,7 @@ import org.springframework.security.web.context.HttpRequestResponseHolder;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
-import ru.mngerasimenko.todolist.model.User;
-import ru.mngerasimenko.todolist.service.UserService;
+import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.view.LoginView;
 
 import java.io.IOException;
@@ -57,22 +56,6 @@ public class SecurityConfig extends VaadinWebSecurity {
         );
     }
 
-//    @Bean
-//    public UserDetailsService userDetailsService() {
-//        InMemoryUserDetailsManager manager = new InMemoryUserDetailsManager();
-//        List<User> userList = userService.getAll();
-//        for (User user : userList) {
-//            UserDetails userDetails = org.springframework.security.core.userdetails.User
-//                    .withDefaultPasswordEncoder()
-//                    .username(user.getName())
-//                    .password(user.getPassword())
-//                    .roles("USER", "ADMIN")
-//                    .build();
-//            manager.createUser(userDetails);
-//        }
-//        return manager;
-//    }
-
     private OncePerRequestFilter autoLoginFilter() {
         return new OncePerRequestFilter() {
             @Override
@@ -93,7 +76,7 @@ public class SecurityConfig extends VaadinWebSecurity {
                         (existingAuth.getPrincipal() instanceof String &&
                                 existingAuth.getPrincipal().equals("anonymousUser"))) {
 
-                    User authUser = userAuthService.getAuthUser(request);
+                    UserDto authUser = userAuthService.getAuthUser(request);
                     if (authUser != null) {
                         UserDetails userDetails = userAuthService.getUserDetailsByName(authUser.getName());
                         Authentication auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(

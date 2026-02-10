@@ -9,19 +9,18 @@ import com.vaadin.flow.component.formlayout.FormLayout;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.shared.Registration;
-import ru.mngerasimenko.todolist.model.Todo;
+import ru.mngerasimenko.todolist.dto.TodoDto;
 
 import java.util.List;
 
 public class TodoForm extends FormLayout {
-    Todo todo;
+    TodoDto todoDto;
     TextField title = new TextField("Todo title");
-
     Button save = new Button("Save");
     Button delete = new Button("Delete");
     Button close = new Button("Close");
 
-    public TodoForm(List<Todo> todoList) {
+    public TodoForm(List<TodoDto> todoList) {
         addClassName("todo-form");
         add(title, createButtonsLayout());
     }
@@ -35,48 +34,48 @@ public class TodoForm extends FormLayout {
         close.addClickShortcut(Key.ESCAPE);
 
         save.addClickListener(event -> validateAndSave());
-        delete.addClickListener(event -> fireEvent(new DeleteEvent(this, todo)));
+        delete.addClickListener(event -> fireEvent(new DeleteEvent(this, todoDto)));
         close.addClickListener(event -> fireEvent(new CloseEvent(this)));
 
         return new HorizontalLayout(save, delete, close);
     }
 
     private void validateAndSave() {
-        todo.setTitle(title.getValue());
-        fireEvent(new SaveEvent(this, todo));
+        todoDto.setName(title.getValue());
+        fireEvent(new SaveEvent(this, todoDto));
     }
 
-    public void setTodo(Todo todo) {
-        this.todo = todo;
-        if (todo != null && todo.getName() != null) {
-            this.title.setValue(todo.getName());
+    public void setTodo(TodoDto todoDto) {
+        this.todoDto = todoDto;
+        if (todoDto != null && todoDto.getName() != null) {
+            this.title.setValue(todoDto.getName());
         } else {
             this.title.clear();
         }
     }
 
     public static abstract class TodoFormEvent extends ComponentEvent<TodoForm> {
-        private final Todo todo;
+        private final TodoDto todoDto;
 
-        protected TodoFormEvent(TodoForm source, Todo todo) {
+        protected TodoFormEvent(TodoForm source, TodoDto todoDto) {
             super(source, false);
-            this.todo = todo;
+            this.todoDto = todoDto;
         }
 
-        public Todo getTodo() {
-            return todo;
+        public TodoDto getTodoDto() {
+            return todoDto;
         }
     }
 
     public static class SaveEvent extends TodoFormEvent {
-        SaveEvent(TodoForm source, Todo todo) {
-            super(source, todo);
+        SaveEvent(TodoForm source, TodoDto todoDto) {
+            super(source, todoDto);
         }
     }
 
     public static class DeleteEvent extends TodoFormEvent {
-        DeleteEvent(TodoForm source, Todo todo) {
-            super(source, todo);
+        DeleteEvent(TodoForm source, TodoDto todoDto) {
+            super(source, todoDto);
         }
     }
 

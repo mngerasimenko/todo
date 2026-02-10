@@ -3,7 +3,7 @@ package ru.mngerasimenko.todolist.security;
 import com.vaadin.flow.spring.security.AuthenticationContext;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
-import ru.mngerasimenko.todolist.model.User;
+import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.service.CookieService;
 import ru.mngerasimenko.todolist.service.UserService;
 
@@ -21,12 +21,12 @@ public class SecurityService {
         this.authenticationContext = authenticationContext;
     }
 
-    public User getAuthenticatedUser() {
+    public UserDto getAuthenticatedUser() {
         UserDetails userDetails = authenticationContext.getAuthenticatedUser(UserDetails.class).get();
-        User user = userService.getUserByUserName(userDetails.getUsername());
-        cookieService.setCookie(user.getAuthId(), 30);
+        UserDto userDto = userService.getUserByUserName(userDetails.getUsername());
+        cookieService.setCookie(userDto.getAuthId(), 30);
 
-        return user;
+        return userDto;
     }
 
     public void logout() {

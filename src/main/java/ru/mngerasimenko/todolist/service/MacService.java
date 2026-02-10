@@ -1,9 +1,5 @@
 package ru.mngerasimenko.todolist.service;
 
-import ru.mngerasimenko.todolist.model.Mac2User;
-import ru.mngerasimenko.todolist.model.User;
-import ru.mngerasimenko.todolist.repository.MacRepository;
-
 //@Service
 public class MacService {
 //    private final MacRepository macRepository;

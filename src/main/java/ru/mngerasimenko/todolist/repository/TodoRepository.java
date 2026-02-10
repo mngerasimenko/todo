@@ -3,7 +3,6 @@ package ru.mngerasimenko.todolist.repository;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Transactional;
 import ru.mngerasimenko.todolist.model.Todo;
 
 import java.util.List;
@@ -22,7 +21,12 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
     Todo findByIdAndUserId(long id, long userId);
 
     @Modifying
-    @Transactional
     int deleteByUserIdAndId(long userId, long todoId);
+
+    List<Todo> findByUserId(Long userId);
+
+    List<Todo> findByUserIdAndDone(Long userId, boolean done);
+
+    void deleteByUserId(Long userId);
 
 }

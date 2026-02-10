@@ -1,68 +1,22 @@
 package ru.mngerasimenko.todolist.service;
 
-import io.micrometer.common.util.StringUtils;
-import org.springframework.stereotype.Service;
-import ru.mngerasimenko.todolist.model.User;
-import ru.mngerasimenko.todolist.repository.UserRepository;
+import ru.mngerasimenko.todolist.dto.UserDto;
 
 import java.util.List;
 
-@Service
-public class UserService {
-    private final UserRepository repository;
+public interface UserService {
 
-    public UserService(UserRepository repository) {
-        this.repository = repository;
-    }
+    List<UserDto> getAll();
 
-    public User save(User user) {
-        if (user.getId() == null) {
-            User userByEmail = repository.getUserByEmail(user.getEmail());
-            if (userByEmail != null) {
-                return null;
-            }
-        }
-        return repository.save(user);
-    }
+    void delete(long id);
 
-    public User getUser(User user) {
-        if (StringUtils.isBlank(user.getEmail()) || StringUtils.isBlank(user.getPassword())) {
-            return null;
-        }
-        return repository.getUserByEmailAndPassword(user.getEmail(), user.getPassword());
-    }
+    UserDto getUserByUserName(String userName);
 
-    public User getUser(Long id) {
-        return id == null ? null : repository.getUserById(id);
-    }
+    UserDto getUserByAuthId(String authId);
 
-    public User getUser(String email) {
-        if (StringUtils.isBlank(email)) {
-            return null;
-        }
-        return repository.getUserByEmail(email);
-    }
+    UserDto createUser(UserDto userDto);
 
-    public List<User> getAll() {
-        return repository.findAll();
-    }
+    UserDto updateUser(Long id, UserDto userDto);
 
-    public void delete(long id) {
-        repository.deleteById(id);
-    }
-
-    public User getUserByUserName(String userName) {
-        if (StringUtils.isBlank(userName)) {
-            return null;
-        }
-        return repository.getUserByName(userName);
-    }
-
-    public User getUserByAuthId(String authId) {
-        if (StringUtils.isBlank(authId)) {
-            return null;
-        }
-        return repository.getUserByAuthId(authId);
-    }
-
+    UserDto getUserById(Long id);
 }

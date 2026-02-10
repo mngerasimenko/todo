@@ -3,14 +3,13 @@ package ru.mngerasimenko.todolist.model;
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 
-import javax.validation.constraints.NotBlank;
-import javax.validation.constraints.NotNull;
-import javax.validation.constraints.Size;
 import java.time.LocalDateTime;
 
 @JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"})
@@ -37,14 +36,14 @@ public class Todo {
     @OnDelete(action = OnDeleteAction.CASCADE)
     private User user;
 
-    private Long authKey;
+    @Column(name = "user_id", insertable = false, updatable = false)
+    private Long userId;
 
     public Todo() {
     }
 
-    public Todo(long userId) {
-        this();
-        this.setAuthKey(userId);
+    public Todo(User user) {
+        this.user = user;
     }
 
     public Todo(String title) {
@@ -75,7 +74,7 @@ public class Todo {
         return name;
     }
 
-    public void setTitle(String name) {
+    public void setName(String name) {
         this.name = name;
     }
 
@@ -104,17 +103,16 @@ public class Todo {
         this.done = done;
     }
 
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    public Long getAuthKey() {
-        return authKey;
-    }
-
-    public void setAuthKey(Long authKey) {
-        this.authKey = authKey;
-    }
-
     @JsonIgnore
     public boolean isNew() {
         return id == null;
+    }
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
     }
 }

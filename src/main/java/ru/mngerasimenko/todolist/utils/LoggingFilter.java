@@ -4,9 +4,10 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import java.io.IOException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
 
 @Component
 public class LoggingFilter extends OncePerRequestFilter {
@@ -21,11 +22,8 @@ public class LoggingFilter extends OncePerRequestFilter {
 
         long duration = System.currentTimeMillis() - startTime;
 
-        // Создание записи лога
         String logMessage = String.format("request method: %s, request URI: %s, response status: %d, request processing time: %d ms",
                 request.getMethod(), request.getRequestURI(), response.getStatus(), duration);
-
-        // Запись лога
         logger.info(logMessage);
     }
 }

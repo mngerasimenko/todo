@@ -10,8 +10,9 @@ import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
-import ru.mngerasimenko.todolist.model.Todo;
-import ru.mngerasimenko.todolist.model.User;
+import ru.mngerasimenko.todolist.dto.TodoDto;
+import ru.mngerasimenko.todolist.dto.UserDto;
+import ru.mngerasimenko.todolist.mapper.TodoMapper;
 import ru.mngerasimenko.todolist.security.SecurityService;
 import ru.mngerasimenko.todolist.service.TodoService;
 
@@ -21,14 +22,16 @@ import ru.mngerasimenko.todolist.service.TodoService;
 public class ListView extends VerticalLayout {
     private final SecurityService securityService;
     private final TodoService todoService;
-    private final Grid<Todo> grid = new Grid<>(Todo.class);
+    private final TodoMapper todoMapper;
+    private final Grid<TodoDto> grid = new Grid<>(TodoDto.class);
     private final TextField filterText = new TextField();
     private TodoForm form;
-    private User authenticatedUser;
+    private UserDto authenticatedUser;
 
-    public ListView(TodoService todoService, SecurityService securityService) {
+    public ListView(TodoService todoService, SecurityService securityService, TodoMapper todoMapper) {
         this.todoService = todoService;
         this.securityService = securityService;
+        this.todoMapper = todoMapper;
 
         init();
     }
@@ -51,18 +54,18 @@ public class ListView extends VerticalLayout {
         removeClassName("editing");
     }
 
-    public void editTodo(Todo todo) {
-        if (todo == null) {
+    public void editTodo(TodoDto todoDto) {
+        if (todoDto == null) {
             closeEditor();
         } else {
-            form.setTodo(todo);
+            form.setTodo(todoDto);
             form.setVisible(true);
             addClassName("editing");
         }
     }
 
     private void updateList() {
-        grid.setItems(todoService.getAllByFilter(authenticatedUser.getId(), filterText.getValue()));
+        grid.setItems(todoService.getFilteredTodosByUserId(authenticatedUser.getId(), filterText.getValue()));
     }
 
     private void configureGrid() {
@@ -71,6 +74,12 @@ public class ListView extends VerticalLayout {
         grid.setColumns("name");
         grid.getColumns().forEach(col -> col.setAutoWidth(true));
         grid.asSingleSelect().addValueChangeListener(event -> editTodo(event.getValue()));
+        grid.setClassNameGenerator(this::getRowClassName);
+    }
+
+    private String getRowClassName(TodoDto todoDto) {
+        //todo coloring in different colors
+        return "";
     }
 
     private HorizontalLayout getToolBar() {
@@ -81,7 +90,7 @@ public class ListView extends VerticalLayout {
 
         Button addTodoButton = new Button("Add todo");
         addTodoButton.addClickListener(click -> addTodo());
-        
+
         HorizontalLayout toolbar = new HorizontalLayout(filterText, addTodoButton);
         toolbar.addClassName("toolbar");
 
@@ -90,7 +99,7 @@ public class ListView extends VerticalLayout {
 
     private void addTodo() {
         grid.asSingleSelect().clear();
-        editTodo(new Todo(authenticatedUser.getId()));
+        editTodo(new TodoDto(authenticatedUser.getId()));
     }
 
     private Component getContent() {
@@ -103,7 +112,7 @@ public class ListView extends VerticalLayout {
     }
 
     private void configureForm() {
-        form = new TodoForm(todoService.getAll(1));
+        form = new TodoForm(todoService.getTodosByUserId(authenticatedUser.getId()));
         form.setWidth("25em");
         form.addSaveListener(this::saveTodo);
         form.addDeleteListener(this::deleteTodo);
@@ -111,13 +120,19 @@ public class ListView extends VerticalLayout {
     }
 
     private void saveTodo(TodoForm.SaveEvent event) {
-        todoService.save(event.getTodo());
+        TodoDto todoDto = event.getTodoDto();
+        if (todoDto.getId() == null) {
+            todoService.createTodo(todoDto);
+        } else {
+            todoService.updateTodo(todoDto.getId(), todoDto);
+        }
         updateList();
         closeEditor();
     }
 
     private void deleteTodo(TodoForm.DeleteEvent event) {
-        todoService.delete(event.getTodo());
+        TodoDto todoDto = event.getTodoDto();
+        todoService.deleteTodo(todoDto.getId());
         updateList();
         closeEditor();
     }
