@@ -1,0 +1,404 @@
+package ru.mngerasimenko.todolist.service;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import ru.mngerasimenko.todolist.dto.UserDto;
+import ru.mngerasimenko.todolist.exception.UserNotFoundException;
+import ru.mngerasimenko.todolist.mapper.UserMapper;
+import ru.mngerasimenko.todolist.model.User;
+import ru.mngerasimenko.todolist.repository.UserRepository;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class UserServiceImplTest {
+
+    @Mock
+    private UserRepository repository;
+
+    @Mock
+    private UserMapper mapper;
+
+    @InjectMocks
+    private UserServiceImpl userService;
+
+    private User user;
+    private UserDto userDto;
+
+
+    @BeforeEach
+    void setUp() {
+        user = new User();
+        user.setId(1L);
+        user.setAuthId("AuthId");
+        user.setName("user");
+        user.setEmail("user@mail.ru");
+        user.setPassword("password");
+
+        userDto = new UserDto();
+        userDto.setId(1L);
+        userDto.setAuthId("AuthId");
+        userDto.setName("user");
+        userDto.setEmail("user@mail.ru");
+        userDto.setPassword("password");
+    }
+
+    @Test
+    void getAll_ReturnsListOfUsers() {
+        User user2 = new User();
+        user2.setId(2L);
+        user2.setAuthId("AuthId2");
+        user2.setName("user2");
+        user2.setEmail("user2@mail.ru");
+        user2.setPassword("pass2");
+
+        UserDto dto2 = new UserDto();
+        dto2.setId(2L);
+        dto2.setAuthId("AuthId2");
+        dto2.setName("user2");
+        dto2.setEmail("user2@mail.ru");
+        dto2.setPassword("pass2");
+
+        List<User> users = Arrays.asList(user, user2);
+        when(repository.findAll()).thenReturn(users);
+        when(mapper.toDto(user)).thenReturn(userDto);
+        when(mapper.toDto(user2)).thenReturn(dto2);
+
+        List<UserDto> result = userService.getAll();
+
+        assertThat(result).hasSize(2);
+        assertThat(result).containsExactlyInAnyOrder(userDto, dto2);
+        assertEquals(result.get(0).getId(), userDto.getId());
+        assertEquals(result.get(1).getId(), dto2.getId());
+        verify(repository, times(1)).findAll();
+        verify(mapper, times(2)).toDto(any(User.class));
+    }
+
+    @Test
+    void delete_DeletesUserById() {
+        userService.delete(1L);
+
+        verify(repository, times(1)).deleteById(1L);
+    }
+
+    @Test
+    void getUserByUserName_WithValidUserName_ReturnsUserDto() {
+        when(repository.getUserByName("user")).thenReturn(user);
+        when(mapper.toDto(user)).thenReturn(userDto);
+
+        UserDto result = userService.getUserByUserName("user");
+
+        assertThat(result).isEqualTo(userDto);
+        verify(repository, times(1)).getUserByName("user");
+        verify(mapper, times(1)).toDto(user);
+    }
+
+    @Test
+    void getUserByUserName_WithBlankUserName_ReturnsNull() {
+        UserDto result = userService.getUserByUserName("   ");
+
+        assertThat(result).isNull();
+        verify(repository, never()).getUserByName(anyString());
+    }
+
+    @Test
+    void getUserByUserName_WithNullUserName_ReturnsNull() {
+        UserDto result = userService.getUserByUserName(null);
+
+        assertThat(result).isNull();
+        verify(repository, never()).getUserByName(anyString());
+    }
+
+    @Test
+    void getUserByAuthId_WithValidAuthId_ReturnsUserDto() {
+        when(repository.getUserByAuthId("AuthId")).thenReturn(user);
+        when(mapper.toDto(user)).thenReturn(userDto);
+
+        UserDto result = userService.getUserByAuthId("AuthId");
+
+        assertThat(result).isEqualTo(userDto);
+        verify(repository, times(1)).getUserByAuthId("AuthId");
+        verify(mapper, times(1)).toDto(user);
+    }
+
+    @Test
+    void getUserByAuthId_WithBlankAuthId_ReturnsNull() {
+        UserDto result = userService.getUserByAuthId("   ");
+
+        assertThat(result).isNull();
+        verify(repository, never()).getUserByAuthId(anyString());
+    }
+
+    @Test
+    void getUserByAuthId_WithNullAuthId_ReturnsNull() {
+        UserDto result = userService.getUserByAuthId(null);
+
+        assertThat(result).isNull();
+        verify(repository, never()).getUserByAuthId(anyString());
+    }
+
+    @Test
+    void createUser_WithNewUser_ReturnsCreatedUserDto() {
+        UserDto newUserDto = new UserDto();
+        newUserDto.setName("newuser");
+        newUserDto.setEmail("new@mail.ru");
+        newUserDto.setPassword("newpass");
+
+        User newUser = new User();
+        newUser.setName("newuser");
+        newUser.setEmail("new@mail.ru");
+        newUser.setPassword("newpass");
+
+        User savedUser = new User();
+        savedUser.setId(2L);
+        savedUser.setName("newuser");
+        savedUser.setEmail("new@mail.ru");
+        savedUser.setPassword("newpass");
+        savedUser.setAuthId("generated-auth-id");
+
+        when(repository.getUserByEmail("new@mail.ru")).thenReturn(null);
+        when(repository.getUserByName("newuser")).thenReturn(null);
+        when(mapper.toEntity(newUserDto)).thenReturn(newUser);
+        when(repository.save(any(User.class))).thenReturn(savedUser);
+        when(mapper.toDto(savedUser)).thenReturn(newUserDto);
+
+        UserDto result = userService.createUser(newUserDto);
+
+        assertThat(result).isEqualTo(newUserDto);
+        verify(repository, times(1)).save(any(User.class));
+        verify(mapper, times(1)).toDto(savedUser);
+    }
+
+    @Test
+    void createUser_WithExistingEmail_ThrowsIllegalArgumentException() {
+        UserDto existingUserDto = new UserDto();
+        existingUserDto.setName("existing");
+        existingUserDto.setEmail("existing@mail.ru");
+        existingUserDto.setPassword("pass");
+
+        User existingUser = new User();
+        existingUser.setEmail("existing@mail.ru");
+
+        when(repository.getUserByEmail("existing@mail.ru")).thenReturn(existingUser);
+
+        assertThatThrownBy(() -> userService.createUser(existingUserDto))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("User with email existing@mail.ru already exists");
+
+        verify(repository, never()).save(any(User.class));
+        verify(mapper, never()).toEntity(any());
+    }
+
+    @Test
+    void createUser_WithExistingUserName_ThrowsIllegalArgumentException() {
+        UserDto existingUserDto = new UserDto();
+        existingUserDto.setName("existing");
+        existingUserDto.setEmail("new@mail.ru");
+        existingUserDto.setPassword("pass");
+
+        User existingUser = new User();
+        existingUser.setName("existing");
+
+        when(repository.getUserByEmail("new@mail.ru")).thenReturn(null);
+        when(repository.getUserByName("existing")).thenReturn(existingUser);
+
+        assertThatThrownBy(() -> userService.createUser(existingUserDto))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("User with name existing already exists");
+
+        verify(repository, never()).save(any(User.class));
+        verify(mapper, never()).toEntity(any());
+    }
+
+    @Test
+    void createUser_WithNullAuthId_GeneratesNewAuthId() {
+        UserDto newUserDto = new UserDto();
+        newUserDto.setName("newuser");
+        newUserDto.setEmail("new@mail.ru");
+        newUserDto.setPassword("newpass");
+        newUserDto.setAuthId(null);
+
+        User newUser = new User();
+        newUser.setName("newuser");
+        newUser.setEmail("new@mail.ru");
+        newUser.setPassword("newpass");
+        newUser.setAuthId(null);
+
+        when(repository.getUserByEmail("new@mail.ru")).thenReturn(null);
+        when(repository.getUserByName("newuser")).thenReturn(null);
+        when(mapper.toEntity(newUserDto)).thenReturn(newUser);
+        when(repository.save(any(User.class))).thenAnswer(invocation -> {
+            User saved = invocation.getArgument(0);
+            saved.setId(2L);
+            if (saved.getAuthId() == null) {
+                saved.setAuthId(UUID.randomUUID().toString());
+            }
+            return saved;
+        });
+        when(mapper.toDto(any(User.class))).thenAnswer(invocation -> {
+            User user = invocation.getArgument(0);
+            UserDto dto = new UserDto();
+            dto.setId(user.getId());
+            dto.setName(user.getName());
+            dto.setEmail(user.getEmail());
+            dto.setPassword(user.getPassword());
+            dto.setAuthId(user.getAuthId());
+            return dto;
+        });
+
+        UserDto result = userService.createUser(newUserDto);
+
+        assertThat(result.getAuthId()).isNotNull();
+        assertThat(result.getAuthId()).isNotEmpty();
+        verify(repository, times(1)).save(any(User.class));
+    }
+
+    @Test
+    void updateUser_WithValidIdAndDto_ReturnsUpdatedUserDto() {
+        UserDto updatedDto = new UserDto();
+        updatedDto.setName("updated");
+        updatedDto.setEmail("updated@mail.ru");
+        updatedDto.setPassword("newpass");
+
+        User existingUser = new User();
+        existingUser.setId(1L);
+        existingUser.setName("old");
+        existingUser.setEmail("old@mail.ru");
+        existingUser.setPassword("oldpass");
+
+        User updatedUser = new User();
+        updatedUser.setId(1L);
+        updatedUser.setName("updated");
+        updatedUser.setEmail("updated@mail.ru");
+        updatedUser.setPassword("newpass");
+
+        when(repository.findById(1L)).thenReturn(Optional.of(existingUser));
+        when(repository.getUserByEmail("updated@mail.ru")).thenReturn(null);
+        when(repository.save(any(User.class))).thenReturn(updatedUser);
+        when(mapper.toDto(updatedUser)).thenReturn(updatedDto);
+
+        UserDto result = userService.updateUser(1L, updatedDto);
+
+        assertThat(result).isEqualTo(updatedDto);
+        verify(repository, times(1)).save(any(User.class));
+        verify(repository, times(1)).findById(1L);
+    }
+
+    @Test
+    void updateUser_WithNonExistentId_ThrowsUserNotFoundException() {
+        UserDto updatedDto = new UserDto();
+        updatedDto.setName("updated");
+        updatedDto.setEmail("updated@mail.ru");
+        updatedDto.setPassword("newpass");
+
+        when(repository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.updateUser(999L, updatedDto))
+                .isInstanceOf(UserNotFoundException.class)
+                .hasMessage("User not found with id: 999");
+
+        verify(repository, never()).save(any(User.class));
+    }
+
+    @Test
+    void updateUser_WithExistingEmail_ThrowsIllegalArgumentException() {
+        UserDto updatedDto = new UserDto();
+        updatedDto.setName("updated");
+        updatedDto.setEmail("existing@mail.ru");
+        updatedDto.setPassword("newpass");
+
+        User existingUser = new User();
+        existingUser.setId(1L);
+        existingUser.setName("old");
+        existingUser.setEmail("old@mail.ru");
+        existingUser.setPassword("oldpass");
+
+        User existingEmailUser = new User();
+        existingEmailUser.setEmail("existing@mail.ru");
+
+        when(repository.findById(1L)).thenReturn(Optional.of(existingUser));
+        when(repository.getUserByEmail("existing@mail.ru")).thenReturn(existingEmailUser);
+
+        assertThatThrownBy(() -> userService.updateUser(1L, updatedDto))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Email existing@mail.ru is already taken");
+
+        verify(repository, never()).save(any(User.class));
+    }
+
+    @Test
+    void getUserById_WithValidId_ReturnsUserDto() {
+        when(repository.getUserById(1L)).thenReturn(user);
+        when(mapper.toDto(user)).thenReturn(userDto);
+
+        UserDto result = userService.getUserById(1L);
+
+        assertThat(result).isEqualTo(userDto);
+        verify(repository, times(1)).getUserById(1L);
+        verify(mapper, times(1)).toDto(user);
+    }
+
+    @Test
+    void getUserById_WithNonExistentId_ThrowsUserNotFoundException() {
+        when(repository.getUserById(999L)).thenReturn(null);
+
+        assertThatThrownBy(() -> userService.getUserById(999L))
+                .isInstanceOf(UserNotFoundException.class)
+                .hasMessage("User not found with id: 999");
+
+        verify(repository, times(1)).getUserById(999L);
+    }
+
+    @Test
+    void existsByEmail_WithExistingEmail_ReturnsTrue() {
+        when(repository.getUserByEmail("test@mail.ru")).thenReturn(user);
+
+        boolean result = userService.existsByEmail("test@mail.ru");
+
+        assertThat(result).isTrue();
+        verify(repository, times(1)).getUserByEmail("test@mail.ru");
+    }
+
+    @Test
+    void existsByEmail_WithNonExistentEmail_ReturnsFalse() {
+        when(repository.getUserByEmail("nonexistent@mail.ru")).thenReturn(null);
+
+        boolean result = userService.existsByEmail("nonexistent@mail.ru");
+
+        assertThat(result).isFalse();
+        verify(repository, times(1)).getUserByEmail("nonexistent@mail.ru");
+    }
+
+    @Test
+    void existsByUserName_WithExistingUserName_ReturnsTrue() {
+        when(repository.getUserByName("user")).thenReturn(user);
+
+        boolean result = userService.existsByUserName("user");
+
+        assertThat(result).isTrue();
+        verify(repository, times(1)).getUserByName("user");
+    }
+
+    @Test
+    void existsByUserName_WithNonExistentUserName_ReturnsFalse() {
+        when(repository.getUserByName("nonexistent")).thenReturn(null);
+
+        boolean result = userService.existsByUserName("nonexistent");
+
+        assertThat(result).isFalse();
+        verify(repository, times(1)).getUserByName("nonexistent");
+    }
+}

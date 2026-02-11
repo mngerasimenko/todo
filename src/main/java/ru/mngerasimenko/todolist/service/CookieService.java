@@ -1,13 +1,18 @@
 package ru.mngerasimenko.todolist.service;
 
 import com.vaadin.flow.server.VaadinResponse;
-import com.vaadin.flow.server.VaadinService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import ru.mngerasimenko.todolist.mapper.VaadinServiceWrapper;
 
 @Service
+@RequiredArgsConstructor
 public class CookieService {
+
+    private final VaadinServiceWrapper vaadinServiceWrapper;
+
     public static final String COOKIE_NAME = "todoAuthId";
     public static final int DAY = 60 * 60 * 24;
 
@@ -33,12 +38,12 @@ public class CookieService {
         setCookie(COOKIE_NAME, value, maxAgeDay);
     }
 
-    public void setCookie(String name, String value, int maxAgeMonth) {
-        VaadinResponse response = VaadinService.getCurrentResponse();
+    public void setCookie(String name, String value, int maxAgeDay) {
+        VaadinResponse response = vaadinServiceWrapper.getCurrentResponse();
         if (response == null) return;
 
         Cookie cookie = new Cookie(name, value);
-        cookie.setMaxAge(maxAgeMonth * DAY);
+        cookie.setMaxAge(maxAgeDay * DAY);
         cookie.setPath("/");
         cookie.setHttpOnly(true);
         //cookie.setSecure(true);
