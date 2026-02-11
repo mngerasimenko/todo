@@ -106,8 +106,8 @@ docker compose down
 
 # 1. Склонируйте репозиторий
 ```bash
-git clone https://github.com/mngerasimenko/ваш-репозиторий.git
-cd ваш-репозиторий
+git clone https://github.com/mngerasimenko/todo.git
+cd todo
 ```
 # 2. Запустите инициализационный скрипт (требуются права root)
 ```bash
