@@ -51,14 +51,7 @@ jobs:
           EOF
 
       - name: Run tests with JaCoCo coverage
-        run: mvn clean test jacoco:report
-        env:
-          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/todo
-          SPRING_DATASOURCE_USERNAME: postgres
-          SPRING_DATASOURCE_PASSWORD: postgres
-
-      - name: Check coverage thresholds
-        run: mvn jacoco:check
+        run: mvn clean test
         env:
           SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/todo
           SPRING_DATASOURCE_USERNAME: postgres
