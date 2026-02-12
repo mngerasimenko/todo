@@ -24,11 +24,11 @@ import java.io.IOException;
 
 @EnableWebSecurity
 @Configuration
-public class SecurityConfig extends VaadinWebSecurity {
+public class VaadinSecurityConfig extends VaadinWebSecurity {
 
     private final UserAuthService userAuthService;
 
-    public SecurityConfig(UserAuthService userAuthService) {
+    public VaadinSecurityConfig(UserAuthService userAuthService) {
         this.userAuthService = userAuthService;
     }
 
@@ -39,8 +39,6 @@ public class SecurityConfig extends VaadinWebSecurity {
         http.authorizeHttpRequests(auth ->
                 auth.requestMatchers(AntPathRequestMatcher.antMatcher(HttpMethod.GET, "/images/*.png"))
                         .permitAll()
-                        .requestMatchers(AntPathRequestMatcher.antMatcher("/api/**"))
-                        .permitAll()
                         .requestMatchers(AntPathRequestMatcher.antMatcher("/VAADIN/**"))
                         .permitAll()
                         .requestMatchers(AntPathRequestMatcher.antMatcher("/frontend/**"))
@@ -50,10 +48,6 @@ public class SecurityConfig extends VaadinWebSecurity {
 
         super.configure(http);
         setLoginView(http, LoginView.class);
-
-        http.csrf(csrf -> csrf
-                .ignoringRequestMatchers(AntPathRequestMatcher.antMatcher("/api/**"))
-        );
     }
 
     private OncePerRequestFilter autoLoginFilter() {

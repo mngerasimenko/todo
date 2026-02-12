@@ -54,6 +54,11 @@
             <version>1.18.42</version>
             <scope>compile</scope>
         </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -114,7 +119,6 @@
                                 <exclude>**/exception/*</exclude>
                                 <exclude>**/security/*</exclude>
                                 <exclude>**/mapper/*</exclude>
-                                <exclude>**/controller/*</exclude>
                                 <exclude>**/view/*</exclude>
                                 <exclude>**/utils/*</exclude>
                                 <exclude>**/TodolistApplication.class</exclude>

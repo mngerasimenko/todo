@@ -55,7 +55,9 @@ public class TodoMapper {
 
         todo.setName(todoDto.getName());
         todo.setDateTime(todoDto.getDateTime());
-        todo.setDone(todoDto.getDone());
+        if (todoDto.getDone() != null) {
+            todo.setDone(todoDto.getDone());
+        }
     }
 
 
@@ -80,6 +82,7 @@ public class TodoMapper {
                 .dateTime(todoDto.getDateTime())
                 .done(todoDto.getDone())
                 .userId(todoDto.getUserId())
+                .userName(todoDto.getUserName())
                 .createdAt(todoDto.getDateTime())
                 .build();
     }

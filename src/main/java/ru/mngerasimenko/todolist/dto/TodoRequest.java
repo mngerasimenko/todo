@@ -26,11 +26,9 @@ public class TodoRequest {
     private String name;
 
     @JsonProperty("date_time")
-    @NotNull(message = "Date time is required")
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime dateTime;
 
-    @NotNull(message = "Done status is required")
     private Boolean done;
 
     @JsonProperty("user_id")
