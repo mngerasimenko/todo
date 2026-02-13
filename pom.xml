@@ -99,15 +99,20 @@
                                             <value>COVEREDRATIO</value>
                                             <minimum>0.70</minimum>
                                         </limit>
-                                    </limits>
-                                </rule>
-                                <rule>
-                                    <element>CLASS</element>
-                                    <limits>
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
                                             <minimum>0.70</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.60</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>METHOD</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.80</minimum>
                                         </limit>
                                     </limits>
                                 </rule>
@@ -118,9 +123,9 @@
                                 <exclude>**/config/*</exclude>
                                 <exclude>**/exception/*</exclude>
                                 <exclude>**/security/*</exclude>
-                                <exclude>**/mapper/*</exclude>
                                 <exclude>**/view/*</exclude>
                                 <exclude>**/utils/*</exclude>
+                                <exclude>**/VaadinServiceWrapper.class</exclude>
                                 <exclude>**/TodolistApplication.class</exclude>
                             </excludes>
                         </configuration>

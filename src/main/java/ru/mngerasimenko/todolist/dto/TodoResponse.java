@@ -1,6 +1,7 @@
 package ru.mngerasimenko.todolist.dto;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -34,4 +35,14 @@ public class TodoResponse {
     @JsonProperty("created_at")
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime createdAt;
+
+    @JsonProperty("done")
+    public boolean isDone() {
+        return done != null && done;
+    }
+
+    @JsonIgnore
+    public Boolean getDone() {
+        return done;
+    }
 }

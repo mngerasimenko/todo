@@ -1,6 +1,7 @@
 package ru.mngerasimenko.todolist.dto;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -44,5 +45,15 @@ public class TodoDto {
 
     @JsonProperty("user_email")
     private String userEmail;
+
+    @JsonProperty("done")
+    public boolean isDone() {
+        return done != null && done;
+    }
+
+    @JsonIgnore
+    public Boolean getDone() {
+        return done;
+    }
 
 }

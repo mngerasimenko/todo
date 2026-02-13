@@ -165,7 +165,7 @@ public class TodoServiceImplTest {
         TodoDto updateDto = new TodoDto();
         updateDto.setName("Updated Todo");
         updateDto.setDone(true);
-        updateDto.setUserId(1L);
+        updateDto.setUserId(testUser.getId());
 
         Todo existingTodo = new Todo();
         existingTodo.setId(1L);
@@ -185,11 +185,10 @@ public class TodoServiceImplTest {
         updatedTodoDto.setId(1L);
         updatedTodoDto.setName("Updated Todo");
         updatedTodoDto.setDone(true);
-        updatedTodoDto.setUserId(1L);
+        updatedTodoDto.setUserId(testUser.getId());
         updatedTodoDto.setDateTime(updatedTodo.getDateTime());
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(existingTodo));
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
         doNothing().when(todoMapper).updateEntityFromDto(updateDto, existingTodo);
         when(todoRepository.save(any(Todo.class))).thenReturn(updatedTodo);
         when(todoMapper.toDto(updatedTodo)).thenReturn(updatedTodoDto);
@@ -199,7 +198,7 @@ public class TodoServiceImplTest {
         assertThat(result).isNotNull();
         assertThat(result.getName()).isEqualTo("Updated Todo");
         assertThat(result.getDone()).isTrue();
-        verify(todoRepository, times(1)).findById(1L);
+        verify(userRepository, never()).findById(any());
         verify(todoMapper, times(1)).updateEntityFromDto(updateDto, existingTodo);
         verify(todoRepository, times(1)).save(existingTodo);
     }
@@ -228,7 +227,6 @@ public class TodoServiceImplTest {
         existingTodo.setId(1L);
         existingTodo.setName("Old Todo");
         existingTodo.setUser(testUser);
-        existingTodo.setUserId(testUser.getId());
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(existingTodo));
         when(userRepository.findById(999L)).thenReturn(Optional.empty());
@@ -260,7 +258,7 @@ public class TodoServiceImplTest {
 
         TodoDto updatedTodoDto = new TodoDto();
         updatedTodoDto.setId(1L);
-        updatedTodoDto.setUserId(2L);
+        updatedTodoDto.setUserId(newUser.getId());
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(existingTodo));
         when(userRepository.findById(2L)).thenReturn(Optional.of(newUser));
