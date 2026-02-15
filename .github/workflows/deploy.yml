@@ -12,21 +12,6 @@ jobs:
   # ============================================
   test:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_DB: todo
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -38,24 +23,8 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Configure test database
-        run: |
-          mkdir -p src/test/resources
-          cat > src/test/resources/application.properties <<EOF
-          spring.datasource.url=jdbc:postgresql://localhost:5432/todo
-          spring.datasource.username=postgres
-          spring.datasource.password=postgres
-          spring.jpa.hibernate.ddl-auto=create-drop
-          spring.jpa.show-sql=true
-          spring.jpa.properties.hibernate.format_sql=true
-          EOF
-
       - name: Run tests with JaCoCo coverage
         run: mvn clean test
-        env:
-          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/todo
-          SPRING_DATASOURCE_USERNAME: postgres
-          SPRING_DATASOURCE_PASSWORD: postgres
 
       - name: Upload JaCoCo coverage report
         uses: actions/upload-artifact@v4

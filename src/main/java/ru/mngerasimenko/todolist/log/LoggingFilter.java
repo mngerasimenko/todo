@@ -1,4 +1,4 @@
-package ru.mngerasimenko.todolist.utils;
+package ru.mngerasimenko.todolist.log;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
