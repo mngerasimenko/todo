@@ -5,24 +5,62 @@ import com.vaadin.flow.component.ComponentEventListener;
 import com.vaadin.flow.component.Key;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.checkbox.Checkbox;
 import com.vaadin.flow.component.formlayout.FormLayout;
+import com.vaadin.flow.component.html.H3;
+import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.component.icon.Icon;
+import com.vaadin.flow.component.icon.VaadinIcon;
+import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.shared.Registration;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 public class TodoForm extends FormLayout {
     TodoDto todoDto;
-    TextField title = new TextField("Todo title");
-    Button save = new Button("Save");
-    Button delete = new Button("Delete");
-    Button close = new Button("Close");
+
+    private static final DateTimeFormatter DATE_FORMATTER =
+            DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+
+    // Заголовок формы
+    H3 formTitle = new H3("Новая задача");
+
+    // Поля
+    TextField title = new TextField("Название задачи");
+    Checkbox doneCheckbox = new Checkbox("Выполнено");
+    Span dateLabel = new Span();
+
+    // Кнопки
+    Button save = new Button("Сохранить", new Icon(VaadinIcon.CHECK));
+    Button delete = new Button("Удалить", new Icon(VaadinIcon.TRASH));
+    Button close = new Button("Закрыть", new Icon(VaadinIcon.CLOSE));
 
     public TodoForm(List<TodoDto> todoList) {
         addClassName("todo-form");
-        add(title, createButtonsLayout());
+
+        // Настройка полей
+        title.setPlaceholder("Введите название задачи...");
+        title.setWidthFull();
+        title.setClearButtonVisible(true);
+        title.setPrefixComponent(VaadinIcon.EDIT.create());
+
+        doneCheckbox.getStyle()
+                .set("padding-top", "var(--lumo-space-s)");
+
+        dateLabel.getStyle()
+                .set("color", "var(--lumo-secondary-text-color)")
+                .set("font-size", "var(--lumo-font-size-s)")
+                .set("padding", "var(--lumo-space-xs) 0");
+
+        formTitle.getStyle()
+                .set("margin", "0 0 var(--lumo-space-s) 0")
+                .set("color", "var(--lumo-primary-text-color)");
+
+        add(formTitle, title, doneCheckbox, dateLabel, createButtonsLayout());
     }
 
     private HorizontalLayout createButtonsLayout() {
@@ -37,22 +75,59 @@ public class TodoForm extends FormLayout {
         delete.addClickListener(event -> fireEvent(new DeleteEvent(this, todoDto)));
         close.addClickListener(event -> fireEvent(new CloseEvent(this)));
 
-        return new HorizontalLayout(save, delete, close);
+        HorizontalLayout buttonsLayout = new HorizontalLayout(save, delete, close);
+        buttonsLayout.addClassName("todo-form-buttons");
+        buttonsLayout.setWidthFull();
+        buttonsLayout.setAlignItems(FlexComponent.Alignment.CENTER);
+        return buttonsLayout;
     }
 
     private void validateAndSave() {
         todoDto.setName(title.getValue());
+        todoDto.setDone(doneCheckbox.getValue());
         fireEvent(new SaveEvent(this, todoDto));
     }
 
     public void setTodo(TodoDto todoDto) {
         this.todoDto = todoDto;
-        if (todoDto != null && todoDto.getName() != null) {
-            this.title.setValue(todoDto.getName());
+        if (todoDto != null) {
+            // Название
+            if (todoDto.getName() != null) {
+                this.title.setValue(todoDto.getName());
+            } else {
+                this.title.clear();
+            }
+
+            // Чекбокс статуса
+            doneCheckbox.setValue(todoDto.isDone());
+
+            // Дата
+            if (todoDto.getDateTime() != null) {
+                dateLabel.setText("Создано: " + todoDto.getDateTime().format(DATE_FORMATTER));
+                dateLabel.setVisible(true);
+            } else {
+                dateLabel.setVisible(false);
+            }
+
+            // Контекстный заголовок и видимость элементов
+            if (todoDto.getId() == null) {
+                formTitle.setText("Новая задача");
+                delete.setVisible(false);
+                doneCheckbox.setVisible(false);
+                dateLabel.setVisible(false);
+            } else {
+                formTitle.setText("Редактирование задачи");
+                delete.setVisible(true);
+                doneCheckbox.setVisible(true);
+            }
         } else {
             this.title.clear();
+            doneCheckbox.setValue(false);
+            dateLabel.setText("");
         }
     }
+
+    // === События ===
 
     public static abstract class TodoFormEvent extends ComponentEvent<TodoForm> {
         private final TodoDto todoDto;

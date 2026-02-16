@@ -1,0 +1,189 @@
+/* === Цветовая палитра (Lumo CSS Custom Properties) === */
+html {
+  /* Акцентный синий */
+  --lumo-primary-color: hsl(214, 90%, 52%);
+  --lumo-primary-color-50pct: hsla(214, 90%, 52%, 0.5);
+  --lumo-primary-color-10pct: hsla(214, 90%, 52%, 0.1);
+  --lumo-primary-text-color: hsl(214, 90%, 52%);
+  --lumo-primary-contrast-color: #ffffff;
+
+  /* Красный для ошибок/удаления */
+  --lumo-error-color: hsl(3, 85%, 55%);
+  --lumo-error-color-50pct: hsla(3, 85%, 55%, 0.5);
+  --lumo-error-color-10pct: hsla(3, 85%, 55%, 0.1);
+  --lumo-error-text-color: hsl(3, 85%, 48%);
+
+  /* Зелёный для выполненных задач */
+  --lumo-success-color: hsl(145, 65%, 42%);
+  --lumo-success-color-50pct: hsla(145, 65%, 42%, 0.5);
+  --lumo-success-color-10pct: hsla(145, 65%, 42%, 0.1);
+  --lumo-success-text-color: hsl(145, 65%, 36%);
+
+  /* Фон и текст */
+  --lumo-base-color: hsl(220, 20%, 97%);
+  --lumo-body-text-color: hsl(220, 15%, 20%);
+  --lumo-secondary-text-color: hsl(220, 10%, 50%);
+  --lumo-tertiary-text-color: hsl(220, 10%, 65%);
+
+  /* Контрасты */
+  --lumo-contrast-5pct: hsla(220, 15%, 20%, 0.05);
+  --lumo-contrast-10pct: hsla(220, 15%, 20%, 0.1);
+  --lumo-contrast-20pct: hsla(220, 15%, 20%, 0.2);
+
+  /* Типографика */
+  --lumo-font-family: 'Inter', 'Segoe UI', Roboto, -apple-system, BlinkMacSystemFont, sans-serif;
+  --lumo-font-size-xl: 1.375rem;
+  --lumo-font-size-l: 1.125rem;
+  --lumo-font-size-m: 0.9375rem;
+  --lumo-font-size-s: 0.8125rem;
+
+  /* Скругления */
+  --lumo-border-radius-m: 8px;
+  --lumo-border-radius-l: 12px;
+  --lumo-border-radius-s: 6px;
+
+  /* Тени */
+  --lumo-box-shadow-s: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
+  --lumo-box-shadow-m: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+  --lumo-box-shadow-l: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.06);
+  --lumo-box-shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.06);
+}
+
+/* === Страница входа === */
+.login-view {
+  background: linear-gradient(135deg, hsl(214, 90%, 96%) 0%, hsl(214, 60%, 88%) 50%, hsl(250, 50%, 92%) 100%);
+}
+
+.login-view h1 {
+  color: var(--lumo-primary-text-color);
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.login-view vaadin-login-form {
+  background: #ffffff;
+  border-radius: var(--lumo-border-radius-l);
+  box-shadow: var(--lumo-box-shadow-xl);
+  padding: var(--lumo-space-l);
+}
+
+/* === Навигационная панель === */
+.main-header {
+  background: #ffffff;
+  box-shadow: var(--lumo-box-shadow-s);
+  min-height: 56px;
+}
+
+.main-header h1 {
+  font-size: var(--lumo-font-size-xl);
+  font-weight: 700;
+  color: var(--lumo-primary-text-color);
+  letter-spacing: -0.01em;
+}
+
+.header-logout-btn {
+  border-radius: var(--lumo-border-radius-m);
+  font-weight: 500;
+}
+
+/* === Список задач === */
+.list-view {
+  padding: var(--lumo-space-l);
+  background: var(--lumo-base-color);
+}
+
+.toolbar {
+  padding: var(--lumo-space-s) 0;
+  gap: var(--lumo-space-m);
+  align-items: center;
+}
+
+.toolbar vaadin-text-field {
+  flex-grow: 1;
+  max-width: 400px;
+}
+
+.add-todo-btn {
+  border-radius: var(--lumo-border-radius-m);
+  font-weight: 600;
+  padding: 0 var(--lumo-space-l);
+  min-height: 38px;
+}
+
+/* Грид с задачами */
+.todo-grid {
+  border-radius: var(--lumo-border-radius-l);
+  box-shadow: var(--lumo-box-shadow-s);
+  background: #ffffff;
+  overflow: hidden;
+}
+
+/* Раскраска строк */
+.todo-row-done {
+  background-color: var(--lumo-success-color-10pct);
+}
+
+.todo-row-active:hover {
+  background-color: var(--lumo-primary-color-10pct);
+}
+
+/* === Форма задачи === */
+.todo-form {
+  background: #ffffff;
+  border-radius: var(--lumo-border-radius-l);
+  box-shadow: var(--lumo-box-shadow-l);
+  padding: var(--lumo-space-l);
+  border-left: 4px solid var(--lumo-primary-color);
+}
+
+.todo-form-buttons {
+  gap: var(--lumo-space-s);
+  padding-top: var(--lumo-space-m);
+}
+
+/* === Пустое состояние === */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--lumo-space-xl) 0;
+  color: var(--lumo-secondary-text-color);
+}
+
+.empty-state-icon {
+  font-size: 3rem;
+  margin-bottom: var(--lumo-space-m);
+  opacity: 0.5;
+}
+
+.empty-state-text {
+  font-size: var(--lumo-font-size-l);
+  font-weight: 500;
+}
+
+/* === Состояние редактирования === */
+.editing .content {
+  gap: var(--lumo-space-l);
+}
+
+/* === Адаптивность === */
+@media (max-width: 768px) {
+  .list-view {
+    padding: var(--lumo-space-m);
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .toolbar vaadin-text-field {
+    max-width: 100%;
+  }
+
+  .editing .todo-form {
+    width: 100% !important;
+  }
+}
