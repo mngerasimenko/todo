@@ -1,14 +1,15 @@
 # 🛒 Todo List
 
 ![Java](https://img.shields.io/badge/Java-17-007396?logo=java)
-![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.2.2-6DB33F?logo=spring)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.4.1-6DB33F?logo=spring)
 ![Vaadin](https://img.shields.io/badge/Vaadin-24.3.8-2D3E50?logo=vaadin)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791?logo=postgresql)
 ![Docker](https://img.shields.io/badge/Docker-24+-2496ED?logo=docker)
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?logo=github-actions)
 
 Простое веб-приложение для управления списком задач и покупок с современным интерфейсом на Vaadin.
-- ✅ **Автоматический деплой при пуше в `master`** через GitHub Actions  
+- ✅ **Современный UI/UX** — кастомная тема с адаптивным дизайном
+- ✅ **Автоматический деплой при пуше в `master`** через GitHub Actions
 - ✅ **Автоматическая проверка пулл-реквестов** перед мержем
 - ✅ **Проверка покрытия кода через JaCoCo** перед каждым деплоем
 - ✅ **Защита от мержа сломанного кода** — тесты + проверка покрытия для всех PR
@@ -16,7 +17,7 @@
 ---
 
 ## 🌐 Демо
-
+/
 Приложение развернуто и доступно по адресу:
 
 **👉 [Попробовать онлайн](http://185.244.172.45:8090)**  
@@ -28,13 +29,18 @@
 ## 📌 Возможности приложения
 - ✅ Добавление, редактирование и удаление задач
 - ✅ Отметка задач как выполненных
+- ✅ Фильтрация и поиск задач
+- ✅ Счетчик выполненных задач
+- ✅ Визуальная индикация статуса (цветовая раскраска)
 - ✅ Хранение данных в PostgreSQL с сохранением между перезапусками
 - ✅ Современный SPA-интерфейс без перезагрузки страницы (Vaadin)
+- ✅ Кастомная тема с адаптивным дизайном
 - ✅ Авторизация пользователей (Spring Security)
 - ✅ Автоматический деплой при пуше в `master`
 - ✅ Автоматическая проверка пулл-реквестов
 
-**Статус:** В разработке
+**Статус:** Активная разработка
+**Последнее обновление:** Spring Boot 3.4.1, модернизированный UI/UX
 
 ---
 
@@ -43,8 +49,9 @@
 | Категория      | Технология               | Версия |
 |----------------|--------------------------|--------|
 | **Язык**       | Java                     | 17     |
-| **Backend**    | Spring Boot              | 3.2.2  |
+| **Backend**    | Spring Boot              | 3.4.1  |
 | **UI**         | Vaadin                   | 24.3.8 |
+| **Frontend**   | Vite + TypeScript        | —      |
 | **База данных**| PostgreSQL               | 17     |
 | **Сборка**     | Maven                    | 3.9    |
 | **Тестирование**| JUnit 5 + Mockito + AssertJ | —    |
@@ -142,24 +149,46 @@ chmod +x setup-server.sh
   - Дальнейшие деплои выполняются автоматически через git push origin master
 
 ## 📁 Структура проекта
-* .
-* ├── src/
-* │   ├── main/java/ru/mngerasimenko/todolist/
-* │   │   ├── controller/      # Spring MVC контроллеры (REST API)
-* │   │   ├── service/         # Бизнес-логика (полностью покрыта тестами)
-* │   │   ├── repository/      # Spring Data JPA репозитории
-* │   │   ├── model/           # Сущности JPA
-* │   │   ├── dto/             # Data Transfer Objects
-* │   │   ├── mapper/          # Мапперы
-* │   │   ├── security/        # Конфигурация Spring Security
-* │   │   ├── view/            # Vaadin UI компоненты
-* │   │   └── TodolistApplication.java
-* │   └── test/java/ru/mngerasimenko/todolist/
-* │       └── service/         # Модульные тесты сервисов
-* ├── pom.xml                  # Конфигурация Maven + JaCoCo
-* ├── Dockerfile               # Двухстадийная сборка образа
-* ├── docker-compose.yml       # Оркестрация (БД + приложение)
-* ├── setup-server.sh          # Скрипт первоначальной настройки сервера
-* └── .github/workflows/
-  * └── deploy.yml            # Единый пайплайн: тесты → деплой
+```
+.
+├── src/
+│   ├── main/
+│   │   ├── java/ru/mngerasimenko/todolist/
+│   │   │   ├── controller/      # Spring MVC контроллеры (REST API)
+│   │   │   ├── service/         # Бизнес-логика (полностью покрыта тестами)
+│   │   │   ├── repository/      # Spring Data JPA репозитории
+│   │   │   ├── model/           # Сущности JPA
+│   │   │   ├── dto/             # Data Transfer Objects
+│   │   │   ├── mapper/          # Мапперы
+│   │   │   ├── security/        # Конфигурация Spring Security
+│   │   │   ├── view/            # Vaadin UI компоненты
+│   │   │   └── TodolistApplication.java
+│   │   └── resources/
+│   │       └── application.properties
+│   └── test/java/ru/mngerasimenko/todolist/
+│       ├── controller/          # Тесты REST API (@WebMvcTest)
+│       ├── service/             # Тесты сервисов (@ExtendWith)
+│       ├── repository/          # Тесты репозиториев (@DataJpaTest)
+│       └── mapper/              # Тесты мапперов
+├── frontend/
+│   └── themes/
+│       └── todo-theme/          # Кастомная Vaadin тема
+│           ├── theme.json       # Конфигурация темы (Lumo)
+│           ├── styles.css       # Глобальные CSS custom properties
+│           └── components/      # Shadow DOM стили компонентов
+├── .claude/                     # Документация проекта
+│   ├── CLAUDE.md               # Настройки для Claude Code
+│   └── docs/
+│       ├── architecture.md     # Архитектура и паттерны
+│       ├── api.md              # REST API эндпоинты
+│       ├── models.md           # Сущности, DTO, маппинг
+│       ├── testing.md          # Тестирование и покрытие
+│       └── deployment.md       # Docker, CI/CD, сервер
+├── pom.xml                     # Конфигурация Maven + JaCoCo
+├── Dockerfile                  # Двухстадийная сборка образа
+├── docker-compose.yml          # Оркестрация (БД + приложение)
+├── setup-server.sh             # Скрипт первоначальной настройки сервера
+└── .github/workflows/
+    └── deploy.yml              # Единый пайплайн: тесты → деплой
+```
 
