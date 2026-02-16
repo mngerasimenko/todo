@@ -1,0 +1,13 @@
+:host {
+  --vaadin-input-field-border-radius: var(--lumo-border-radius-m);
+}
+
+[part="input-field"] {
+  border: 1px solid var(--lumo-contrast-20pct);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+[part="input-field"]:focus-within {
+  border-color: var(--lumo-primary-color);
+  box-shadow: 0 0 0 2px var(--lumo-primary-color-10pct);
+}

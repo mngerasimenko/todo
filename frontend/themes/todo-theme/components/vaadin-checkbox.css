@@ -1,0 +1,8 @@
+:host {
+  transition: color 0.15s ease;
+}
+
+:host([checked]) [part="checkbox"] {
+  background-color: var(--lumo-success-color);
+  border-color: var(--lumo-success-color);
+}
