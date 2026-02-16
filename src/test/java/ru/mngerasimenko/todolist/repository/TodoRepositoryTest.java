@@ -96,8 +96,7 @@ class TodoRepositoryTest {
 
     @Test
     void deleteByUserIdAndId_DeletesTodo() {
-        int deleted = todoRepository.deleteByUserIdAndId(testUser.getId(), todo1.getId());
-        assertThat(deleted).isEqualTo(1);
+        todoRepository.deleteByUserIdAndId(testUser.getId(), todo1.getId());
         Todo found = todoRepository.findByIdAndUserId(todo1.getId(), testUser.getId());
         assertThat(found).isNull();
     }

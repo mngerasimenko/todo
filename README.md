@@ -1,8 +1,8 @@
 # 🛒 Todo List
 
 ![Java](https://img.shields.io/badge/Java-17-007396?logo=java)
-![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.4.1-6DB33F?logo=spring)
-![Vaadin](https://img.shields.io/badge/Vaadin-24.3.8-2D3E50?logo=vaadin)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5.6-6DB33F?logo=spring)
+![Vaadin](https://img.shields.io/badge/Vaadin-24.9.10-2D3E50?logo=vaadin)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791?logo=postgresql)
 ![Docker](https://img.shields.io/badge/Docker-24+-2496ED?logo=docker)
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?logo=github-actions)
@@ -40,7 +40,7 @@
 - ✅ Автоматическая проверка пулл-реквестов
 
 **Статус:** Активная разработка
-**Последнее обновление:** Spring Boot 3.4.1, модернизированный UI/UX
+**Последнее обновление:** Spring Boot 3.5.6, Vaadin 24.9.10
 
 ---
 
@@ -49,8 +49,8 @@
 | Категория      | Технология               | Версия |
 |----------------|--------------------------|--------|
 | **Язык**       | Java                     | 17     |
-| **Backend**    | Spring Boot              | 3.4.1  |
-| **UI**         | Vaadin                   | 24.3.8 |
+| **Backend**    | Spring Boot              | 3.5.6  |
+| **UI**         | Vaadin                   | 24.9.10 |
 | **Frontend**   | Vite + TypeScript        | —      |
 | **База данных**| PostgreSQL               | 17     |
 | **Сборка**     | Maven                    | 3.9    |
