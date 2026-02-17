@@ -1,0 +1,8 @@
+# Не коммитить файлы с реальными токенами
+*_backup.json
+*_local.json
+*.bak
+
+# Newman отчёты
+newman/
+report.html

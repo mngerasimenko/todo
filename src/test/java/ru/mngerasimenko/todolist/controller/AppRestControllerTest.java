@@ -6,6 +6,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import ru.mngerasimenko.todolist.config.TestSecurityConfig;
 import ru.mngerasimenko.todolist.security.ApiSecurityConfig;
 import ru.mngerasimenko.todolist.settings.Constants;
 
@@ -14,7 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 
 @WebMvcTest(AppRestController.class)
-@Import(ApiSecurityConfig.class)
+@Import({ApiSecurityConfig.class, TestSecurityConfig.class})
 class AppRestControllerTest {
 
     @Autowired

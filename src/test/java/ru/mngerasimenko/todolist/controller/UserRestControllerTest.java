@@ -5,7 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -15,6 +15,7 @@ import ru.mngerasimenko.todolist.dto.UserRequest;
 import ru.mngerasimenko.todolist.dto.UserResponse;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.UserMapper;
+import ru.mngerasimenko.todolist.config.TestSecurityConfig;
 import ru.mngerasimenko.todolist.security.ApiSecurityConfig;
 import ru.mngerasimenko.todolist.service.UserService;
 
@@ -27,7 +28,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(UserRestController.class)
-@Import(ApiSecurityConfig.class)
+@Import({ApiSecurityConfig.class, TestSecurityConfig.class})
 class UserRestControllerTest {
 
     @Autowired
@@ -36,10 +37,10 @@ class UserRestControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @MockBean
+    @MockitoBean
     private UserService userService;
 
-    @MockBean
+    @MockitoBean
     private UserMapper userMapper;
 
     private UserDto testUserDto;
