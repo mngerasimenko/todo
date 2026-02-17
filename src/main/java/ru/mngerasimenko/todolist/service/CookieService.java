@@ -1,22 +1,16 @@
 package ru.mngerasimenko.todolist.service;
 
-import com.vaadin.flow.server.VaadinResponse;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import ru.mngerasimenko.todolist.mapper.VaadinServiceWrapper;
 
 /**
  * Сервис для работы с HTTP cookie.
- * Поддерживает как Vaadin (через VaadinResponse), так и обычные REST запросы (через HttpServletResponse).
+ * Работает через стандартные HttpServletRequest/HttpServletResponse без Vaadin зависимостей.
  */
 @Service
-@RequiredArgsConstructor
 public class CookieService {
-
-    private final VaadinServiceWrapper vaadinServiceWrapper;
 
     public static final String COOKIE_NAME = "todoAuthId";
     public static final int DAY = 60 * 60 * 24;
@@ -53,32 +47,7 @@ public class CookieService {
     }
 
     /**
-     * Устанавливает auth cookie через Vaadin response (для Vaadin UI)
-     *
-     * @param value     значение cookie
-     * @param maxAgeDay время жизни в днях
-     */
-    public void setCookie(String value, int maxAgeDay) {
-        setCookie(COOKIE_NAME, value, maxAgeDay);
-    }
-
-    /**
-     * Устанавливает cookie через Vaadin response (для Vaadin UI)
-     *
-     * @param name      имя cookie
-     * @param value     значение cookie
-     * @param maxAgeDay время жизни в днях
-     */
-    public void setCookie(String name, String value, int maxAgeDay) {
-        VaadinResponse response = vaadinServiceWrapper.getCurrentResponse();
-        if (response == null) return;
-
-        Cookie cookie = createCookie(name, value, maxAgeDay);
-        response.addCookie(cookie);
-    }
-
-    /**
-     * Устанавливает auth cookie через HTTP response (для REST API)
+     * Устанавливает auth cookie через HTTP response
      *
      * @param response  HTTP ответ
      * @param value     значение cookie
@@ -89,7 +58,7 @@ public class CookieService {
     }
 
     /**
-     * Устанавливает cookie через HTTP response (для REST API)
+     * Устанавливает cookie через HTTP response
      *
      * @param response  HTTP ответ
      * @param name      имя cookie
@@ -101,22 +70,6 @@ public class CookieService {
 
         Cookie cookie = createCookie(name, value, maxAgeDay);
         response.addCookie(cookie);
-    }
-
-    /**
-     * Удаляет auth cookie через Vaadin response
-     */
-    public void deleteCookie() {
-        deleteCookie(COOKIE_NAME);
-    }
-
-    /**
-     * Удаляет cookie через Vaadin response
-     *
-     * @param name имя cookie
-     */
-    public void deleteCookie(String name) {
-        setCookie(name, "", 0);
     }
 
     /**
@@ -146,7 +99,7 @@ public class CookieService {
      * @param maxAgeDay время жизни в днях
      * @return настроенный cookie
      */
-    private Cookie createCookie(String name, String value, int maxAgeDay) {
+    public Cookie createCookie(String name, String value, int maxAgeDay) {
         Cookie cookie = new Cookie(name, value);
         cookie.setMaxAge(maxAgeDay * DAY);
         cookie.setPath("/");

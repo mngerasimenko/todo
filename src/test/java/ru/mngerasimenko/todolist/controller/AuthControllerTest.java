@@ -126,10 +126,8 @@ class AuthControllerTest {
     }
 
     @Test
-    void login_InvalidCredentials_ReturnsInternalServerError() throws Exception {
+    void login_InvalidCredentials_ReturnsUnauthorized() throws Exception {
         // Arrange
-        // Примечание: BadCredentialsException обрабатывается как generic Exception в GlobalExceptionHandler
-        // TODO: Добавить обработчик для AuthenticationException в GlobalExceptionHandler
         LoginRequest loginRequest = LoginRequest.builder()
                 .username("testUser")
                 .password("wrongPassword")
@@ -142,7 +140,10 @@ class AuthControllerTest {
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
-                .andExpect(status().isInternalServerError()); // 500 до добавления обработчика AuthenticationException
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.error").value("Unauthorized"))
+                .andExpect(jsonPath("$.message").value("Bad credentials"));
     }
 
     @Test

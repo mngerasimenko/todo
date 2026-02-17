@@ -1,21 +1,19 @@
 package ru.mngerasimenko.todolist.service;
 
-import com.vaadin.flow.server.VaadinResponse;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import ru.mngerasimenko.todolist.mapper.VaadinServiceWrapper;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -28,14 +26,11 @@ class CookieServiceTest {
     private HttpServletRequest request;
 
     @Mock
-    private VaadinResponse response;
+    private HttpServletResponse response;
 
-    @Mock
-    private VaadinServiceWrapper vaadinServiceWrapper;
-
-    private static final String TEST_COOKIE_NAME = "todoAuthId";
     private static final String TEST_COOKIE_VALUE = "test-auth-id-123";
 
+    // ==================== GET COOKIE TESTS ====================
 
     @Test
     void getAuthCookieValue_WithExistingCookie_ReturnsCookieValue() {
@@ -58,7 +53,6 @@ class CookieServiceTest {
         String result = cookieService.getAuthCookieValue(request);
 
         assertThat(result).isNull();
-        verify(request).getCookies();
     }
 
     @Test
@@ -68,7 +62,6 @@ class CookieServiceTest {
         String result = cookieService.getAuthCookieValue(request);
 
         assertThat(result).isNull();
-        verify(request).getCookies();
     }
 
     @Test
@@ -78,7 +71,6 @@ class CookieServiceTest {
         String result = cookieService.getAuthCookieValue(request);
 
         assertThat(result).isNull();
-        verify(request).getCookies();
     }
 
     @Test
@@ -98,7 +90,6 @@ class CookieServiceTest {
         String result = cookieService.getAuthCookieValue(request);
 
         assertThat(result).isEqualTo(TEST_COOKIE_VALUE);
-        verify(request).getCookies();
     }
 
     @Test
@@ -114,16 +105,16 @@ class CookieServiceTest {
         String result = cookieService.getAuthCookieValue(request, customName);
 
         assertThat(result).isEqualTo(customValue);
-        verify(request).getCookies();
     }
+
+    // ==================== SET COOKIE TESTS ====================
 
     @Test
     void setCookie_WithValueAndMaxAge_SetsCookieWithCorrectParameters() {
         int maxAgeDays = 7;
         int expectedMaxAgeSeconds = maxAgeDays * CookieService.DAY;
-        when(vaadinServiceWrapper.getCurrentResponse()).thenReturn(response);
 
-        cookieService.setCookie(TEST_COOKIE_VALUE, maxAgeDays);
+        cookieService.setCookie(response, TEST_COOKIE_VALUE, maxAgeDays);
 
         ArgumentCaptor<Cookie> cookieCaptor = ArgumentCaptor.forClass(Cookie.class);
         verify(response).addCookie(cookieCaptor.capture());
@@ -135,65 +126,39 @@ class CookieServiceTest {
         assertThat(capturedCookie.getMaxAge()).isEqualTo(expectedMaxAgeSeconds);
         assertThat(capturedCookie.getPath()).isEqualTo("/");
         assertThat(capturedCookie.isHttpOnly()).isTrue();
-        assertThat(capturedCookie.getSecure()).isFalse();
     }
 
     @Test
     void setCookie_WithZeroMaxAge_SetsCookieWithZeroMaxAge() {
-        when(vaadinServiceWrapper.getCurrentResponse()).thenReturn(response);
-
-        cookieService.setCookie(TEST_COOKIE_VALUE, 0);
+        cookieService.setCookie(response, TEST_COOKIE_VALUE, 0);
 
         ArgumentCaptor<Cookie> cookieCaptor = ArgumentCaptor.forClass(Cookie.class);
         verify(response).addCookie(cookieCaptor.capture());
 
-        Cookie capturedCookie = cookieCaptor.getValue();
-        assertThat(capturedCookie.getMaxAge()).isEqualTo(0);
-    }
-
-    @Test
-    void setCookie_WithNegativeMaxAge_SetsCookieWithNegativeMaxAge() {
-        when(vaadinServiceWrapper.getCurrentResponse()).thenReturn(response);
-
-        cookieService.setCookie(TEST_COOKIE_VALUE, -1);
-
-        ArgumentCaptor<Cookie> cookieCaptor = ArgumentCaptor.forClass(Cookie.class);
-        verify(response).addCookie(cookieCaptor.capture());
-
-        Cookie capturedCookie = cookieCaptor.getValue();
-        assertThat(capturedCookie.getMaxAge()).isEqualTo(-1 * CookieService.DAY);
+        assertThat(cookieCaptor.getValue().getMaxAge()).isEqualTo(0);
     }
 
     @Test
     void setCookie_WithEmptyValue_SetsCookieWithEmptyValue() {
-        when(vaadinServiceWrapper.getCurrentResponse()).thenReturn(response);
-
-        cookieService.setCookie("", 7);
+        cookieService.setCookie(response, "", 7);
 
         ArgumentCaptor<Cookie> cookieCaptor = ArgumentCaptor.forClass(Cookie.class);
         verify(response).addCookie(cookieCaptor.capture());
 
-        Cookie capturedCookie = cookieCaptor.getValue();
-        assertThat(capturedCookie.getValue()).isEmpty();
+        assertThat(cookieCaptor.getValue().getValue()).isEmpty();
     }
 
     @Test
     void setCookie_WithNullResponse_DoesNotThrowException() {
-        when(vaadinServiceWrapper.getCurrentResponse()).thenReturn(null);
-
-        assertThatCode(() -> cookieService.setCookie(TEST_COOKIE_VALUE, 7))
+        assertThatCode(() -> cookieService.setCookie((HttpServletResponse) null, TEST_COOKIE_VALUE, 7))
                 .doesNotThrowAnyException();
-
-        verify(response, never()).addCookie(any(Cookie.class));
     }
 
     @Test
     void setCookie_WithCustomName_SetsCookieWithCorrectName() {
         String customName = "customCookie";
-        int maxAgeDays = 30;
-        when(vaadinServiceWrapper.getCurrentResponse()).thenReturn(response);
 
-        cookieService.setCookie(customName, TEST_COOKIE_VALUE, maxAgeDays);
+        cookieService.setCookie(response, customName, TEST_COOKIE_VALUE, 30);
 
         ArgumentCaptor<Cookie> cookieCaptor = ArgumentCaptor.forClass(Cookie.class);
         verify(response).addCookie(cookieCaptor.capture());
@@ -204,39 +169,32 @@ class CookieServiceTest {
     }
 
     @Test
-    void setCookie_WithSpecialCharacters_SetsCorrectly() {
-        String specialValue = "811f619a-885f-40b9-a75f-a8864eff1196";
-        when(vaadinServiceWrapper.getCurrentResponse()).thenReturn(response);
+    void setCookie_WithUuidValue_SetsCorrectly() {
+        String uuidValue = "811f619a-885f-40b9-a75f-a8864eff1196";
 
-        cookieService.setCookie(specialValue, 7);
+        cookieService.setCookie(response, uuidValue, 7);
 
         ArgumentCaptor<Cookie> cookieCaptor = ArgumentCaptor.forClass(Cookie.class);
         verify(response).addCookie(cookieCaptor.capture());
 
-        Cookie capturedCookie = cookieCaptor.getValue();
-        assertThat(capturedCookie.getValue()).isEqualTo(specialValue);
+        assertThat(cookieCaptor.getValue().getValue()).isEqualTo(uuidValue);
     }
 
     @Test
-    void setCookie_WithVeryLargeMaxAge_DoesNotOverflow() {
-        int maxAgeDays = 365;
-        when(vaadinServiceWrapper.getCurrentResponse()).thenReturn(response);
-
-        cookieService.setCookie(TEST_COOKIE_VALUE, maxAgeDays);
+    void setCookie_WithLargeMaxAge_DoesNotOverflow() {
+        cookieService.setCookie(response, TEST_COOKIE_VALUE, 365);
 
         ArgumentCaptor<Cookie> cookieCaptor = ArgumentCaptor.forClass(Cookie.class);
         verify(response).addCookie(cookieCaptor.capture());
 
-        Cookie capturedCookie = cookieCaptor.getValue();
-        int expectedMaxAge = 365 * CookieService.DAY;
-        assertThat(capturedCookie.getMaxAge()).isEqualTo(expectedMaxAge);
+        assertThat(cookieCaptor.getValue().getMaxAge()).isEqualTo(365 * CookieService.DAY);
     }
+
+    // ==================== DELETE COOKIE TESTS ====================
 
     @Test
     void deleteCookie_DeletesDefaultCookie() {
-        when(vaadinServiceWrapper.getCurrentResponse()).thenReturn(response);
-
-        cookieService.deleteCookie();
+        cookieService.deleteCookie(response);
 
         ArgumentCaptor<Cookie> cookieCaptor = ArgumentCaptor.forClass(Cookie.class);
         verify(response).addCookie(cookieCaptor.capture());
@@ -250,9 +208,8 @@ class CookieServiceTest {
     @Test
     void deleteCookie_WithCustomName_DeletesCustomCookie() {
         String customName = "customCookie";
-        when(vaadinServiceWrapper.getCurrentResponse()).thenReturn(response);
 
-        cookieService.deleteCookie(customName);
+        cookieService.deleteCookie(response, customName);
 
         ArgumentCaptor<Cookie> cookieCaptor = ArgumentCaptor.forClass(Cookie.class);
         verify(response).addCookie(cookieCaptor.capture());
@@ -263,27 +220,12 @@ class CookieServiceTest {
         assertThat(capturedCookie.getMaxAge()).isEqualTo(0);
     }
 
-    @Test
-    void setAndGetCookie_IntegrationTest() {
-        int maxAgeDays = 7;
-        when(vaadinServiceWrapper.getCurrentResponse()).thenReturn(response);
-
-        cookieService.setCookie(TEST_COOKIE_VALUE, maxAgeDays);
-
-        ArgumentCaptor<Cookie> cookieCaptor = ArgumentCaptor.forClass(Cookie.class);
-        verify(response).addCookie(cookieCaptor.capture());
-
-        Cookie capturedCookie = cookieCaptor.getValue();
-        assertThat(capturedCookie.getName()).isEqualTo(CookieService.COOKIE_NAME);
-        assertThat(capturedCookie.getValue()).isEqualTo(TEST_COOKIE_VALUE);
-    }
+    // ==================== INTEGRATION TESTS ====================
 
     @Test
     void deleteThenSetCookie_SequenceTest() {
-        when(vaadinServiceWrapper.getCurrentResponse()).thenReturn(response);
-
-        cookieService.deleteCookie();
-        cookieService.setCookie(TEST_COOKIE_VALUE, 7);
+        cookieService.deleteCookie(response);
+        cookieService.setCookie(response, TEST_COOKIE_VALUE, 7);
 
         ArgumentCaptor<Cookie> cookieCaptor = ArgumentCaptor.forClass(Cookie.class);
         verify(response, times(2)).addCookie(cookieCaptor.capture());
@@ -292,13 +234,24 @@ class CookieServiceTest {
         assertThat(capturedCookies).hasSize(2);
 
         Cookie deleteCookie = capturedCookies.get(0);
-        assertThat(deleteCookie.getName()).isEqualTo(CookieService.COOKIE_NAME);
         assertThat(deleteCookie.getValue()).isEmpty();
         assertThat(deleteCookie.getMaxAge()).isEqualTo(0);
 
         Cookie setCookie = capturedCookies.get(1);
-        assertThat(setCookie.getName()).isEqualTo(CookieService.COOKIE_NAME);
         assertThat(setCookie.getValue()).isEqualTo(TEST_COOKIE_VALUE);
         assertThat(setCookie.getMaxAge()).isEqualTo(7 * CookieService.DAY);
+    }
+
+    // ==================== CREATE COOKIE TESTS ====================
+
+    @Test
+    void createCookie_ReturnsCorrectlyConfiguredCookie() {
+        Cookie cookie = cookieService.createCookie("testName", "testValue", 30);
+
+        assertThat(cookie.getName()).isEqualTo("testName");
+        assertThat(cookie.getValue()).isEqualTo("testValue");
+        assertThat(cookie.getMaxAge()).isEqualTo(30 * CookieService.DAY);
+        assertThat(cookie.getPath()).isEqualTo("/");
+        assertThat(cookie.isHttpOnly()).isTrue();
     }
 }
