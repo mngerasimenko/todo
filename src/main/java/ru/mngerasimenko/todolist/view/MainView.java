@@ -11,14 +11,14 @@ import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.router.BeforeEnterEvent;
 import com.vaadin.flow.router.BeforeEnterObserver;
-import ru.mngerasimenko.todolist.security.SecurityService;
+import ru.mngerasimenko.todolist.security.VaadinSecurityService;
 
 
 public class MainView extends AppLayout implements BeforeEnterObserver {
-    private final SecurityService securityService;
+    private final VaadinSecurityService vaadinSecurityService;
 
-    public MainView(SecurityService securityService) {
-        this.securityService = securityService;
+    public MainView(VaadinSecurityService vaadinSecurityService) {
+        this.vaadinSecurityService = vaadinSecurityService;
         createHeader();
     }
 
@@ -43,7 +43,7 @@ public class MainView extends AppLayout implements BeforeEnterObserver {
         logoLayout.getStyle().set("gap", "var(--lumo-space-s)");
 
         // Имя пользователя
-        String userName = securityService.getAuthenticatedUser().getName();
+        String userName = vaadinSecurityService.getAuthenticatedUser().getName();
         Span userNameSpan = new Span(userName);
         userNameSpan.getStyle()
                 .set("color", "var(--lumo-secondary-text-color)")
@@ -54,7 +54,7 @@ public class MainView extends AppLayout implements BeforeEnterObserver {
         Button logout = new Button("Выйти", new Icon(VaadinIcon.SIGN_OUT));
         logout.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_SMALL);
         logout.addClassName("header-logout-btn");
-        logout.addClickListener(e -> securityService.logout());
+        logout.addClickListener(e -> vaadinSecurityService.logout());
 
         // Правая секция (имя + кнопка выхода)
         HorizontalLayout rightSection = new HorizontalLayout(userNameSpan, logout);
@@ -77,7 +77,7 @@ public class MainView extends AppLayout implements BeforeEnterObserver {
 
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
-        if (securityService.getAuthenticatedUser() == null) {
+        if (vaadinSecurityService.getAuthenticatedUser() == null) {
             event.rerouteTo(LoginView.class);
         }
     }

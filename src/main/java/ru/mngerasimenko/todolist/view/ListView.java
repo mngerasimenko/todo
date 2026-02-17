@@ -22,8 +22,7 @@ import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.dto.UserDto;
-import ru.mngerasimenko.todolist.mapper.TodoMapper;
-import ru.mngerasimenko.todolist.security.SecurityService;
+import ru.mngerasimenko.todolist.security.VaadinSecurityService;
 import ru.mngerasimenko.todolist.service.TodoService;
 
 import java.time.format.DateTimeFormatter;
@@ -33,9 +32,8 @@ import java.util.List;
 @Route(value = "", layout = MainView.class)
 @PageTitle("Список задач")
 public class ListView extends VerticalLayout {
-    private final SecurityService securityService;
+    private final VaadinSecurityService vaadinSecurityService;
     private final TodoService todoService;
-    private final TodoMapper todoMapper;
     private final Grid<TodoDto> grid = new Grid<>(TodoDto.class);
     private final TextField filterText = new TextField();
     private final Span todoCountLabel = new Span();
@@ -46,16 +44,16 @@ public class ListView extends VerticalLayout {
     private static final DateTimeFormatter DATE_FORMATTER =
             DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
-    public ListView(TodoService todoService, SecurityService securityService, TodoMapper todoMapper) {
+    public ListView(TodoService todoService,
+                    VaadinSecurityService vaadinSecurityService) {
         this.todoService = todoService;
-        this.securityService = securityService;
-        this.todoMapper = todoMapper;
+        this.vaadinSecurityService = vaadinSecurityService;
 
         init();
     }
 
     private void init() {
-        authenticatedUser = securityService.getAuthenticatedUser();
+        authenticatedUser = vaadinSecurityService.getAuthenticatedUser();
         addClassName("list-view");
         setSizeFull();
         configureGrid();
