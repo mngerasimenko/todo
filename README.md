@@ -36,6 +36,8 @@
 - ✅ Современный SPA-интерфейс без перезагрузки страницы (Vaadin)
 - ✅ Кастомная тема с адаптивным дизайном
 - ✅ Авторизация пользователей (Spring Security)
+- ✅ JWT аутентификация для REST API
+- ✅ Структурированное логирование (Logback, профили dev/production, ротация файлов)
 - ✅ Автоматический деплой при пуше в `master`
 - ✅ Автоматическая проверка пулл-реквестов
 
@@ -56,6 +58,7 @@
 | **Сборка**     | Maven                    | 3.9    |
 | **Тестирование**| JUnit 5 + Mockito + AssertJ | —    |
 | **Покрытие**   | JaCoCo                   | 0.8.14 |
+| **Логирование**| SLF4j + Logback          | —      |
 | **Контейнеры** | Docker + Docker Compose  | 24+    |
 | **CI/CD**      | GitHub Actions           | —      |
 
@@ -89,8 +92,11 @@ docker compose up -d --build
 # Проверка статуса
 docker compose ps
 
-# Просмотр логов приложения
+# Просмотр логов приложения (консоль)
 docker compose logs -f todo-app
+
+# Просмотр логов приложения (файл)
+docker exec todo-app tail -f logs/todo-app.log
 
 # Остановка
 docker compose down

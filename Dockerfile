@@ -23,6 +23,7 @@ WORKDIR /todo
 COPY --from=builder /build/target/todo-1.jar /todo/todo.jar
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN mkdir -p /todo/logs && chown appuser:appgroup /todo/logs
 USER appuser
 
 EXPOSE 8090
