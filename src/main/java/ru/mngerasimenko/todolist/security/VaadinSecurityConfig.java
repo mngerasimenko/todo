@@ -1,6 +1,7 @@
 package ru.mngerasimenko.todolist.security;
 
 import com.vaadin.flow.spring.security.VaadinWebSecurity;
+import lombok.extern.slf4j.Slf4j;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -22,6 +23,7 @@ import ru.mngerasimenko.todolist.view.LoginView;
 
 import java.io.IOException;
 
+@Slf4j
 @EnableWebSecurity
 @Configuration
 public class VaadinSecurityConfig extends VaadinWebSecurity {
@@ -85,7 +87,7 @@ public class VaadinSecurityConfig extends VaadinWebSecurity {
                                 request,
                                 response
                         );
-                        System.out.println("Auto-login performed for user: " + authUser.getName());
+                        log.info("Авто-логин выполнен для пользователя: {}", authUser.getName());
                         response.sendRedirect(determineRedirectUrl(request));
 
                         return;

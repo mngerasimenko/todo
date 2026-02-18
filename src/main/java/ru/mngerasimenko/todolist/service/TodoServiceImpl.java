@@ -1,6 +1,7 @@
 package ru.mngerasimenko.todolist.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.mngerasimenko.todolist.dto.TodoDto;
@@ -16,6 +17,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class TodoServiceImpl implements TodoService {
@@ -37,6 +39,7 @@ public class TodoServiceImpl implements TodoService {
         todo.setUser(user);
 
         Todo savedTodo = todoRepository.save(todo);
+        log.info("Создана задача: id={}, name='{}', userId={}", savedTodo.getId(), savedTodo.getName(), user.getId());
         return todoMapper.toDto(savedTodo);
     }
 
@@ -57,6 +60,7 @@ public class TodoServiceImpl implements TodoService {
         existingTodo.setDateTime(LocalDateTime.now());
 
         Todo updatedTodo = todoRepository.save(existingTodo);
+        log.info("Обновлена задача: id={}, name='{}', done={}", updatedTodo.getId(), updatedTodo.getName(), updatedTodo.isDone());
         return todoMapper.toDto(updatedTodo);
     }
 
@@ -87,7 +91,9 @@ public class TodoServiceImpl implements TodoService {
     @Override
     @Transactional(readOnly = true)
     public List<TodoDto> getTodosByUserId(Long userId) {
-        return todoRepository.findByUserId(userId).stream()
+        List<Todo> todos = todoRepository.findByUserId(userId);
+        log.debug("Загрузка задач для userId={}, найдено: {}", userId, todos.size());
+        return todos.stream()
                 .map(todoMapper::toDto)
                 .collect(Collectors.toList());
     }
@@ -115,6 +121,7 @@ public class TodoServiceImpl implements TodoService {
             throw new TodoNotFoundException("Todo not found with id: " + id);
         }
         todoRepository.deleteById(id);
+        log.info("Удалена задача: id={}", id);
     }
 
     @Override

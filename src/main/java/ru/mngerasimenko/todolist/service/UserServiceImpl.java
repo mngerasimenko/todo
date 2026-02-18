@@ -2,6 +2,7 @@ package ru.mngerasimenko.todolist.service;
 
 import io.micrometer.common.util.StringUtils;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.mngerasimenko.todolist.dto.UserDto;
@@ -14,6 +15,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
@@ -31,6 +33,7 @@ public class UserServiceImpl implements UserService {
     @Override
     public void delete(long id) {
         repository.deleteById(id);
+        log.info("Удалён пользователь: id={}", id);
     }
 
     @Override
@@ -67,6 +70,7 @@ public class UserServiceImpl implements UserService {
         }
 
         User savedUser = repository.save(user);
+        log.info("Создан пользователь: id={}, name='{}'", savedUser.getId(), savedUser.getName());
         return mapper.toDto(savedUser);
     }
 
@@ -85,6 +89,7 @@ public class UserServiceImpl implements UserService {
         existingUser.setName(userDto.getName());
 
         User updatedUser = repository.save(existingUser);
+        log.info("Обновлён пользователь: id={}, name='{}'", updatedUser.getId(), updatedUser.getName());
         return mapper.toDto(updatedUser);
     }
 

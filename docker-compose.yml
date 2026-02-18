@@ -17,6 +17,10 @@ services:
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=postgres
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SPRING_PROFILES_ACTIVE=production
+
+    volumes:
+      - todo-logs:/todo/logs
 
     depends_on:
       postgres-db:
@@ -69,3 +73,4 @@ networks:
 # ========================================
 volumes:
   postgres-data:
+  todo-logs:

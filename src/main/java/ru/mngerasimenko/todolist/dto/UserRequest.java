@@ -28,7 +28,7 @@ public class UserRequest {
     private String email;
 
     @NotBlank(message = "Password is required")
-    @Size(min = 5, max = 128, message = "Password must be between 5 and 128 characters")
+    @Size(min = 3, max = 128, message = "Password must be between 3 and 128 characters")
     private String password;
 
     @NotBlank(message = "Name is required")
