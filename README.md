@@ -176,14 +176,6 @@ chmod +x setup-server.sh
 │           ├── theme.json       # Конфигурация темы (Lumo)
 │           ├── styles.css       # Глобальные CSS custom properties
 │           └── components/      # Shadow DOM стили компонентов
-├── .claude/                     # Документация проекта
-│   ├── CLAUDE.md               # Настройки для Claude Code
-│   └── docs/
-│       ├── architecture.md     # Архитектура и паттерны
-│       ├── api.md              # REST API эндпоинты
-│       ├── models.md           # Сущности, DTO, маппинг
-│       ├── testing.md          # Тестирование и покрытие
-│       └── deployment.md       # Docker, CI/CD, сервер
 ├── pom.xml                     # Конфигурация Maven + JaCoCo
 ├── Dockerfile                  # Двухстадийная сборка образа
 ├── docker-compose.yml          # Оркестрация (БД + приложение)
