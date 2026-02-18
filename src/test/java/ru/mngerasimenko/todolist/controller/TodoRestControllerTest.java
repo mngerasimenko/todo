@@ -345,4 +345,26 @@ class TodoRestControllerTest {
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"USER"})
+    void delete_ValidId_ReturnsNoContent() throws Exception {
+        doNothing().when(todoService).deleteTodo(1L);
+
+        mockMvc.perform(delete("/api/todos/1"))
+                .andExpect(status().isNoContent());
+
+        verify(todoService, times(1)).deleteTodo(1L);
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"USER"})
+    void delete_NonExistentId_ReturnsNotFound() throws Exception {
+        doThrow(new TodoNotFoundException("Todo not found with id: 999"))
+                .when(todoService).deleteTodo(999L);
+
+        mockMvc.perform(delete("/api/todos/999"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Todo not found with id: 999"));
+    }
 }
