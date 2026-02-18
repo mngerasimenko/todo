@@ -40,7 +40,7 @@ public class TodoMapper {
         todo.setId(todoDto.getId());
         todo.setName(todoDto.getName());
         todo.setDateTime(todoDto.getDateTime());
-        todo.setDone(todoDto.getDone());
+        todo.setDone(todoDto.isDone());
         todo.setUserId(todoDto.getUserId());
         return todo;
     }
@@ -55,9 +55,7 @@ public class TodoMapper {
 
         todo.setName(todoDto.getName());
         todo.setDateTime(todoDto.getDateTime());
-        if (todoDto.getDone() != null) {
-            todo.setDone(todoDto.getDone());
-        }
+        todo.setDone(todoDto.isDone());
     }
 
 

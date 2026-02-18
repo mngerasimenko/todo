@@ -56,7 +56,9 @@ public class TodoServiceImpl implements TodoService {
             existingTodo.setUser(newUser);
         }
 
+        log.debug("updateTodo: входной todoDto.getDone()={}, existingTodo.isDone()={}", todoDto.getDone(), existingTodo.isDone());
         todoMapper.updateEntityFromDto(todoDto, existingTodo);
+        log.debug("updateTodo: после маппинга existingTodo.isDone()={}", existingTodo.isDone());
         existingTodo.setDateTime(LocalDateTime.now());
 
         Todo updatedTodo = todoRepository.save(existingTodo);
