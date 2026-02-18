@@ -184,3 +184,11 @@ chmod +x setup-server.sh
     └── deploy.yml              # Единый пайплайн: тесты → деплой
 ```
 
+---
+
+## 📱 Android-приложение
+
+Нативное Android-приложение для этого сервера (Kotlin + Jetpack Compose):
+
+**👉 [todolist-android](https://github.com/mngerasimenko/todolist-android)**
+
