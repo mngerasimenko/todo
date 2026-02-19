@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import ru.mngerasimenko.todolist.dto.UpdateColorsRequest;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.dto.UserRequest;
 import ru.mngerasimenko.todolist.dto.UserResponse;
@@ -47,26 +48,24 @@ public class UserRestController {
         return ResponseEntity.ok(response);
     }
 
-//    @PostMapping("/login")
-//    public Status login(@RequestBody User user) {
-//        User foundUser = userService.getUser(user);
-//        if (foundUser == null) {
-//            foundUser = userService.getUser(user.getEmail());
-//            if (foundUser != null) {
-//                return new Status(WRONG_PASSWORD);
-//            } else {
-//                return new Status(NO_USER);
-//            }
-//        }
-//        return new StatusLogin(AUTHORIZE_SUCCESS, foundUser.getId(), foundUser.getName());
-//    }
-
     @PutMapping("/{id}")
     public ResponseEntity<UserResponse> updateUser(
             @PathVariable Long id,
             @Valid @RequestBody UserRequest request) {
         UserDto userDto = userMapper.toDto(request);
         UserDto updatedUser = userService.updateUser(id, userDto);
+        UserResponse response = userMapper.toResponse(updatedUser);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Обновить цвета задач пользователя.
+     */
+    @PutMapping("/{id}/colors")
+    public ResponseEntity<UserResponse> updateColors(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateColorsRequest request) {
+        UserDto updatedUser = userService.updateColors(id, request.getCreatedTaskColor(), request.getCompletedTaskColor());
         UserResponse response = userMapper.toResponse(updatedUser);
         return ResponseEntity.ok(response);
     }

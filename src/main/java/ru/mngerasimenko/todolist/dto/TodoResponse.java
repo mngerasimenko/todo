@@ -20,11 +20,18 @@ public class TodoResponse {
 
     private String name;
 
-    @JsonProperty("date_time")
+    @JsonProperty("created_at")
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
-    private LocalDateTime dateTime;
+    private LocalDateTime createdAt;
+
+    @JsonProperty("completed_at")
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime completedAt;
 
     private Boolean done;
+
+    @JsonProperty("is_private")
+    private boolean isPrivate;
 
     @JsonProperty("user_id")
     private Long userId;
@@ -32,9 +39,20 @@ public class TodoResponse {
     @JsonProperty("user_name")
     private String userName;
 
-    @JsonProperty("created_at")
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
-    private LocalDateTime createdAt;
+    @JsonProperty("completor_user_id")
+    private Long completorUserId;
+
+    @JsonProperty("completor_user_name")
+    private String completorUserName;
+
+    @JsonProperty("account_id")
+    private Long accountId;
+
+    @JsonProperty("creator_color")
+    private String creatorColor;
+
+    @JsonProperty("completor_color")
+    private String completorColor;
 
     @JsonProperty("done")
     public boolean isDone() {

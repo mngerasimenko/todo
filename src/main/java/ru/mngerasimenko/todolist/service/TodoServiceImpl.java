@@ -8,8 +8,10 @@ import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.exception.TodoNotFoundException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
+import ru.mngerasimenko.todolist.model.Account;
 import ru.mngerasimenko.todolist.model.Todo;
 import ru.mngerasimenko.todolist.model.User;
+import ru.mngerasimenko.todolist.repository.AccountRepository;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 
@@ -24,6 +26,7 @@ public class TodoServiceImpl implements TodoService {
 
     private final TodoRepository todoRepository;
     private final UserRepository userRepository;
+    private final AccountRepository accountRepository;
     private final TodoMapper todoMapper;
 
     @Override
@@ -32,14 +35,21 @@ public class TodoServiceImpl implements TodoService {
         User user = userRepository.findById(todoDto.getUserId())
                 .orElseThrow(() -> new UserNotFoundException(
                         "User not found with id: " + todoDto.getUserId()));
+
+        Account account = accountRepository.findById(todoDto.getAccountId())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Account not found with id: " + todoDto.getAccountId()));
+
         todoDto.setDone(false);
         todoDto.setUserId(user.getId());
-        todoDto.setDateTime(LocalDateTime.now());
+        todoDto.setCreatedAt(LocalDateTime.now());
         Todo todo = todoMapper.toEntity(todoDto);
         todo.setUser(user);
+        todo.setAccount(account);
 
         Todo savedTodo = todoRepository.save(todo);
-        log.info("Создана задача: id={}, name='{}', userId={}", savedTodo.getId(), savedTodo.getName(), user.getId());
+        log.info("Создана задача: id={}, name='{}', userId={}, accountId={}, private={}",
+                savedTodo.getId(), savedTodo.getName(), user.getId(), account.getId(), savedTodo.getIsPrivate());
         return todoMapper.toDto(savedTodo);
     }
 
@@ -56,13 +66,30 @@ public class TodoServiceImpl implements TodoService {
             existingTodo.setUser(newUser);
         }
 
-        log.debug("updateTodo: входной todoDto.getDone()={}, existingTodo.isDone()={}", todoDto.getDone(), existingTodo.isDone());
+        boolean wasDone = Boolean.TRUE.equals(existingTodo.isDone());
+        boolean nowDone = todoDto.isDone();
+
+        log.debug("updateTodo: входной done={}, существующий done={}", nowDone, wasDone);
         todoMapper.updateEntityFromDto(todoDto, existingTodo);
-        log.debug("updateTodo: после маппинга existingTodo.isDone()={}", existingTodo.isDone());
-        existingTodo.setDateTime(LocalDateTime.now());
+
+        // Логика completedAt и completorUser
+        if (!wasDone && nowDone) {
+            // Задача выполнена: проставляем время выполнения и исполнителя
+            existingTodo.setCompletedAt(LocalDateTime.now());
+            if (todoDto.getCompletorUserId() != null) {
+                User completor = userRepository.findById(todoDto.getCompletorUserId())
+                        .orElse(null);
+                existingTodo.setCompletorUser(completor);
+            }
+        } else if (wasDone && !nowDone) {
+            // Задача снята с выполнения: очищаем completedAt и completorUser
+            existingTodo.setCompletedAt(null);
+            existingTodo.setCompletorUser(null);
+        }
 
         Todo updatedTodo = todoRepository.save(existingTodo);
-        log.info("Обновлена задача: id={}, name='{}', done={}", updatedTodo.getId(), updatedTodo.getName(), updatedTodo.isDone());
+        log.info("Обновлена задача: id={}, name='{}', done={}, completedAt={}",
+                updatedTodo.getId(), updatedTodo.getName(), updatedTodo.isDone(), updatedTodo.getCompletedAt());
         return todoMapper.toDto(updatedTodo);
     }
 
@@ -138,6 +165,7 @@ public class TodoServiceImpl implements TodoService {
         Todo todo = todoRepository.findById(id)
                 .orElseThrow(() -> new TodoNotFoundException("Todo not found with id: " + id));
         todo.setDone(true);
+        todo.setCompletedAt(LocalDateTime.now());
         Todo updatedTodo = todoRepository.save(todo);
         return todoMapper.toDto(updatedTodo);
     }
@@ -148,8 +176,9 @@ public class TodoServiceImpl implements TodoService {
         Todo todo = todoRepository.findById(id)
                 .orElseThrow(() -> new TodoNotFoundException("Todo not found with id: " + id));
         todo.setDone(false);
+        todo.setCompletedAt(null);
+        todo.setCompletorUser(null);
         Todo updatedTodo = todoRepository.save(todo);
         return todoMapper.toDto(updatedTodo);
     }
-
 }

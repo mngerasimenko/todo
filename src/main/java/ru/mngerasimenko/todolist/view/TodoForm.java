@@ -102,8 +102,8 @@ public class TodoForm extends FormLayout {
             doneCheckbox.setValue(todoDto.isDone());
 
             // Дата
-            if (todoDto.getDateTime() != null) {
-                dateLabel.setText("Создано: " + todoDto.getDateTime().format(DATE_FORMATTER));
+            if (todoDto.getCreatedAt() != null) {
+                dateLabel.setText("Создано: " + todoDto.getCreatedAt().format(DATE_FORMATTER));
                 dateLabel.setVisible(true);
             } else {
                 dateLabel.setVisible(false);

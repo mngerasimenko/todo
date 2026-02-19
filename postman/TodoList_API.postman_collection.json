@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "todo-list-api-collection",
 		"name": "TodoList API - JWT Auth",
-		"description": "Коллекция для тестирования REST API Todo List с JWT аутентификацией.\n\n**Порядок выполнения:**\n1. Auth → Register (создать пользователя)\n2. Auth → Login (получить JWT токены)\n3. Todos / Users (использовать access_token)\n\n**Переменные:**\n- `baseUrl`: http://localhost:8090\n- `accessToken`: автоматически сохраняется после login\n- `refreshToken`: автоматически сохраняется после login\n- `userId`: ID пользователя\n- `todoId`: ID задачи",
+		"description": "Коллекция для тестирования REST API Todo List с JWT аутентификацией.\n\n**Порядок выполнения:**\n1. Auth → Register (создать пользователя)\n2. Auth → Login (получить JWT токены)\n3. Accounts → Create Account (создать аккаунт, сохранится accountId)\n4. Todos / Users / Accounts (использовать access_token)\n\n**Переменные:**\n- `baseUrl`: http://localhost:8090\n- `accessToken`: автоматически сохраняется после login\n- `refreshToken`: автоматически сохраняется после login\n- `userId`: ID пользователя\n- `todoId`: ID задачи\n- `accountId`: ID аккаунта (сохраняется после создания аккаунта)",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
@@ -191,6 +191,349 @@
 			"description": "Эндпоинты аутентификации и регистрации"
 		},
 		{
+			"name": "Accounts",
+			"item": [
+				{
+					"name": "Create Account",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Account created successfully\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.id).to.exist;",
+									"    pm.expect(jsonData.name).to.exist;",
+									"    pm.expect(jsonData.role).to.eql(\"ADMIN\");",
+									"    ",
+									"    // Сохранение accountId для дальнейших запросов",
+									"    pm.environment.set(\"accountId\", jsonData.id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"МойАккаунт\",\n  \"password\": \"secret\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/accounts",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"accounts"
+							]
+						},
+						"description": "Создание нового аккаунта.\n\nСоздатель автоматически получает роль `ADMIN`.\n\n**accountId сохраняется автоматически в переменные.**\n\n**Ошибки:** `400` (название уже занято), `404` (пользователь не найден)"
+					},
+					"response": []
+				},
+				{
+					"name": "Join Account",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Joined account successfully\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.id).to.exist;",
+									"    pm.expect(jsonData.name).to.exist;",
+									"    pm.expect(jsonData.role).to.exist;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"МойАккаунт\",\n  \"password\": \"secret\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/accounts/join",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"accounts",
+								"join"
+							]
+						},
+						"description": "Вступление в существующий аккаунт по имени и паролю.\n\nЕсли пользователь уже является участником — возвращается его текущая роль без повторного добавления.\n\n**Ошибки:** `400` (аккаунт не найден, неверный пароль)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get My Accounts",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response is array\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"});",
+									"",
+									"pm.test(\"Each account has id, name and role\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.length > 0) {",
+									"        pm.expect(jsonData[0].id).to.exist;",
+									"        pm.expect(jsonData[0].name).to.exist;",
+									"        pm.expect(jsonData[0].role).to.exist;",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/accounts",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"accounts"
+							]
+						},
+						"description": "Получение списка аккаунтов текущего пользователя (определяется по JWT токену)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Account Members",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response is array\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"});",
+									"",
+									"pm.test(\"Each member has user_id, user_name and role\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.length > 0) {",
+									"        pm.expect(jsonData[0].user_id).to.exist;",
+									"        pm.expect(jsonData[0].user_name).to.exist;",
+									"        pm.expect(jsonData[0].role).to.exist;",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/accounts/{{accountId}}/members",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"accounts",
+								"{{accountId}}",
+								"members"
+							]
+						},
+						"description": "Получение списка участников аккаунта.\n\n**Доступ:** только для участников аккаунта.\n\n**Ошибки:** `400` (не являетесь участником)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Account Todos",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response is array\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/accounts/{{accountId}}/todos",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"accounts",
+								"{{accountId}}",
+								"todos"
+							]
+						},
+						"description": "Получение задач аккаунта.\n\nВозвращает публичные задачи + приватные задачи текущего пользователя в этом аккаунте.\n\n**Доступ:** только для участников аккаунта.\n\n**Ошибки:** `400` (не являетесь участником)"
+					},
+					"response": []
+				},
+				{
+					"name": "Leave Account",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/accounts/{{accountId}}/leave",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"accounts",
+								"{{accountId}}",
+								"leave"
+							]
+						},
+						"description": "Выход из аккаунта.\n\n⚠️ **Внимание:** При выходе автоматически удаляются все приватные задачи пользователя в данном аккаунте.\n\n**Ошибки:** `400` (не являетесь участником)"
+					},
+					"response": []
+				}
+			],
+			"description": "Операции с аккаунтами (требуют JWT токен). Аккаунт — это общее пространство для совместного ведения задач.",
+			"auth": {
+				"type": "bearer",
+				"bearer": [
+					{
+						"key": "token",
+						"value": "{{accessToken}}",
+						"type": "string"
+					}
+				]
+			}
+		},
+		{
 			"name": "Todos",
 			"item": [
 				{
@@ -209,6 +552,7 @@
 									"    pm.expect(jsonData.id).to.exist;",
 									"    pm.expect(jsonData.name).to.exist;",
 									"    pm.expect(jsonData.done).to.eql(false);",
+									"    pm.expect(jsonData.account_id).to.exist;",
 									"    ",
 									"    // Сохранение todoId для дальнейших запросов",
 									"    pm.environment.set(\"todoId\", jsonData.id);",
@@ -238,7 +582,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"Купить молоко\",\n  \"user_id\": {{userId}}\n}"
+							"raw": "{\n  \"name\": \"Купить молоко\",\n  \"user_id\": {{userId}},\n  \"account_id\": {{accountId}},\n  \"is_private\": false\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/todos/create",
@@ -251,7 +595,65 @@
 								"create"
 							]
 						},
-						"description": "Создание новой задачи.\n\n**Требует JWT токен** в заголовке Authorization."
+						"description": "Создание новой задачи.\n\n**Обязательные поля:** `name`, `user_id`, `account_id`\n\n**Требует JWT токен** в заголовке Authorization."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Private Todo",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Private todo created\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.id).to.exist;",
+									"    pm.expect(jsonData.is_private).to.eql(true);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Личная задача\",\n  \"user_id\": {{userId}},\n  \"account_id\": {{accountId}},\n  \"is_private\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/create",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"create"
+							]
+						},
+						"description": "Создание приватной задачи.\n\nПриватная задача видна только создателю — другие участники аккаунта её не видят."
 					},
 					"response": []
 				},
@@ -318,6 +720,7 @@
 									"    var jsonData = pm.response.json();",
 									"    pm.expect(jsonData.id).to.exist;",
 									"    pm.expect(jsonData.name).to.exist;",
+									"    pm.expect(jsonData.account_id).to.exist;",
 									"});"
 								],
 								"type": "text/javascript"
@@ -415,6 +818,7 @@
 									"pm.test(\"Todo updated\", function () {",
 									"    var jsonData = pm.response.json();",
 									"    pm.expect(jsonData.done).to.eql(true);",
+									"    pm.expect(jsonData.completed_at).to.exist;",
 									"});"
 								],
 								"type": "text/javascript"
@@ -441,7 +845,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"Купить молоко (обновлено)\",\n  \"done\": true,\n  \"user_id\": {{userId}}\n}"
+							"raw": "{\n  \"name\": \"Купить молоко (обновлено)\",\n  \"done\": true,\n  \"user_id\": {{userId}},\n  \"account_id\": {{accountId}}\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/todos/{{todoId}}",
@@ -454,7 +858,50 @@
 								"{{todoId}}"
 							]
 						},
-						"description": "Обновление задачи (название, статус выполнения)."
+						"description": "Обновление задачи.\n\nПри `done: true` автоматически устанавливается `completed_at`.\nПри `done: false` — `completed_at` и `completor_user_id` очищаются."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Todo",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/{{todoId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"{{todoId}}"
+							]
+						},
+						"description": "Удаление задачи по ID.\n\n⚠️ **Осторожно:** Операция необратима!\n\n**Ошибки:** `404` (задача не найдена)"
 					},
 					"response": []
 				}
@@ -538,6 +985,8 @@
 									"    pm.expect(jsonData.id).to.exist;",
 									"    pm.expect(jsonData.name).to.exist;",
 									"    pm.expect(jsonData.email).to.exist;",
+									"    pm.expect(jsonData.created_task_color).to.exist;",
+									"    pm.expect(jsonData.completed_task_color).to.exist;",
 									"});"
 								],
 								"type": "text/javascript"
@@ -568,7 +1017,7 @@
 								"{{userId}}"
 							]
 						},
-						"description": "Получение пользователя по ID."
+						"description": "Получение пользователя по ID.\n\nОтвет включает `created_task_color` и `completed_task_color`."
 					},
 					"response": []
 				},
@@ -587,6 +1036,8 @@
 									"    var jsonData = pm.response.json();",
 									"    pm.expect(jsonData.id).to.exist;",
 									"    pm.expect(jsonData.name).to.exist;",
+									"    pm.expect(jsonData.created_task_color).to.exist;",
+									"    pm.expect(jsonData.completed_task_color).to.exist;",
 									"});"
 								],
 								"type": "text/javascript"
@@ -679,6 +1130,65 @@
 							]
 						},
 						"description": "Обновление данных пользователя."
+					},
+					"response": []
+				},
+				{
+					"name": "Update User Colors",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Colors updated\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.created_task_color).to.eql(\"#FF0000\");",
+									"    pm.expect(jsonData.completed_task_color).to.eql(\"#00FF00\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"created_task_color\": \"#FF0000\",\n  \"completed_task_color\": \"#00FF00\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/users/{{userId}}/colors",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"users",
+								"{{userId}}",
+								"colors"
+							]
+						},
+						"description": "Обновление цветов задач пользователя.\n\n| Поле | Формат | Описание |\n|------|--------|----------|\n| created_task_color | #RRGGBB | Цвет иконки создаваемых задач |\n| completed_task_color | #RRGGBB | Цвет иконки выполненных задач |\n\n**Ошибки:** `400` (неверный формат HEX), `404` (пользователь не найден)"
 					},
 					"response": []
 				},
@@ -1023,6 +1533,111 @@
 						"description": "Попытка получить несуществующую задачу.\n\n**Ожидается:** 404 Not Found"
 					},
 					"response": []
+				},
+				{
+					"name": "Wrong Account Password - Join",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400\", function () {",
+									"    pm.response.to.have.status(400);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"МойАккаунт\",\n  \"password\": \"wrongpassword\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/accounts/join",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"accounts",
+								"join"
+							]
+						},
+						"description": "Попытка вступить в аккаунт с неверным паролем.\n\n**Ожидается:** 400 Bad Request"
+					},
+					"response": []
+				},
+				{
+					"name": "Invalid HEX Color - Update Colors",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400\", function () {",
+									"    pm.response.to.have.status(400);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"created_task_color\": \"not-a-hex\",\n  \"completed_task_color\": \"#00FF00\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/users/{{userId}}/colors",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"users",
+								"{{userId}}",
+								"colors"
+							]
+						},
+						"description": "Попытка обновить цвет с невалидным HEX-значением.\n\n**Ожидается:** 400 Bad Request"
+					},
+					"response": []
 				}
 			],
 			"description": "Негативные тесты (проверка обработки ошибок)"
@@ -1071,6 +1686,11 @@
 		},
 		{
 			"key": "todoId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "accountId",
 			"value": "",
 			"type": "string"
 		}

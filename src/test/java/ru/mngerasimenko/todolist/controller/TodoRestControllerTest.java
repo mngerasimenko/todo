@@ -56,18 +56,21 @@ class TodoRestControllerTest {
         testTodoDto.setName("Test Todo");
         testTodoDto.setDone(false);
         testTodoDto.setUserId(1L);
-        testTodoDto.setDateTime(LocalDateTime.now());
+        testTodoDto.setAccountId(1L);
+        testTodoDto.setCreatedAt(LocalDateTime.now());
 
         testTodoResponse = new TodoResponse();
         testTodoResponse.setId(1L);
         testTodoResponse.setName("Test Todo");
         testTodoResponse.setDone(false);
         testTodoResponse.setUserId(1L);
-        testTodoResponse.setDateTime(testTodoDto.getDateTime());
+        testTodoResponse.setAccountId(1L);
+        testTodoResponse.setCreatedAt(testTodoDto.getCreatedAt());
 
         testTodoRequest = new TodoRequest();
         testTodoRequest.setName("New Todo");
         testTodoRequest.setUserId(1L);
+        testTodoRequest.setAccountId(1L);
     }
 
     @Test
@@ -78,14 +81,16 @@ class TodoRestControllerTest {
         createdDto.setName("New Todo");
         createdDto.setDone(false);
         createdDto.setUserId(1L);
-        createdDto.setDateTime(LocalDateTime.now());
+        createdDto.setAccountId(1L);
+        createdDto.setCreatedAt(LocalDateTime.now());
 
         TodoResponse createdResponse = new TodoResponse();
         createdResponse.setId(2L);
         createdResponse.setName("New Todo");
         createdResponse.setDone(false);
         createdResponse.setUserId(1L);
-        createdResponse.setDateTime(createdDto.getDateTime());
+        createdResponse.setAccountId(1L);
+        createdResponse.setCreatedAt(createdDto.getCreatedAt());
 
         when(todoMapper.toDto(any(TodoRequest.class))).thenReturn(createdDto);
         when(todoService.createTodo(any(TodoDto.class))).thenReturn(createdDto);
@@ -139,14 +144,16 @@ class TodoRestControllerTest {
         updatedDto.setName("Updated Todo");
         updatedDto.setDone(true);
         updatedDto.setUserId(1L);
-        updatedDto.setDateTime(LocalDateTime.now());
+        updatedDto.setAccountId(1L);
+        updatedDto.setCreatedAt(LocalDateTime.now());
 
         TodoResponse updatedResponse = new TodoResponse();
         updatedResponse.setId(1L);
         updatedResponse.setName("Updated Todo");
         updatedResponse.setDone(true);
         updatedResponse.setUserId(1L);
-        updatedResponse.setDateTime(updatedDto.getDateTime());
+        updatedResponse.setAccountId(1L);
+        updatedResponse.setCreatedAt(updatedDto.getCreatedAt());
 
         when(todoMapper.toDto(any(TodoRequest.class))).thenReturn(updatedDto);
         when(todoService.updateTodo(eq(1L), any(TodoDto.class))).thenReturn(updatedDto);

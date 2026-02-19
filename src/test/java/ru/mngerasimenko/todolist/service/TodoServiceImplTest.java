@@ -10,8 +10,10 @@ import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.exception.TodoNotFoundException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
+import ru.mngerasimenko.todolist.model.Account;
 import ru.mngerasimenko.todolist.model.Todo;
 import ru.mngerasimenko.todolist.model.User;
+import ru.mngerasimenko.todolist.repository.AccountRepository;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 
@@ -37,12 +39,16 @@ public class TodoServiceImplTest {
     private UserRepository userRepository;
 
     @Mock
+    private AccountRepository accountRepository;
+
+    @Mock
     private TodoMapper todoMapper;
 
     @InjectMocks
     private TodoServiceImpl todoService;
 
     private User testUser;
+    private Account testAccount;
     private Todo testTodo;
     private TodoDto testTodoDto;
 
@@ -53,18 +59,23 @@ public class TodoServiceImplTest {
         testUser.setName("testuser");
         testUser.setEmail("test@mail.ru");
 
+        testAccount = new Account("TestAccount", "$2a$10$hashedPass");
+        testAccount.setId(1L);
+
         testTodo = new Todo();
         testTodo.setId(1L);
         testTodo.setName("Test Todo");
         testTodo.setDone(false);
-        testTodo.setDateTime(LocalDateTime.now());
+        testTodo.setCreatedAt(LocalDateTime.now());
         testTodo.setUser(testUser);
+        testTodo.setAccount(testAccount);
 
         testTodoDto = new TodoDto();
         testTodoDto.setId(1L);
         testTodoDto.setName("Test Todo");
         testTodoDto.setDone(false);
         testTodoDto.setUserId(1L);
+        testTodoDto.setAccountId(1L);
     }
 
     @Test
@@ -72,27 +83,32 @@ public class TodoServiceImplTest {
         TodoDto newTodoDto = new TodoDto();
         newTodoDto.setName("New Todo");
         newTodoDto.setUserId(1L);
+        newTodoDto.setAccountId(1L);
 
         Todo newTodo = new Todo();
         newTodo.setName("New Todo");
         newTodo.setDone(false);
         newTodo.setUser(testUser);
+        newTodo.setAccount(testAccount);
 
         Todo savedTodo = new Todo();
         savedTodo.setId(2L);
         savedTodo.setName("New Todo");
         savedTodo.setDone(false);
-        savedTodo.setDateTime(LocalDateTime.now());
+        savedTodo.setCreatedAt(LocalDateTime.now());
         savedTodo.setUser(testUser);
+        savedTodo.setAccount(testAccount);
 
         TodoDto savedTodoDto = new TodoDto();
         savedTodoDto.setId(2L);
         savedTodoDto.setName("New Todo");
         savedTodoDto.setDone(false);
         savedTodoDto.setUserId(1L);
-        savedTodoDto.setDateTime(savedTodo.getDateTime());
+        savedTodoDto.setAccountId(1L);
+        savedTodoDto.setCreatedAt(savedTodo.getCreatedAt());
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+        when(accountRepository.findById(1L)).thenReturn(Optional.of(testAccount));
         when(todoMapper.toEntity(newTodoDto)).thenReturn(newTodo);
         when(todoRepository.save(any(Todo.class))).thenReturn(savedTodo);
         when(todoMapper.toDto(savedTodo)).thenReturn(savedTodoDto);
@@ -104,8 +120,9 @@ public class TodoServiceImplTest {
         assertThat(result.getName()).isEqualTo("New Todo");
         assertThat(result.getDone()).isFalse();
         assertThat(result.getUserId()).isEqualTo(1L);
-        assertThat(result.getDateTime()).isNotNull();
+        assertThat(result.getCreatedAt()).isNotNull();
         verify(userRepository, times(1)).findById(1L);
+        verify(accountRepository, times(1)).findById(1L);
         verify(todoRepository, times(1)).save(any(Todo.class));
         verify(todoMapper, times(1)).toDto(savedTodo);
     }
@@ -115,6 +132,7 @@ public class TodoServiceImplTest {
         TodoDto newTodoDto = new TodoDto();
         newTodoDto.setName("New Todo");
         newTodoDto.setUserId(999L);
+        newTodoDto.setAccountId(1L);
 
         when(userRepository.findById(999L)).thenReturn(Optional.empty());
 
@@ -131,6 +149,7 @@ public class TodoServiceImplTest {
         TodoDto newTodoDto = new TodoDto();
         newTodoDto.setName("New Todo");
         newTodoDto.setUserId(1L);
+        newTodoDto.setAccountId(1L);
         newTodoDto.setDone(true);
 
         Todo newTodo = new Todo();
@@ -140,16 +159,19 @@ public class TodoServiceImplTest {
         savedTodo.setId(2L);
         savedTodo.setName("New Todo");
         savedTodo.setDone(false);
-        savedTodo.setDateTime(LocalDateTime.now());
+        savedTodo.setCreatedAt(LocalDateTime.now());
         savedTodo.setUser(testUser);
+        savedTodo.setAccount(testAccount);
 
         TodoDto savedTodoDto = new TodoDto();
         savedTodoDto.setId(2L);
         savedTodoDto.setName("New Todo");
         savedTodoDto.setDone(false);
         savedTodoDto.setUserId(1L);
+        savedTodoDto.setAccountId(1L);
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+        when(accountRepository.findById(1L)).thenReturn(Optional.of(testAccount));
         when(todoMapper.toEntity(newTodoDto)).thenReturn(newTodo);
         when(todoRepository.save(any(Todo.class))).thenReturn(savedTodo);
         when(todoMapper.toDto(savedTodo)).thenReturn(savedTodoDto);
@@ -171,14 +193,14 @@ public class TodoServiceImplTest {
         existingTodo.setId(1L);
         existingTodo.setName("Old Todo");
         existingTodo.setDone(false);
-        existingTodo.setDateTime(LocalDateTime.of(2026, 2, 11, 0, 0));
+        existingTodo.setCreatedAt(LocalDateTime.of(2026, 2, 11, 0, 0));
         existingTodo.setUser(testUser);
 
         Todo updatedTodo = new Todo();
         updatedTodo.setId(1L);
         updatedTodo.setName("Updated Todo");
         updatedTodo.setDone(true);
-        updatedTodo.setDateTime(LocalDateTime.now());
+        updatedTodo.setCreatedAt(LocalDateTime.now());
         updatedTodo.setUser(testUser);
 
         TodoDto updatedTodoDto = new TodoDto();
@@ -186,7 +208,7 @@ public class TodoServiceImplTest {
         updatedTodoDto.setName("Updated Todo");
         updatedTodoDto.setDone(true);
         updatedTodoDto.setUserId(testUser.getId());
-        updatedTodoDto.setDateTime(updatedTodo.getDateTime());
+        updatedTodoDto.setCreatedAt(updatedTodo.getCreatedAt());
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(existingTodo));
         doNothing().when(todoMapper).updateEntityFromDto(updateDto, existingTodo);
@@ -480,7 +502,8 @@ public class TodoServiceImplTest {
         markedTodo.setId(1L);
         markedTodo.setName("Todo");
         markedTodo.setDone(true);
-        markedTodo.setDateTime(LocalDateTime.now());
+        markedTodo.setCreatedAt(LocalDateTime.now());
+        markedTodo.setCompletedAt(LocalDateTime.now());
 
         TodoDto markedDto = new TodoDto();
         markedDto.setId(1L);
@@ -498,6 +521,7 @@ public class TodoServiceImplTest {
         verify(todoRepository, times(1)).findById(1L);
         verify(todoRepository, times(1)).save(todoToMark);
         assertThat(todoToMark.isDone()).isTrue(); // Проверяем, что поле изменено
+        assertThat(todoToMark.getCompletedAt()).isNotNull(); // completedAt должен быть установлен
     }
 
     @Test
@@ -517,12 +541,13 @@ public class TodoServiceImplTest {
         todoToMark.setId(1L);
         todoToMark.setName("Todo");
         todoToMark.setDone(true);
+        todoToMark.setCompletedAt(LocalDateTime.now());
 
         Todo markedTodo = new Todo();
         markedTodo.setId(1L);
         markedTodo.setName("Todo");
         markedTodo.setDone(false);
-        markedTodo.setDateTime(LocalDateTime.now());
+        markedTodo.setCreatedAt(LocalDateTime.now());
 
         TodoDto markedDto = new TodoDto();
         markedDto.setId(1L);
@@ -540,6 +565,8 @@ public class TodoServiceImplTest {
         verify(todoRepository, times(1)).findById(1L);
         verify(todoRepository, times(1)).save(todoToMark);
         assertThat(todoToMark.isDone()).isFalse(); // Проверяем, что поле изменено
+        assertThat(todoToMark.getCompletedAt()).isNull(); // completedAt должен быть очищен
+        assertThat(todoToMark.getCompletorUser()).isNull(); // completorUser должен быть очищен
     }
 
     @Test

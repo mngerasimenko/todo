@@ -136,43 +136,6 @@ class UserRepositoryTest {
     }
 
     @Test
-    void getUserByEmailAndPassword_ExistingCredentials_ReturnsUser() {
-        userRepository.save(testUser);
-
-        User result = userRepository.getUserByEmailAndPassword(
-                TEST_EMAIL,
-                TEST_PASSWORD
-        );
-
-        assertThat(result).isNotNull();
-        assertThat(result.getEmail()).isEqualTo(TEST_EMAIL);
-    }
-
-    @Test
-    void getUserByEmailAndPassword_WrongPassword_ReturnsNull() {
-        userRepository.save(testUser);
-
-        User result = userRepository.getUserByEmailAndPassword(
-                TEST_EMAIL,
-                "wrongpassword"
-        );
-
-        assertThat(result).isNull();
-    }
-
-    @Test
-    void getUserByEmailAndPassword_WrongEmail_ReturnsNull() {
-        userRepository.save(testUser);
-
-        User result = userRepository.getUserByEmailAndPassword(
-                "wrong@mail.ru",
-                TEST_PASSWORD
-        );
-
-        assertThat(result).isNull();
-    }
-
-    @Test
     void getUserById_ExistingId_ReturnsUser() {
         User savedUser = userRepository.save(testUser);
 

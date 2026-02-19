@@ -6,6 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.UserMapper;
@@ -21,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,6 +33,9 @@ class UserServiceImplTest {
 
     @Mock
     private UserMapper mapper;
+
+    @Mock
+    private PasswordEncoder passwordEncoder;
 
     @InjectMocks
     private UserServiceImpl userService;
@@ -172,6 +177,7 @@ class UserServiceImplTest {
         when(repository.getUserByEmail("new@mail.ru")).thenReturn(null);
         when(repository.getUserByName("newuser")).thenReturn(null);
         when(mapper.toEntity(newUserDto)).thenReturn(newUser);
+        when(passwordEncoder.encode(anyString())).thenReturn("$2a$10$encodedPassword");
         when(repository.save(any(User.class))).thenReturn(savedUser);
         when(mapper.toDto(savedUser)).thenReturn(newUserDto);
 
@@ -180,6 +186,7 @@ class UserServiceImplTest {
         assertThat(result).isEqualTo(newUserDto);
         verify(repository, times(1)).save(any(User.class));
         verify(mapper, times(1)).toDto(savedUser);
+        verify(passwordEncoder, times(1)).encode(anyString());
     }
 
     @Test
@@ -240,6 +247,7 @@ class UserServiceImplTest {
         when(repository.getUserByEmail("new@mail.ru")).thenReturn(null);
         when(repository.getUserByName("newuser")).thenReturn(null);
         when(mapper.toEntity(newUserDto)).thenReturn(newUser);
+        when(passwordEncoder.encode(anyString())).thenReturn("$2a$10$encodedPassword");
         when(repository.save(any(User.class))).thenAnswer(invocation -> {
             User saved = invocation.getArgument(0);
             saved.setId(2L);
@@ -287,6 +295,7 @@ class UserServiceImplTest {
 
         when(repository.findById(1L)).thenReturn(Optional.of(existingUser));
         when(repository.getUserByEmail("updated@mail.ru")).thenReturn(null);
+        when(passwordEncoder.encode(anyString())).thenReturn("$2a$10$encodedPassword");
         when(repository.save(any(User.class))).thenReturn(updatedUser);
         when(mapper.toDto(updatedUser)).thenReturn(updatedDto);
 
@@ -295,6 +304,7 @@ class UserServiceImplTest {
         assertThat(result).isEqualTo(updatedDto);
         verify(repository, times(1)).save(any(User.class));
         verify(repository, times(1)).findById(1L);
+        verify(passwordEncoder, times(1)).encode(anyString());
     }
 
     @Test
@@ -400,5 +410,52 @@ class UserServiceImplTest {
 
         assertThat(result).isFalse();
         verify(repository, times(1)).getUserByName("nonexistent");
+    }
+
+    @Test
+    void updateColors_WithValidId_ReturnsUpdatedUserDto() {
+        User existingUser = new User();
+        existingUser.setId(1L);
+        existingUser.setName("user");
+        existingUser.setEmail("user@mail.ru");
+        existingUser.setPassword("$2a$10$hash");
+        existingUser.setCreatedTaskColor("#4285F4");
+        existingUser.setCompletedTaskColor("#34A853");
+
+        User savedUser = new User();
+        savedUser.setId(1L);
+        savedUser.setName("user");
+        savedUser.setEmail("user@mail.ru");
+        savedUser.setPassword("$2a$10$hash");
+        savedUser.setCreatedTaskColor("#FF0000");
+        savedUser.setCompletedTaskColor("#00FF00");
+
+        UserDto updatedDto = new UserDto();
+        updatedDto.setId(1L);
+        updatedDto.setCreatedTaskColor("#FF0000");
+        updatedDto.setCompletedTaskColor("#00FF00");
+
+        when(repository.findById(1L)).thenReturn(java.util.Optional.of(existingUser));
+        when(repository.save(any(User.class))).thenReturn(savedUser);
+        when(mapper.toDto(savedUser)).thenReturn(updatedDto);
+
+        UserDto result = userService.updateColors(1L, "#FF0000", "#00FF00");
+
+        assertThat(result).isNotNull();
+        assertThat(result.getCreatedTaskColor()).isEqualTo("#FF0000");
+        assertThat(result.getCompletedTaskColor()).isEqualTo("#00FF00");
+        verify(repository, times(1)).findById(1L);
+        verify(repository, times(1)).save(existingUser);
+    }
+
+    @Test
+    void updateColors_WithNonExistentId_ThrowsUserNotFoundException() {
+        when(repository.findById(999L)).thenReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> userService.updateColors(999L, "#FF0000", "#00FF00"))
+                .isInstanceOf(ru.mngerasimenko.todolist.exception.UserNotFoundException.class)
+                .hasMessage("User not found with id: 999");
+
+        verify(repository, never()).save(any(User.class));
     }
 }

@@ -35,4 +35,10 @@ public class TodoRequest {
     @NotNull(message = "User ID is required")
     private Long userId;
 
+    @JsonProperty("account_id")
+    @NotNull(message = "Account ID is required")
+    private Long accountId;
+
+    @JsonProperty("is_private")
+    private boolean isPrivate;
 }

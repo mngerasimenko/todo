@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.dto.TodoRequest;
 import ru.mngerasimenko.todolist.dto.TodoResponse;
+import ru.mngerasimenko.todolist.model.Account;
 import ru.mngerasimenko.todolist.model.Todo;
 import ru.mngerasimenko.todolist.model.User;
 
@@ -27,12 +28,16 @@ class TodoMapperTest {
         user.setName("testuser");
         user.setEmail("test@mail.ru");
 
+        Account account = new Account("TestAccount", "hash");
+        account.setId(1L);
+
         Todo todo = new Todo();
         todo.setId(1L);
         todo.setName("Test Todo");
         todo.setDone(false);
-        todo.setDateTime(LocalDateTime.of(2024, 1, 15, 10, 30));
+        todo.setCreatedAt(LocalDateTime.of(2024, 1, 15, 10, 30));
         todo.setUser(user);
+        todo.setAccount(account);
 
         TodoDto result = todoMapper.toDto(todo);
 
@@ -40,10 +45,11 @@ class TodoMapperTest {
         assertThat(result.getId()).isEqualTo(1L);
         assertThat(result.getName()).isEqualTo("Test Todo");
         assertThat(result.isDone()).isFalse();
-        assertThat(result.getDateTime()).isEqualTo(LocalDateTime.of(2024, 1, 15, 10, 30));
+        assertThat(result.getCreatedAt()).isEqualTo(LocalDateTime.of(2024, 1, 15, 10, 30));
         assertThat(result.getUserId()).isEqualTo(1L);
         assertThat(result.getUserName()).isEqualTo("testuser");
         assertThat(result.getUserEmail()).isEqualTo("test@mail.ru");
+        assertThat(result.getAccountId()).isEqualTo(1L);
     }
 
     @Test
@@ -74,7 +80,7 @@ class TodoMapperTest {
                 .id(1L)
                 .name("Test Todo")
                 .done(true)
-                .dateTime(LocalDateTime.of(2024, 1, 15, 10, 30))
+                .createdAt(LocalDateTime.of(2024, 1, 15, 10, 30))
                 .userId(1L)
                 .build();
 
@@ -84,7 +90,7 @@ class TodoMapperTest {
         assertThat(result.getId()).isEqualTo(1L);
         assertThat(result.getName()).isEqualTo("Test Todo");
         assertThat(result.isDone()).isTrue();
-        assertThat(result.getDateTime()).isEqualTo(LocalDateTime.of(2024, 1, 15, 10, 30));
+        assertThat(result.getCreatedAt()).isEqualTo(LocalDateTime.of(2024, 1, 15, 10, 30));
         assertThat(result.getUserId()).isEqualTo(1L);
     }
 
@@ -100,20 +106,20 @@ class TodoMapperTest {
         TodoDto todoDto = TodoDto.builder()
                 .name("Updated Todo")
                 .done(true)
-                .dateTime(LocalDateTime.of(2024, 1, 16, 11, 45))
                 .build();
 
         Todo todo = new Todo();
         todo.setId(1L);
         todo.setName("Old Name");
         todo.setDone(false);
-        todo.setDateTime(LocalDateTime.of(2024, 1, 15, 10, 30));
+        todo.setCreatedAt(LocalDateTime.of(2024, 1, 15, 10, 30));
 
         todoMapper.updateEntityFromDto(todoDto, todo);
 
         assertThat(todo.getName()).isEqualTo("Updated Todo");
         assertThat(todo.isDone()).isTrue();
-        assertThat(todo.getDateTime()).isEqualTo(LocalDateTime.of(2024, 1, 16, 11, 45));
+        // createdAt не должен изменяться при updateEntityFromDto
+        assertThat(todo.getCreatedAt()).isEqualTo(LocalDateTime.of(2024, 1, 15, 10, 30));
         assertThat(todo.getId()).isEqualTo(1L);
     }
 
@@ -159,7 +165,8 @@ class TodoMapperTest {
         request.setUserId(1L);
         request.setName("New Todo");
         request.setDone(false);
-        request.setDateTime(LocalDateTime.of(2024, 1, 15, 10, 30));
+        request.setAccountId(2L);
+        request.setPrivate(false);
 
         TodoDto result = todoMapper.toDto(request);
 
@@ -168,7 +175,7 @@ class TodoMapperTest {
         assertThat(result.getUserId()).isEqualTo(1L);
         assertThat(result.getName()).isEqualTo("New Todo");
         assertThat(result.isDone()).isFalse();
-        assertThat(result.getDateTime()).isEqualTo(LocalDateTime.of(2024, 1, 15, 10, 30));
+        assertThat(result.getAccountId()).isEqualTo(2L);
     }
 
     @Test
@@ -183,7 +190,6 @@ class TodoMapperTest {
         assertThat(result.getId()).isNull();
         assertThat(result.getUserId()).isNull();
         assertThat(result.getDone()).isNull();
-        assertThat(result.getDateTime()).isNull();
     }
 
     @Test
@@ -192,10 +198,11 @@ class TodoMapperTest {
                 .id(1L)
                 .name("Test Todo")
                 .done(true)
-                .dateTime(LocalDateTime.of(2024, 1, 15, 10, 30))
+                .createdAt(LocalDateTime.of(2024, 1, 15, 10, 30))
                 .userId(1L)
                 .userName("testuser")
                 .userEmail("test@mail.ru")
+                .accountId(1L)
                 .build();
 
         TodoResponse result = todoMapper.toResponse(todoDto);
@@ -204,10 +211,10 @@ class TodoMapperTest {
         assertThat(result.getId()).isEqualTo(1L);
         assertThat(result.getName()).isEqualTo("Test Todo");
         assertThat(result.isDone()).isTrue();
-        assertThat(result.getDateTime()).isEqualTo(LocalDateTime.of(2024, 1, 15, 10, 30));
+        assertThat(result.getCreatedAt()).isEqualTo(LocalDateTime.of(2024, 1, 15, 10, 30));
         assertThat(result.getUserId()).isEqualTo(1L);
         assertThat(result.getUserName()).isEqualTo("testuser");
-        assertThat(result.getCreatedAt()).isEqualTo(LocalDateTime.of(2024, 1, 15, 10, 30));
+        assertThat(result.getAccountId()).isEqualTo(1L);
     }
 
     @Test
@@ -245,7 +252,7 @@ class TodoMapperTest {
         originalTodo.setId(10L);
         originalTodo.setName("Consistency Test");
         originalTodo.setDone(true);
-        originalTodo.setDateTime(LocalDateTime.now());
+        originalTodo.setCreatedAt(LocalDateTime.now());
         originalTodo.setUser(user);
 
         TodoDto dto = todoMapper.toDto(originalTodo);
@@ -256,5 +263,33 @@ class TodoMapperTest {
         assertThat(convertedBack.isDone()).isEqualTo(originalTodo.isDone());
         assertThat(convertedBack.getUserId()).isEqualTo(originalTodo.getUserId());
         assertThat(convertedBack.getUser()).isNull();
+    }
+
+    @Test
+    void toDto_WithCompletorUser_MapsCompletorFields() {
+        User creator = new User();
+        creator.setId(1L);
+        creator.setName("creator");
+        creator.setEmail("creator@mail.ru");
+
+        User completor = new User();
+        completor.setId(2L);
+        completor.setName("completor");
+        completor.setEmail("completor@mail.ru");
+
+        Todo todo = new Todo();
+        todo.setId(1L);
+        todo.setName("Completed Todo");
+        todo.setDone(true);
+        todo.setCreatedAt(LocalDateTime.of(2024, 1, 15, 10, 0));
+        todo.setCompletedAt(LocalDateTime.of(2024, 1, 15, 12, 0));
+        todo.setUser(creator);
+        todo.setCompletorUser(completor);
+
+        TodoDto result = todoMapper.toDto(todo);
+
+        assertThat(result.getCompletorUserId()).isEqualTo(2L);
+        assertThat(result.getCompletorUserName()).isEqualTo("completor");
+        assertThat(result.getCompletedAt()).isEqualTo(LocalDateTime.of(2024, 1, 15, 12, 0));
     }
 }

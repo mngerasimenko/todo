@@ -19,4 +19,6 @@ public interface UserService {
     UserDto updateUser(Long id, UserDto userDto);
 
     UserDto getUserById(Long id);
+
+    UserDto updateColors(Long id, String createdTaskColor, String completedTaskColor);
 }

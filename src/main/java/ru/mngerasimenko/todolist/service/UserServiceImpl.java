@@ -3,6 +3,7 @@ package ru.mngerasimenko.todolist.service;
 import io.micrometer.common.util.StringUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.mngerasimenko.todolist.dto.UserDto;
@@ -21,6 +22,7 @@ import java.util.stream.Collectors;
 public class UserServiceImpl implements UserService {
     private final UserRepository repository;
     private final UserMapper mapper;
+    private final PasswordEncoder passwordEncoder;
 
     @Override
     @Transactional(readOnly = true)
@@ -69,6 +71,9 @@ public class UserServiceImpl implements UserService {
             user.setAuthId(uuid.toString());
         }
 
+        // Хэшируем пароль перед сохранением
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
+
         User savedUser = repository.save(user);
         log.info("Создан пользователь: id={}, name='{}'", savedUser.getId(), savedUser.getName());
         return mapper.toDto(savedUser);
@@ -85,7 +90,8 @@ public class UserServiceImpl implements UserService {
         }
 
         existingUser.setEmail(userDto.getEmail());
-        existingUser.setPassword(userDto.getPassword());
+        // Хэшируем пароль при обновлении
+        existingUser.setPassword(passwordEncoder.encode(userDto.getPassword()));
         existingUser.setName(userDto.getName());
 
         User updatedUser = repository.save(existingUser);
@@ -103,6 +109,18 @@ public class UserServiceImpl implements UserService {
         return mapper.toDto(user);
     }
 
+    @Override
+    @Transactional
+    public UserDto updateColors(Long id, String createdTaskColor, String completedTaskColor) {
+        User user = repository.findById(id)
+                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + id));
+        user.setCreatedTaskColor(createdTaskColor);
+        user.setCompletedTaskColor(completedTaskColor);
+        User savedUser = repository.save(user);
+        log.info("Обновлены цвета пользователя: id={}", id);
+        return mapper.toDto(savedUser);
+    }
+
     @Transactional(readOnly = true)
     public boolean existsByEmail(String email) {
         return repository.getUserByEmail(email) != null;
@@ -112,6 +130,4 @@ public class UserServiceImpl implements UserService {
     public boolean existsByUserName(String userName) {
         return repository.getUserByName(userName) != null;
     }
-
-
 }

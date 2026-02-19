@@ -29,13 +29,20 @@ public class TodoDto {
     @Size(min = 2, max = 120, message = "Todo name must be between 2 and 120 characters")
     private String name;
 
-    @JsonProperty("date_time")
-    @NotNull(message = "Date time is required")
+    @JsonProperty("created_at")
+    @NotNull(message = "Created at is required")
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
-    private LocalDateTime dateTime;
+    private LocalDateTime createdAt;
+
+    @JsonProperty("completed_at")
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime completedAt;
 
     @NotNull(message = "Done status is required")
     private Boolean done;
+
+    @JsonProperty("is_private")
+    private boolean isPrivate;
 
     @JsonProperty("user_id")
     private Long userId;
@@ -46,6 +53,27 @@ public class TodoDto {
     @JsonProperty("user_email")
     private String userEmail;
 
+    @JsonProperty("completor_user_id")
+    private Long completorUserId;
+
+    @JsonProperty("completor_user_name")
+    private String completorUserName;
+
+    @JsonProperty("account_id")
+    private Long accountId;
+
+    /**
+     * Цвет иконки создателя задачи.
+     */
+    @JsonProperty("creator_color")
+    private String creatorColor;
+
+    /**
+     * Цвет иконки исполнителя задачи.
+     */
+    @JsonProperty("completor_color")
+    private String completorColor;
+
     @JsonProperty("done")
     public boolean isDone() {
         return done != null && done;
@@ -55,5 +83,4 @@ public class TodoDto {
     public Boolean getDone() {
         return done;
     }
-
 }

@@ -35,4 +35,10 @@ public class UserDto {
 
     @NotBlank
     private String name;
+
+    @JsonProperty("created_task_color")
+    private String createdTaskColor;
+
+    @JsonProperty("completed_task_color")
+    private String completedTaskColor;
 }
