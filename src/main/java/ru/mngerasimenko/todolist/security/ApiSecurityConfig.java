@@ -1,5 +1,6 @@
 package ru.mngerasimenko.todolist.security;
 
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -52,6 +53,15 @@ public class ApiSecurityConfig {
                 )
                 // Добавляем JWT фильтр перед UsernamePasswordAuthenticationFilter
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                // Возвращаем 401 вместо редиректа на /login для API эндпоинтов
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint((request, response, authException) -> {
+                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                            response.setContentType("application/json");
+                            response.setCharacterEncoding("UTF-8");
+                            response.getWriter().write("{\"error\":\"Unauthorized\"}");
+                        })
+                )
                 // Отключаем HTTP Basic (используем JWT)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 // Отключаем CSRF для API (stateless)
