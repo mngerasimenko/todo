@@ -31,7 +31,17 @@ public class TodoResponse {
     private Boolean done;
 
     @JsonProperty("is_private")
-    private boolean isPrivate;
+    private Boolean isPrivate;
+
+    @JsonProperty("is_private")
+    public boolean isPrivate() {
+        return isPrivate != null && isPrivate;
+    }
+
+    @JsonIgnore
+    public Boolean getIsPrivate() {
+        return isPrivate;
+    }
 
     @JsonProperty("user_id")
     private Long userId;
