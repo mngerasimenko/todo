@@ -121,16 +121,18 @@ public class AuthController {
      */
     @PostMapping("/refresh")
     public ResponseEntity<LoginResponse> refresh(@Valid @RequestBody RefreshTokenRequest refreshTokenRequest) {
+        log.debug("POST /api/auth/refresh — запрос получен");
         String refreshToken = refreshTokenRequest.getRefreshToken();
 
         // Валидация refresh токена
         if (!jwtTokenProvider.validateToken(refreshToken)) {
-            log.warn("Невалидный refresh токен");
+            log.warn("POST /api/auth/refresh — refresh токен невалиден, возвращаем 401");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
         // Извлечение username из токена
         String username = jwtTokenProvider.getUsernameFromToken(refreshToken);
+        log.debug("POST /api/auth/refresh — токен валиден, пользователь: {}", username);
 
         // Генерация новых токенов
         String newAccessToken = jwtTokenProvider.generateAccessToken(username);

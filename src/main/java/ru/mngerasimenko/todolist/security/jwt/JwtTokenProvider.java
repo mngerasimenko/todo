@@ -44,6 +44,8 @@ public class JwtTokenProvider {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtProperties.getAccessTokenExpiration());
 
+        log.debug("Выдача access токена: user={}, истекает через {}с", username, jwtProperties.getAccessTokenExpiration() / 1000);
+
         return Jwts.builder()
                 .subject(username)
                 .issuedAt(now)
@@ -61,6 +63,8 @@ public class JwtTokenProvider {
     public String generateRefreshToken(String username) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtProperties.getRefreshTokenExpiration());
+
+        log.debug("Выдача refresh токена: user={}, истекает через {}с", username, jwtProperties.getRefreshTokenExpiration() / 1000);
 
         return Jwts.builder()
                 .subject(username)
@@ -104,7 +108,7 @@ public class JwtTokenProvider {
         } catch (MalformedJwtException ex) {
             log.error("Некорректный JWT токен", ex);
         } catch (ExpiredJwtException ex) {
-            log.error("Истёк срок действия JWT токена", ex);
+            log.warn("JWT токен истёк: user={}", ex.getClaims().getSubject());
         } catch (UnsupportedJwtException ex) {
             log.error("Неподдерживаемый JWT токен", ex);
         } catch (IllegalArgumentException ex) {
