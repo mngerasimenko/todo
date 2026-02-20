@@ -1,4 +1,4 @@
-package ru.mngerasimenko.todolist.dto.account;
+package ru.mngerasimenko.todolist.dto.list;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
@@ -7,21 +7,21 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Ответ с информацией об аккаунте.
- * Поле role — роль текущего пользователя в данном аккаунте (ADMIN/USER).
+ * Ответ с информацией о списке задач.
+ * Поле role — роль текущего пользователя в данном списке (ADMIN/USER).
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class AccountResponse {
+public class ListResponse {
 
     private Long id;
 
     private String name;
 
     /**
-     * Роль текущего пользователя в аккаунте.
+     * Роль текущего пользователя в списке.
      */
     private String role;
 

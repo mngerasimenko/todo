@@ -7,7 +7,7 @@
 ![Docker](https://img.shields.io/badge/Docker-24+-2496ED?logo=docker)
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?logo=github-actions)
 
-Веб-приложение для совместного управления списком задач. Система аккаунтов позволяет нескольким пользователям работать в общем пространстве, видеть задачи друг друга и отмечать их выполнение.
+Веб-приложение для совместного управления списком задач. Система списков задач позволяет нескольким пользователям работать в общем пространстве, видеть задачи друг друга и отмечать их выполнение.
 
 ---
 
@@ -22,7 +22,7 @@
 
 ## Возможности
 
-- Совместная работа через аккаунты (создание, вступление по паролю, роли ADMIN/USER)
+- Совместная работа через списки задач (создание, вступление по паролю, роли ADMIN/USER)
 - Приватные задачи, видимые только создателю
 - Цвета пользователей для визуальной идентификации задач
 - Отметка задач как выполненных с фиксацией даты и исполнителя
@@ -62,16 +62,16 @@
 | POST | `/api/auth/login` | Вход (возвращает JWT) |
 | POST | `/api/auth/refresh` | Обновление access токена |
 
-### Аккаунты
+### Списки задач
 
 | Метод | Эндпоинт | Описание |
 |-------|----------|----------|
-| POST | `/api/accounts` | Создать аккаунт (роль ADMIN) |
-| POST | `/api/accounts/join` | Вступить в аккаунт по паролю |
-| GET | `/api/accounts` | Мои аккаунты |
-| GET | `/api/accounts/{id}/members` | Участники аккаунта |
-| GET | `/api/accounts/{id}/todos` | Задачи аккаунта (с учётом приватности) |
-| DELETE | `/api/accounts/{id}/leave` | Покинуть аккаунт |
+| POST | `/api/lists` | Создать список (роль ADMIN) |
+| POST | `/api/lists/join` | Вступить в список по паролю |
+| GET | `/api/lists` | Мои списки |
+| GET | `/api/lists/{id}/members` | Участники списка |
+| GET | `/api/lists/{id}/todos` | Задачи списка (с учётом приватности) |
+| DELETE | `/api/lists/{id}/leave` | Покинуть список |
 
 ### Задачи
 
@@ -169,12 +169,12 @@ chmod +x setup-server.sh
 
 ```
 src/main/java/ru/mngerasimenko/todolist/
-├── controller/      REST-контроллеры (5: App, Todo, User, Account, Auth)
+├── controller/      REST-контроллеры (5: App, Todo, User, TaskList, Auth)
 ├── service/         Бизнес-логика (3 интерфейса + 4 реализации)
 ├── repository/      Spring Data JPA (5 репозиториев)
-├── model/           JPA-сущности (User, Todo, Account, AccountUser, AccountRole)
-├── dto/             DTO + account/ + auth/ подпакеты
-├── mapper/          Ручные мапперы (Todo, User, Account)
+├── model/           JPA-сущности (User, Todo, TaskList, TaskListUser, TaskListRole)
+├── dto/             DTO + list/ + auth/ подпакеты
+├── mapper/          Ручные мапперы (Todo, User, TaskList)
 ├── security/        Spring Security + JWT (2 цепочки: API + Vaadin)
 ├── view/            Vaadin UI (Login, Main, List, TodoForm)
 ├── exception/       GlobalExceptionHandler + кастомные исключения

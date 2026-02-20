@@ -30,7 +30,7 @@ public class TodoUserDetailsService implements UserDetailsService {
         }
 
         // Используем пароль из БД (уже BCrypt-хэш).
-        // Роль — только USER; роли ADMIN/USER управляются через account_user (per-account).
+        // Роль — только USER; роли ADMIN/USER управляются через task_list_user (per-list).
         return org.springframework.security.core.userdetails.User
                 .builder()
                 .username(userDto.getName())

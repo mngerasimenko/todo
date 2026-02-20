@@ -60,7 +60,7 @@ public class User {
     private List<Todo> todoList = new ArrayList<>();
 
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "user")
-    private List<AccountUser> accountUsers = new ArrayList<>();
+    private List<TaskListUser> taskListUsers = new ArrayList<>();
 
     public User() {
     }
@@ -143,11 +143,11 @@ public class User {
     }
 
     @JsonIgnore
-    public List<AccountUser> getAccountUsers() {
-        return accountUsers;
+    public List<TaskListUser> getTaskListUsers() {
+        return taskListUsers;
     }
 
-    public void setAccountUsers(List<AccountUser> accountUsers) {
-        this.accountUsers = accountUsers;
+    public void setTaskListUsers(List<TaskListUser> taskListUsers) {
+        this.taskListUsers = taskListUsers;
     }
 }

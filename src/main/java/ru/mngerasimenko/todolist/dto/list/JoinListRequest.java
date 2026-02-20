@@ -1,4 +1,4 @@
-package ru.mngerasimenko.todolist.dto.account;
+package ru.mngerasimenko.todolist.dto.list;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -11,13 +11,13 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class JoinAccountRequest {
+public class JoinListRequest {
 
-    @NotBlank(message = "Название аккаунта обязательно")
+    @NotBlank(message = "Название списка обязательно")
     @Size(min = 2, max = 128)
     private String name;
 
-    @NotBlank(message = "Пароль аккаунта обязателен")
+    @NotBlank(message = "Пароль списка обязателен")
     @Size(min = 3, max = 128)
     private String password;
 }

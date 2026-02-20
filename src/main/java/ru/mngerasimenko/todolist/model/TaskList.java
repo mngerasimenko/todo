@@ -10,13 +10,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Аккаунт — пространство для совместной работы над задачами.
- * Пользователи вступают в аккаунт по названию и паролю.
+ * Список задач — пространство для совместной работы над задачами.
+ * Пользователи подключаются к списку по названию и паролю.
  */
 @Entity
-@Table(name = "account")
+@Table(name = "task_list")
 @JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"})
-public class Account {
+public class TaskList {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -34,13 +34,13 @@ public class Account {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
-    @OneToMany(mappedBy = "account", fetch = FetchType.LAZY)
-    private List<AccountUser> accountUsers = new ArrayList<>();
+    @OneToMany(mappedBy = "taskList", fetch = FetchType.LAZY)
+    private List<TaskListUser> taskListUsers = new ArrayList<>();
 
-    public Account() {
+    public TaskList() {
     }
 
-    public Account(String name, String passwordHash) {
+    public TaskList(String name, String passwordHash) {
         this.name = name;
         this.passwordHash = passwordHash;
         this.createdAt = LocalDateTime.now();
@@ -85,11 +85,11 @@ public class Account {
         this.createdAt = createdAt;
     }
 
-    public List<AccountUser> getAccountUsers() {
-        return accountUsers;
+    public List<TaskListUser> getTaskListUsers() {
+        return taskListUsers;
     }
 
-    public void setAccountUsers(List<AccountUser> accountUsers) {
-        this.accountUsers = accountUsers;
+    public void setTaskListUsers(List<TaskListUser> taskListUsers) {
+        this.taskListUsers = taskListUsers;
     }
 }

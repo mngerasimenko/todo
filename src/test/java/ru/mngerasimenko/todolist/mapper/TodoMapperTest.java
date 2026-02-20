@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.dto.TodoRequest;
 import ru.mngerasimenko.todolist.dto.TodoResponse;
-import ru.mngerasimenko.todolist.model.Account;
+import ru.mngerasimenko.todolist.model.TaskList;
 import ru.mngerasimenko.todolist.model.Todo;
 import ru.mngerasimenko.todolist.model.User;
 
@@ -28,8 +28,8 @@ class TodoMapperTest {
         user.setName("testuser");
         user.setEmail("test@mail.ru");
 
-        Account account = new Account("TestAccount", "hash");
-        account.setId(1L);
+        TaskList taskList = new TaskList("TestList", "hash");
+        taskList.setId(1L);
 
         Todo todo = new Todo();
         todo.setId(1L);
@@ -37,7 +37,7 @@ class TodoMapperTest {
         todo.setDone(false);
         todo.setCreatedAt(LocalDateTime.of(2024, 1, 15, 10, 30));
         todo.setUser(user);
-        todo.setAccount(account);
+        todo.setTaskList(taskList);
 
         TodoDto result = todoMapper.toDto(todo);
 
@@ -49,7 +49,7 @@ class TodoMapperTest {
         assertThat(result.getUserId()).isEqualTo(1L);
         assertThat(result.getUserName()).isEqualTo("testuser");
         assertThat(result.getUserEmail()).isEqualTo("test@mail.ru");
-        assertThat(result.getAccountId()).isEqualTo(1L);
+        assertThat(result.getListId()).isEqualTo(1L);
     }
 
     @Test
@@ -165,7 +165,7 @@ class TodoMapperTest {
         request.setUserId(1L);
         request.setName("New Todo");
         request.setDone(false);
-        request.setAccountId(2L);
+        request.setListId(2L);
         request.setPrivate(false);
 
         TodoDto result = todoMapper.toDto(request);
@@ -175,7 +175,7 @@ class TodoMapperTest {
         assertThat(result.getUserId()).isEqualTo(1L);
         assertThat(result.getName()).isEqualTo("New Todo");
         assertThat(result.isDone()).isFalse();
-        assertThat(result.getAccountId()).isEqualTo(2L);
+        assertThat(result.getListId()).isEqualTo(2L);
     }
 
     @Test
@@ -202,7 +202,7 @@ class TodoMapperTest {
                 .userId(1L)
                 .userName("testuser")
                 .userEmail("test@mail.ru")
-                .accountId(1L)
+                .listId(1L)
                 .build();
 
         TodoResponse result = todoMapper.toResponse(todoDto);
@@ -214,7 +214,7 @@ class TodoMapperTest {
         assertThat(result.getCreatedAt()).isEqualTo(LocalDateTime.of(2024, 1, 15, 10, 30));
         assertThat(result.getUserId()).isEqualTo(1L);
         assertThat(result.getUserName()).isEqualTo("testuser");
-        assertThat(result.getAccountId()).isEqualTo(1L);
+        assertThat(result.getListId()).isEqualTo(1L);
     }
 
     @Test

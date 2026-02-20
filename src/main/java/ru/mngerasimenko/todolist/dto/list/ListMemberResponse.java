@@ -1,4 +1,4 @@
-package ru.mngerasimenko.todolist.dto.account;
+package ru.mngerasimenko.todolist.dto.list;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
@@ -7,13 +7,13 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Ответ с информацией об участнике аккаунта.
+ * Ответ с информацией об участнике списка задач.
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class AccountMemberResponse {
+public class ListMemberResponse {
 
     @JsonProperty("user_id")
     private Long userId;

@@ -10,10 +10,10 @@ import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.exception.TodoNotFoundException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
-import ru.mngerasimenko.todolist.model.Account;
+import ru.mngerasimenko.todolist.model.TaskList;
 import ru.mngerasimenko.todolist.model.Todo;
 import ru.mngerasimenko.todolist.model.User;
-import ru.mngerasimenko.todolist.repository.AccountRepository;
+import ru.mngerasimenko.todolist.repository.TaskListRepository;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 
@@ -39,7 +39,7 @@ public class TodoServiceImplTest {
     private UserRepository userRepository;
 
     @Mock
-    private AccountRepository accountRepository;
+    private TaskListRepository taskListRepository;
 
     @Mock
     private TodoMapper todoMapper;
@@ -48,7 +48,7 @@ public class TodoServiceImplTest {
     private TodoServiceImpl todoService;
 
     private User testUser;
-    private Account testAccount;
+    private TaskList testTaskList;
     private Todo testTodo;
     private TodoDto testTodoDto;
 
@@ -59,8 +59,8 @@ public class TodoServiceImplTest {
         testUser.setName("testuser");
         testUser.setEmail("test@mail.ru");
 
-        testAccount = new Account("TestAccount", "$2a$10$hashedPass");
-        testAccount.setId(1L);
+        testTaskList = new TaskList("TestList", "$2a$10$hashedPass");
+        testTaskList.setId(1L);
 
         testTodo = new Todo();
         testTodo.setId(1L);
@@ -68,14 +68,14 @@ public class TodoServiceImplTest {
         testTodo.setDone(false);
         testTodo.setCreatedAt(LocalDateTime.now());
         testTodo.setUser(testUser);
-        testTodo.setAccount(testAccount);
+        testTodo.setTaskList(testTaskList);
 
         testTodoDto = new TodoDto();
         testTodoDto.setId(1L);
         testTodoDto.setName("Test Todo");
         testTodoDto.setDone(false);
         testTodoDto.setUserId(1L);
-        testTodoDto.setAccountId(1L);
+        testTodoDto.setListId(1L);
     }
 
     @Test
@@ -83,13 +83,13 @@ public class TodoServiceImplTest {
         TodoDto newTodoDto = new TodoDto();
         newTodoDto.setName("New Todo");
         newTodoDto.setUserId(1L);
-        newTodoDto.setAccountId(1L);
+        newTodoDto.setListId(1L);
 
         Todo newTodo = new Todo();
         newTodo.setName("New Todo");
         newTodo.setDone(false);
         newTodo.setUser(testUser);
-        newTodo.setAccount(testAccount);
+        newTodo.setTaskList(testTaskList);
 
         Todo savedTodo = new Todo();
         savedTodo.setId(2L);
@@ -97,18 +97,18 @@ public class TodoServiceImplTest {
         savedTodo.setDone(false);
         savedTodo.setCreatedAt(LocalDateTime.now());
         savedTodo.setUser(testUser);
-        savedTodo.setAccount(testAccount);
+        savedTodo.setTaskList(testTaskList);
 
         TodoDto savedTodoDto = new TodoDto();
         savedTodoDto.setId(2L);
         savedTodoDto.setName("New Todo");
         savedTodoDto.setDone(false);
         savedTodoDto.setUserId(1L);
-        savedTodoDto.setAccountId(1L);
+        savedTodoDto.setListId(1L);
         savedTodoDto.setCreatedAt(savedTodo.getCreatedAt());
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(accountRepository.findById(1L)).thenReturn(Optional.of(testAccount));
+        when(taskListRepository.findById(1L)).thenReturn(Optional.of(testTaskList));
         when(todoMapper.toEntity(newTodoDto)).thenReturn(newTodo);
         when(todoRepository.save(any(Todo.class))).thenReturn(savedTodo);
         when(todoMapper.toDto(savedTodo)).thenReturn(savedTodoDto);
@@ -122,7 +122,7 @@ public class TodoServiceImplTest {
         assertThat(result.getUserId()).isEqualTo(1L);
         assertThat(result.getCreatedAt()).isNotNull();
         verify(userRepository, times(1)).findById(1L);
-        verify(accountRepository, times(1)).findById(1L);
+        verify(taskListRepository, times(1)).findById(1L);
         verify(todoRepository, times(1)).save(any(Todo.class));
         verify(todoMapper, times(1)).toDto(savedTodo);
     }
@@ -132,7 +132,7 @@ public class TodoServiceImplTest {
         TodoDto newTodoDto = new TodoDto();
         newTodoDto.setName("New Todo");
         newTodoDto.setUserId(999L);
-        newTodoDto.setAccountId(1L);
+        newTodoDto.setListId(1L);
 
         when(userRepository.findById(999L)).thenReturn(Optional.empty());
 
@@ -149,7 +149,7 @@ public class TodoServiceImplTest {
         TodoDto newTodoDto = new TodoDto();
         newTodoDto.setName("New Todo");
         newTodoDto.setUserId(1L);
-        newTodoDto.setAccountId(1L);
+        newTodoDto.setListId(1L);
         newTodoDto.setDone(true);
 
         Todo newTodo = new Todo();
@@ -161,17 +161,17 @@ public class TodoServiceImplTest {
         savedTodo.setDone(false);
         savedTodo.setCreatedAt(LocalDateTime.now());
         savedTodo.setUser(testUser);
-        savedTodo.setAccount(testAccount);
+        savedTodo.setTaskList(testTaskList);
 
         TodoDto savedTodoDto = new TodoDto();
         savedTodoDto.setId(2L);
         savedTodoDto.setName("New Todo");
         savedTodoDto.setDone(false);
         savedTodoDto.setUserId(1L);
-        savedTodoDto.setAccountId(1L);
+        savedTodoDto.setListId(1L);
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(accountRepository.findById(1L)).thenReturn(Optional.of(testAccount));
+        when(taskListRepository.findById(1L)).thenReturn(Optional.of(testTaskList));
         when(todoMapper.toEntity(newTodoDto)).thenReturn(newTodo);
         when(todoRepository.save(any(Todo.class))).thenReturn(savedTodo);
         when(todoMapper.toDto(savedTodo)).thenReturn(savedTodoDto);

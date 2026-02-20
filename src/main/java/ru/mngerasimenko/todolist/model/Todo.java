@@ -73,15 +73,15 @@ public class Todo {
     private Long completorUserId;
 
     /**
-     * Аккаунт, к которому принадлежит задача.
+     * Список задач, к которому принадлежит задача.
      */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "account_id", nullable = false)
+    @JoinColumn(name = "list_id", nullable = false)
     @NotNull
-    private Account account;
+    private TaskList taskList;
 
-    @Column(name = "account_id", insertable = false, updatable = false)
-    private Long accountId;
+    @Column(name = "list_id", insertable = false, updatable = false)
+    private Long listId;
 
     public Todo() {
     }
@@ -201,22 +201,22 @@ public class Todo {
     }
 
     @JsonIgnore
-    public Account getAccount() {
-        return account;
+    public TaskList getTaskList() {
+        return taskList;
     }
 
-    public void setAccount(Account account) {
-        this.account = account;
-        if (account != null) {
-            this.accountId = account.getId();
+    public void setTaskList(TaskList taskList) {
+        this.taskList = taskList;
+        if (taskList != null) {
+            this.listId = taskList.getId();
         }
     }
 
-    public Long getAccountId() {
-        return accountId;
+    public Long getListId() {
+        return listId;
     }
 
-    public void setAccountId(Long accountId) {
-        this.accountId = accountId;
+    public void setListId(Long listId) {
+        this.listId = listId;
     }
 }

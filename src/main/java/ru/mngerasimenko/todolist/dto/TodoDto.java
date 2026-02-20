@@ -69,8 +69,8 @@ public class TodoDto {
     @JsonProperty("completor_user_name")
     private String completorUserName;
 
-    @JsonProperty("account_id")
-    private Long accountId;
+    @JsonProperty("list_id")
+    private Long listId;
 
     /**
      * Цвет иконки создателя задачи.

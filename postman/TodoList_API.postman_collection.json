@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "todo-list-api-collection",
 		"name": "TodoList API - JWT Auth",
-		"description": "Коллекция для тестирования REST API Todo List с JWT аутентификацией.\n\n**Порядок выполнения:**\n1. Auth → Register (создать пользователя)\n2. Auth → Login (получить JWT токены)\n3. Accounts → Create Account (создать аккаунт, сохранится accountId)\n4. Todos / Users / Accounts (использовать access_token)\n\n**Переменные:**\n- `baseUrl`: http://localhost:8090\n- `accessToken`: автоматически сохраняется после login\n- `refreshToken`: автоматически сохраняется после login\n- `userId`: ID пользователя\n- `todoId`: ID задачи\n- `accountId`: ID аккаунта (сохраняется после создания аккаунта)",
+		"description": "Коллекция для тестирования REST API Todo List с JWT аутентификацией.\n\n**Порядок выполнения:**\n1. Auth → Register (создать пользователя)\n2. Auth → Login (получить JWT токены)\n3. Lists → Create List (создать список, сохранится listId)\n4. Todos / Users / Lists (использовать access_token)\n\n**Переменные:**\n- `baseUrl`: http://localhost:8090\n- `accessToken`: автоматически сохраняется после login\n- `refreshToken`: автоматически сохраняется после login\n- `userId`: ID пользователя\n- `todoId`: ID задачи\n- `listId`: ID списка (сохраняется после создания списка)",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
@@ -191,10 +191,10 @@
 			"description": "Эндпоинты аутентификации и регистрации"
 		},
 		{
-			"name": "Accounts",
+			"name": "Lists",
 			"item": [
 				{
-					"name": "Create Account",
+					"name": "Create List",
 					"event": [
 						{
 							"listen": "test",
@@ -204,14 +204,14 @@
 									"    pm.response.to.have.status(201);",
 									"});",
 									"",
-									"pm.test(\"Account created successfully\", function () {",
+									"pm.test(\"List created successfully\", function () {",
 									"    var jsonData = pm.response.json();",
 									"    pm.expect(jsonData.id).to.exist;",
 									"    pm.expect(jsonData.name).to.exist;",
 									"    pm.expect(jsonData.role).to.eql(\"ADMIN\");",
 									"    ",
-									"    // Сохранение accountId для дальнейших запросов",
-									"    pm.environment.set(\"accountId\", jsonData.id);",
+									"    // Сохранение listId для дальнейших запросов",
+									"    pm.environment.set(\"listId\", jsonData.id);",
 									"});"
 								],
 								"type": "text/javascript"
@@ -238,24 +238,24 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"МойАккаунт\",\n  \"password\": \"secret\"\n}"
+							"raw": "{\n  \"name\": \"МойСписок\",\n  \"password\": \"secret\"\n}"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/api/accounts",
+							"raw": "{{baseUrl}}/api/lists",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"api",
-								"accounts"
+								"lists"
 							]
 						},
-						"description": "Создание нового аккаунта.\n\nСоздатель автоматически получает роль `ADMIN`.\n\n**accountId сохраняется автоматически в переменные.**\n\n**Ошибки:** `400` (название уже занято), `404` (пользователь не найден)"
+						"description": "Создание нового списка.\n\nСоздатель автоматически получает роль `ADMIN`.\n\n**listId сохраняется автоматически в переменные.**\n\n**Ошибки:** `400` (название уже занято), `404` (пользователь не найден)"
 					},
 					"response": []
 				},
 				{
-					"name": "Join Account",
+					"name": "Join List",
 					"event": [
 						{
 							"listen": "test",
@@ -265,7 +265,7 @@
 									"    pm.response.to.have.status(200);",
 									"});",
 									"",
-									"pm.test(\"Joined account successfully\", function () {",
+									"pm.test(\"Joined list successfully\", function () {",
 									"    var jsonData = pm.response.json();",
 									"    pm.expect(jsonData.id).to.exist;",
 									"    pm.expect(jsonData.name).to.exist;",
@@ -296,25 +296,25 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"МойАккаунт\",\n  \"password\": \"secret\"\n}"
+							"raw": "{\n  \"name\": \"МойСписок\",\n  \"password\": \"secret\"\n}"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/api/accounts/join",
+							"raw": "{{baseUrl}}/api/lists/join",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"api",
-								"accounts",
+								"lists",
 								"join"
 							]
 						},
-						"description": "Вступление в существующий аккаунт по имени и паролю.\n\nЕсли пользователь уже является участником — возвращается его текущая роль без повторного добавления.\n\n**Ошибки:** `400` (аккаунт не найден, неверный пароль)"
+						"description": "Вступление в существующий список по имени и паролю.\n\nЕсли пользователь уже является участником — возвращается его текущая роль без повторного добавления.\n\n**Ошибки:** `400` (список не найден, неверный пароль)"
 					},
 					"response": []
 				},
 				{
-					"name": "Get My Accounts",
+					"name": "Get My Lists",
 					"event": [
 						{
 							"listen": "test",
@@ -329,7 +329,7 @@
 									"    pm.expect(jsonData).to.be.an('array');",
 									"});",
 									"",
-									"pm.test(\"Each account has id, name and role\", function () {",
+									"pm.test(\"Each list has id, name and role\", function () {",
 									"    var jsonData = pm.response.json();",
 									"    if (jsonData.length > 0) {",
 									"        pm.expect(jsonData[0].id).to.exist;",
@@ -356,21 +356,21 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{baseUrl}}/api/accounts",
+							"raw": "{{baseUrl}}/api/lists",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"api",
-								"accounts"
+								"lists"
 							]
 						},
-						"description": "Получение списка аккаунтов текущего пользователя (определяется по JWT токену)."
+						"description": "Получение списков текущего пользователя (определяется по JWT токену)."
 					},
 					"response": []
 				},
 				{
-					"name": "Get Account Members",
+					"name": "Get List Members",
 					"event": [
 						{
 							"listen": "test",
@@ -412,23 +412,23 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{baseUrl}}/api/accounts/{{accountId}}/members",
+							"raw": "{{baseUrl}}/api/lists/{{listId}}/members",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"api",
-								"accounts",
-								"{{accountId}}",
+								"lists",
+								"{{listId}}",
 								"members"
 							]
 						},
-						"description": "Получение списка участников аккаунта.\n\n**Доступ:** только для участников аккаунта.\n\n**Ошибки:** `400` (не являетесь участником)"
+						"description": "Получение списка участников списка.\n\n**Доступ:** только для участников списка.\n\n**Ошибки:** `400` (не являетесь участником)"
 					},
 					"response": []
 				},
 				{
-					"name": "Get Account Todos",
+					"name": "Get List Todos",
 					"event": [
 						{
 							"listen": "test",
@@ -461,23 +461,23 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{baseUrl}}/api/accounts/{{accountId}}/todos",
+							"raw": "{{baseUrl}}/api/lists/{{listId}}/todos",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"api",
-								"accounts",
-								"{{accountId}}",
+								"lists",
+								"{{listId}}",
 								"todos"
 							]
 						},
-						"description": "Получение задач аккаунта.\n\nВозвращает публичные задачи + приватные задачи текущего пользователя в этом аккаунте.\n\n**Доступ:** только для участников аккаунта.\n\n**Ошибки:** `400` (не являетесь участником)"
+						"description": "Получение задач списка.\n\nВозвращает публичные задачи + приватные задачи текущего пользователя в этом списке.\n\n**Доступ:** только для участников списка.\n\n**Ошибки:** `400` (не являетесь участником)"
 					},
 					"response": []
 				},
 				{
-					"name": "Leave Account",
+					"name": "Leave List",
 					"event": [
 						{
 							"listen": "test",
@@ -505,23 +505,23 @@
 						"method": "DELETE",
 						"header": [],
 						"url": {
-							"raw": "{{baseUrl}}/api/accounts/{{accountId}}/leave",
+							"raw": "{{baseUrl}}/api/lists/{{listId}}/leave",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"api",
-								"accounts",
-								"{{accountId}}",
+								"lists",
+								"{{listId}}",
 								"leave"
 							]
 						},
-						"description": "Выход из аккаунта.\n\n⚠️ **Внимание:** При выходе автоматически удаляются все приватные задачи пользователя в данном аккаунте.\n\n**Ошибки:** `400` (не являетесь участником)"
+						"description": "Выход из списка.\n\n⚠️ **Внимание:** При выходе автоматически удаляются все приватные задачи пользователя в данном списке.\n\n**Ошибки:** `400` (не являетесь участником)"
 					},
 					"response": []
 				}
 			],
-			"description": "Операции с аккаунтами (требуют JWT токен). Аккаунт — это общее пространство для совместного ведения задач.",
+			"description": "Операции со списками задач (требуют JWT токен). Список — это общее пространство для совместного ведения задач.",
 			"auth": {
 				"type": "bearer",
 				"bearer": [
@@ -552,7 +552,7 @@
 									"    pm.expect(jsonData.id).to.exist;",
 									"    pm.expect(jsonData.name).to.exist;",
 									"    pm.expect(jsonData.done).to.eql(false);",
-									"    pm.expect(jsonData.account_id).to.exist;",
+									"    pm.expect(jsonData.list_id).to.exist;",
 									"    ",
 									"    // Сохранение todoId для дальнейших запросов",
 									"    pm.environment.set(\"todoId\", jsonData.id);",
@@ -582,7 +582,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"Купить молоко\",\n  \"user_id\": {{userId}},\n  \"account_id\": {{accountId}},\n  \"is_private\": false\n}"
+							"raw": "{\n  \"name\": \"Купить молоко\",\n  \"user_id\": {{userId}},\n  \"list_id\": {{listId}},\n  \"is_private\": false\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/todos/create",
@@ -595,7 +595,7 @@
 								"create"
 							]
 						},
-						"description": "Создание новой задачи.\n\n**Обязательные поля:** `name`, `user_id`, `account_id`\n\n**Требует JWT токен** в заголовке Authorization."
+						"description": "Создание новой задачи.\n\n**Обязательные поля:** `name`, `user_id`, `list_id`\n\n**Требует JWT токен** в заголовке Authorization."
 					},
 					"response": []
 				},
@@ -640,7 +640,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"Личная задача\",\n  \"user_id\": {{userId}},\n  \"account_id\": {{accountId}},\n  \"is_private\": true\n}"
+							"raw": "{\n  \"name\": \"Личная задача\",\n  \"user_id\": {{userId}},\n  \"list_id\": {{listId}},\n  \"is_private\": true\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/todos/create",
@@ -653,7 +653,7 @@
 								"create"
 							]
 						},
-						"description": "Создание приватной задачи.\n\nПриватная задача видна только создателю — другие участники аккаунта её не видят."
+						"description": "Создание приватной задачи.\n\nПриватная задача видна только создателю — другие участники списка её не видят."
 					},
 					"response": []
 				},
@@ -720,7 +720,7 @@
 									"    var jsonData = pm.response.json();",
 									"    pm.expect(jsonData.id).to.exist;",
 									"    pm.expect(jsonData.name).to.exist;",
-									"    pm.expect(jsonData.account_id).to.exist;",
+									"    pm.expect(jsonData.list_id).to.exist;",
 									"});"
 								],
 								"type": "text/javascript"
@@ -845,7 +845,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"Купить молоко (обновлено)\",\n  \"done\": true,\n  \"user_id\": {{userId}},\n  \"account_id\": {{accountId}}\n}"
+							"raw": "{\n  \"name\": \"Купить молоко (обновлено)\",\n  \"done\": true,\n  \"user_id\": {{userId}},\n  \"list_id\": {{listId}}\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/todos/{{todoId}}",
@@ -1535,7 +1535,7 @@
 					"response": []
 				},
 				{
-					"name": "Wrong Account Password - Join",
+					"name": "Wrong List Password - Join",
 					"event": [
 						{
 							"listen": "test",
@@ -1569,20 +1569,20 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"МойАккаунт\",\n  \"password\": \"wrongpassword\"\n}"
+							"raw": "{\n  \"name\": \"МойСписок\",\n  \"password\": \"wrongpassword\"\n}"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/api/accounts/join",
+							"raw": "{{baseUrl}}/api/lists/join",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"api",
-								"accounts",
+								"lists",
 								"join"
 							]
 						},
-						"description": "Попытка вступить в аккаунт с неверным паролем.\n\n**Ожидается:** 400 Bad Request"
+						"description": "Попытка вступить в список с неверным паролем.\n\n**Ожидается:** 400 Bad Request"
 					},
 					"response": []
 				},
@@ -1690,7 +1690,7 @@
 			"type": "string"
 		},
 		{
-			"key": "accountId",
+			"key": "listId",
 			"value": "",
 			"type": "string"
 		}

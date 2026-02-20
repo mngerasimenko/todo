@@ -32,6 +32,7 @@ public class TodoForm extends FormLayout {
     // Поля
     TextField title = new TextField("Название задачи");
     Checkbox doneCheckbox = new Checkbox("Выполнено");
+    Checkbox privateCheckbox = new Checkbox("Приватная задача");
     Span dateLabel = new Span();
 
     // Кнопки
@@ -51,6 +52,11 @@ public class TodoForm extends FormLayout {
         doneCheckbox.getStyle()
                 .set("padding-top", "var(--lumo-space-s)");
 
+        privateCheckbox.getStyle()
+                .set("padding-top", "var(--lumo-space-xs)");
+        privateCheckbox.getElement().setAttribute("title",
+                "Приватные задачи видны только вам");
+
         dateLabel.getStyle()
                 .set("color", "var(--lumo-secondary-text-color)")
                 .set("font-size", "var(--lumo-font-size-s)")
@@ -60,7 +66,7 @@ public class TodoForm extends FormLayout {
                 .set("margin", "0 0 var(--lumo-space-s) 0")
                 .set("color", "var(--lumo-primary-text-color)");
 
-        add(formTitle, title, doneCheckbox, dateLabel, createButtonsLayout());
+        add(formTitle, title, doneCheckbox, privateCheckbox, dateLabel, createButtonsLayout());
     }
 
     private HorizontalLayout createButtonsLayout() {
@@ -85,6 +91,7 @@ public class TodoForm extends FormLayout {
     private void validateAndSave() {
         todoDto.setName(title.getValue());
         todoDto.setDone(doneCheckbox.getValue());
+        todoDto.setIsPrivate(privateCheckbox.getValue());
         fireEvent(new SaveEvent(this, todoDto));
     }
 
@@ -109,20 +116,28 @@ public class TodoForm extends FormLayout {
                 dateLabel.setVisible(false);
             }
 
+            // Приватность
+            privateCheckbox.setValue(todoDto.isPrivate());
+
             // Контекстный заголовок и видимость элементов
             if (todoDto.getId() == null) {
                 formTitle.setText("Новая задача");
                 delete.setVisible(false);
                 doneCheckbox.setVisible(false);
                 dateLabel.setVisible(false);
+                privateCheckbox.setVisible(true);
+                privateCheckbox.setReadOnly(false);
             } else {
                 formTitle.setText("Редактирование задачи");
                 delete.setVisible(true);
                 doneCheckbox.setVisible(true);
+                privateCheckbox.setVisible(true);
+                privateCheckbox.setReadOnly(true);
             }
         } else {
             this.title.clear();
             doneCheckbox.setValue(false);
+            privateCheckbox.setValue(false);
             dateLabel.setText("");
         }
     }

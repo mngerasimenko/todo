@@ -31,7 +31,7 @@ public class TodoMapper {
                 .completorUserId(todo.getCompletorUser() != null ? todo.getCompletorUser().getId() : null)
                 .completorUserName(todo.getCompletorUser() != null ? todo.getCompletorUser().getName() : null)
                 .completorColor(todo.getCompletorUser() != null ? todo.getCompletorUser().getCompletedTaskColor() : null)
-                .accountId(todo.getAccount() != null ? todo.getAccount().getId() : null)
+                .listId(todo.getTaskList() != null ? todo.getTaskList().getId() : null)
                 .build();
     }
 
@@ -76,7 +76,7 @@ public class TodoMapper {
                 .name(request.getName())
                 .done(request.getDone())
                 .isPrivate(request.isPrivate())
-                .accountId(request.getAccountId())
+                .listId(request.getListId())
                 .build();
     }
 
@@ -96,7 +96,7 @@ public class TodoMapper {
                 .userName(todoDto.getUserName())
                 .completorUserId(todoDto.getCompletorUserId())
                 .completorUserName(todoDto.getCompletorUserName())
-                .accountId(todoDto.getAccountId())
+                .listId(todoDto.getListId())
                 .creatorColor(todoDto.getCreatorColor())
                 .completorColor(todoDto.getCompletorColor())
                 .build();

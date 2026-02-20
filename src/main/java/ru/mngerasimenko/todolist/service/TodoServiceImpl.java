@@ -8,10 +8,10 @@ import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.exception.TodoNotFoundException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
-import ru.mngerasimenko.todolist.model.Account;
+import ru.mngerasimenko.todolist.model.TaskList;
 import ru.mngerasimenko.todolist.model.Todo;
 import ru.mngerasimenko.todolist.model.User;
-import ru.mngerasimenko.todolist.repository.AccountRepository;
+import ru.mngerasimenko.todolist.repository.TaskListRepository;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 
@@ -26,7 +26,7 @@ public class TodoServiceImpl implements TodoService {
 
     private final TodoRepository todoRepository;
     private final UserRepository userRepository;
-    private final AccountRepository accountRepository;
+    private final TaskListRepository taskListRepository;
     private final TodoMapper todoMapper;
 
     @Override
@@ -36,20 +36,20 @@ public class TodoServiceImpl implements TodoService {
                 .orElseThrow(() -> new UserNotFoundException(
                         "User not found with id: " + todoDto.getUserId()));
 
-        Account account = accountRepository.findById(todoDto.getAccountId())
+        TaskList taskList = taskListRepository.findById(todoDto.getListId())
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Account not found with id: " + todoDto.getAccountId()));
+                        "List not found with id: " + todoDto.getListId()));
 
         todoDto.setDone(false);
         todoDto.setUserId(user.getId());
         todoDto.setCreatedAt(LocalDateTime.now());
         Todo todo = todoMapper.toEntity(todoDto);
         todo.setUser(user);
-        todo.setAccount(account);
+        todo.setTaskList(taskList);
 
         Todo savedTodo = todoRepository.save(todo);
-        log.info("Создана задача: id={}, name='{}', userId={}, accountId={}, private={}",
-                savedTodo.getId(), savedTodo.getName(), user.getId(), account.getId(), savedTodo.getIsPrivate());
+        log.info("Создана задача: id={}, name='{}', userId={}, listId={}, private={}",
+                savedTodo.getId(), savedTodo.getName(), user.getId(), taskList.getId(), savedTodo.getIsPrivate());
         return todoMapper.toDto(savedTodo);
     }
 

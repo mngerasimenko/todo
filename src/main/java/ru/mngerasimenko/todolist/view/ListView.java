@@ -1,5 +1,6 @@
 package ru.mngerasimenko.todolist.view;
 
+import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -11,6 +12,7 @@ import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
+import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
@@ -22,13 +24,13 @@ import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.dto.UserDto;
-import ru.mngerasimenko.todolist.dto.account.AccountResponse;
 import ru.mngerasimenko.todolist.security.VaadinSecurityService;
-import ru.mngerasimenko.todolist.service.AccountService;
+import ru.mngerasimenko.todolist.service.TaskListService;
 import ru.mngerasimenko.todolist.service.TodoService;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @PermitAll
 @Route(value = "", layout = MainView.class)
@@ -36,32 +38,32 @@ import java.util.List;
 public class ListView extends VerticalLayout {
     private final VaadinSecurityService vaadinSecurityService;
     private final TodoService todoService;
-    private final AccountService accountService;
+    private final TaskListService taskListService;
     private final Grid<TodoDto> grid = new Grid<>(TodoDto.class);
     private final TextField filterText = new TextField();
     private final Span todoCountLabel = new Span();
     private TodoForm form;
     private UserDto authenticatedUser;
     private Div emptyState;
-    /** ID первого аккаунта пользователя — используется при создании задач через UI. */
-    private Long defaultAccountId;
+
+    /** ID текущего выбранного списка */
+    private Long currentListId;
 
     private static final DateTimeFormatter DATE_FORMATTER =
             DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
     public ListView(TodoService todoService,
                     VaadinSecurityService vaadinSecurityService,
-                    AccountService accountService) {
+                    TaskListService taskListService) {
         this.todoService = todoService;
         this.vaadinSecurityService = vaadinSecurityService;
-        this.accountService = accountService;
+        this.taskListService = taskListService;
 
         init();
     }
 
     private void init() {
         authenticatedUser = vaadinSecurityService.getAuthenticatedUser();
-        resolveDefaultAccount();
         addClassName("list-view");
         setSizeFull();
         configureGrid();
@@ -69,18 +71,41 @@ public class ListView extends VerticalLayout {
         configureEmptyState();
 
         add(getToolBar(), getContent());
-        updateList();
         closeEditor();
     }
 
+    @Override
+    protected void onAttach(AttachEvent attachEvent) {
+        super.onAttach(attachEvent);
+        // Находим MainView в иерархии компонентов и подписываемся на смену списка
+        findMainView().ifPresent(mainView -> {
+            currentListId = mainView.getSelectedListId();
+            mainView.addListChangeListener(this::onListChanged);
+            updateList();
+        });
+    }
+
     /**
-     * Берём первый аккаунт пользователя — он будет использоваться при создании задач через UI.
+     * Ищет MainView в родительской иерархии компонентов.
      */
-    private void resolveDefaultAccount() {
-        List<AccountResponse> accounts = accountService.getAccountsByUserId(authenticatedUser.getId());
-        if (!accounts.isEmpty()) {
-            defaultAccountId = accounts.get(0).getId();
+    private java.util.Optional<MainView> findMainView() {
+        Component current = this;
+        while (current != null) {
+            if (current instanceof MainView mainView) {
+                return java.util.Optional.of(mainView);
+            }
+            current = current.getParent().orElse(null);
         }
+        return java.util.Optional.empty();
+    }
+
+    /**
+     * Вызывается при переключении списка в MainView.
+     */
+    private void onListChanged(Long newListId) {
+        currentListId = newListId;
+        updateList();
+        closeEditor();
     }
 
     private void configureEmptyState() {
@@ -118,8 +143,25 @@ public class ListView extends VerticalLayout {
     }
 
     private void updateList() {
-        List<TodoDto> items = todoService.getFilteredTodosByUserId(
-                authenticatedUser.getId(), filterText.getValue());
+        List<TodoDto> items;
+
+        if (currentListId != null) {
+            // Загружаем задачи текущего списка (с учётом приватности)
+            items = taskListService.getTodosByList(currentListId, authenticatedUser.getId());
+        } else {
+            items = List.of();
+        }
+
+        // Клиентская фильтрация по тексту
+        String filter = filterText.getValue();
+        if (filter != null && !filter.isBlank()) {
+            String lowerFilter = filter.toLowerCase();
+            items = items.stream()
+                    .filter(t -> t.getName() != null
+                            && t.getName().toLowerCase().contains(lowerFilter))
+                    .collect(Collectors.toList());
+        }
+
         grid.setItems(items);
 
         // Счётчик задач
@@ -161,8 +203,26 @@ public class ListView extends VerticalLayout {
             return icon;
         })).setHeader("").setWidth("60px").setFlexGrow(0);
 
-        // Колонка: Название задачи
+        // Колонка: Цвет создателя
         grid.addColumn(new ComponentRenderer<>(todo -> {
+            Div colorDot = new Div();
+            colorDot.addClassName("color-indicator");
+            String color = todo.getCreatorColor();
+            if (color != null && !color.isBlank()) {
+                colorDot.getStyle().set("background-color", color);
+            } else {
+                colorDot.getStyle().set("background-color", "var(--lumo-contrast-20pct)");
+            }
+            return colorDot;
+        })).setHeader("").setWidth("40px").setFlexGrow(0);
+
+        // Колонка: Название задачи + иконка замка для приватных
+        grid.addColumn(new ComponentRenderer<>(todo -> {
+            HorizontalLayout nameLayout = new HorizontalLayout();
+            nameLayout.setAlignItems(FlexComponent.Alignment.CENTER);
+            nameLayout.setSpacing(true);
+            nameLayout.getStyle().set("gap", "var(--lumo-space-xs)");
+
             Span nameSpan = new Span(todo.getName());
             if (todo.isDone()) {
                 nameSpan.getStyle()
@@ -171,8 +231,54 @@ public class ListView extends VerticalLayout {
             } else {
                 nameSpan.getStyle().set("font-weight", "500");
             }
-            return nameSpan;
+            nameLayout.add(nameSpan);
+
+            // Иконка замка для приватных задач
+            if (todo.isPrivate()) {
+                Icon lockIcon = VaadinIcon.LOCK.create();
+                lockIcon.setSize("14px");
+                lockIcon.addClassName("private-icon");
+                nameLayout.add(lockIcon);
+            }
+
+            return nameLayout;
         })).setHeader("Задача").setFlexGrow(1);
+
+        // Колонка: Автор
+        grid.addColumn(new ComponentRenderer<>(todo -> {
+            Span authorSpan = new Span(
+                    todo.getUserName() != null ? todo.getUserName() : "");
+            authorSpan.getStyle()
+                    .set("color", "var(--lumo-secondary-text-color)")
+                    .set("font-size", "var(--lumo-font-size-s)");
+            return authorSpan;
+        })).setHeader("Автор").setWidth("120px").setFlexGrow(0);
+
+        // Колонка: Завершил
+        grid.addColumn(new ComponentRenderer<>(todo -> {
+            if (todo.isDone() && todo.getCompletorUserName() != null) {
+                HorizontalLayout completorLayout = new HorizontalLayout();
+                completorLayout.setAlignItems(FlexComponent.Alignment.CENTER);
+                completorLayout.setSpacing(true);
+                completorLayout.getStyle().set("gap", "var(--lumo-space-xs)");
+
+                // Цветной индикатор завершившего
+                if (todo.getCompletorColor() != null && !todo.getCompletorColor().isBlank()) {
+                    Div dot = new Div();
+                    dot.addClassName("color-indicator");
+                    dot.getStyle().set("background-color", todo.getCompletorColor());
+                    completorLayout.add(dot);
+                }
+
+                Span name = new Span(todo.getCompletorUserName());
+                name.getStyle()
+                        .set("color", "var(--lumo-secondary-text-color)")
+                        .set("font-size", "var(--lumo-font-size-s)");
+                completorLayout.add(name);
+                return completorLayout;
+            }
+            return new Span("");
+        })).setHeader("Завершил").setWidth("140px").setFlexGrow(0);
 
         // Колонка: Дата
         grid.addColumn(new ComponentRenderer<>(todo -> {
@@ -230,16 +336,14 @@ public class ListView extends VerticalLayout {
     }
 
     private void addTodo() {
-        if (defaultAccountId == null) {
-            com.vaadin.flow.component.notification.Notification
-                    .show("Сначала вступите в аккаунт через мобильное приложение",
-                            4000,
-                            com.vaadin.flow.component.notification.Notification.Position.MIDDLE);
+        if (currentListId == null) {
+            Notification.show("Сначала выберите или создайте список задач",
+                    4000, Notification.Position.MIDDLE);
             return;
         }
         grid.asSingleSelect().clear();
         TodoDto newTodo = new TodoDto(authenticatedUser.getId());
-        newTodo.setAccountId(defaultAccountId);
+        newTodo.setListId(currentListId);
         editTodo(newTodo);
     }
 
@@ -253,7 +357,7 @@ public class ListView extends VerticalLayout {
     }
 
     private void configureForm() {
-        form = new TodoForm(todoService.getTodosByUserId(authenticatedUser.getId()));
+        form = new TodoForm(List.of());
         form.setWidth("25em");
         form.addSaveListener(this::saveTodo);
         form.addDeleteListener(this::deleteTodo);

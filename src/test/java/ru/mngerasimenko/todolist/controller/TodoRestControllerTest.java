@@ -56,7 +56,7 @@ class TodoRestControllerTest {
         testTodoDto.setName("Test Todo");
         testTodoDto.setDone(false);
         testTodoDto.setUserId(1L);
-        testTodoDto.setAccountId(1L);
+        testTodoDto.setListId(1L);
         testTodoDto.setCreatedAt(LocalDateTime.now());
 
         testTodoResponse = new TodoResponse();
@@ -64,13 +64,13 @@ class TodoRestControllerTest {
         testTodoResponse.setName("Test Todo");
         testTodoResponse.setDone(false);
         testTodoResponse.setUserId(1L);
-        testTodoResponse.setAccountId(1L);
+        testTodoResponse.setListId(1L);
         testTodoResponse.setCreatedAt(testTodoDto.getCreatedAt());
 
         testTodoRequest = new TodoRequest();
         testTodoRequest.setName("New Todo");
         testTodoRequest.setUserId(1L);
-        testTodoRequest.setAccountId(1L);
+        testTodoRequest.setListId(1L);
     }
 
     @Test
@@ -81,7 +81,7 @@ class TodoRestControllerTest {
         createdDto.setName("New Todo");
         createdDto.setDone(false);
         createdDto.setUserId(1L);
-        createdDto.setAccountId(1L);
+        createdDto.setListId(1L);
         createdDto.setCreatedAt(LocalDateTime.now());
 
         TodoResponse createdResponse = new TodoResponse();
@@ -89,7 +89,7 @@ class TodoRestControllerTest {
         createdResponse.setName("New Todo");
         createdResponse.setDone(false);
         createdResponse.setUserId(1L);
-        createdResponse.setAccountId(1L);
+        createdResponse.setListId(1L);
         createdResponse.setCreatedAt(createdDto.getCreatedAt());
 
         when(todoMapper.toDto(any(TodoRequest.class))).thenReturn(createdDto);
@@ -144,7 +144,7 @@ class TodoRestControllerTest {
         updatedDto.setName("Updated Todo");
         updatedDto.setDone(true);
         updatedDto.setUserId(1L);
-        updatedDto.setAccountId(1L);
+        updatedDto.setListId(1L);
         updatedDto.setCreatedAt(LocalDateTime.now());
 
         TodoResponse updatedResponse = new TodoResponse();
@@ -152,7 +152,7 @@ class TodoRestControllerTest {
         updatedResponse.setName("Updated Todo");
         updatedResponse.setDone(true);
         updatedResponse.setUserId(1L);
-        updatedResponse.setAccountId(1L);
+        updatedResponse.setListId(1L);
         updatedResponse.setCreatedAt(updatedDto.getCreatedAt());
 
         when(todoMapper.toDto(any(TodoRequest.class))).thenReturn(updatedDto);

@@ -114,6 +114,26 @@ jobs:
               sleep 2
             done
 
+            # === Миграция БД (Stage 4): переименование account → task_list ===
+            docker exec postgres-db psql -U postgres -d todo -c "
+              DO \$\$ BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='account') THEN
+                  ALTER TABLE account RENAME TO task_list;
+                END IF;
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='account_user') THEN
+                  ALTER TABLE account_user RENAME TO task_list_user;
+                END IF;
+                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='task_list_user' AND column_name='account_id') THEN
+                  ALTER TABLE task_list_user RENAME COLUMN account_id TO list_id;
+                END IF;
+                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='todo' AND column_name='account_id') THEN
+                  ALTER TABLE todo RENAME COLUMN account_id TO list_id;
+                END IF;
+              END \$\$;
+            "
+            echo "Миграция Stage 4 (account → task_list) завершена"
+            # === Конец миграции Stage 4 ===
+
             # === Миграция БД (Stage 3): аккаунты, BCrypt, цвета ===
             docker exec postgres-db psql -U postgres -d todo -c "
               DO \$\$ BEGIN
@@ -126,26 +146,26 @@ jobs:
                 ADD COLUMN IF NOT EXISTS created_task_color  VARCHAR(7) NOT NULL DEFAULT '#4285F4',
                 ADD COLUMN IF NOT EXISTS completed_task_color VARCHAR(7) NOT NULL DEFAULT '#34A853';
 
-              CREATE TABLE IF NOT EXISTS account (
+              CREATE TABLE IF NOT EXISTS task_list (
                 id            BIGSERIAL PRIMARY KEY,
                 name          VARCHAR(128) NOT NULL UNIQUE,
                 password_hash VARCHAR(128) NOT NULL,
                 created_at    TIMESTAMP NOT NULL DEFAULT NOW()
               );
 
-              CREATE TABLE IF NOT EXISTS account_user (
-                account_id BIGINT NOT NULL REFERENCES account(id),
+              CREATE TABLE IF NOT EXISTS task_list_user (
+                list_id    BIGINT NOT NULL REFERENCES task_list(id),
                 user_id    BIGINT NOT NULL REFERENCES todo_users(id),
                 role       VARCHAR(16) NOT NULL DEFAULT 'USER',
                 joined_at  TIMESTAMP NOT NULL DEFAULT NOW(),
-                PRIMARY KEY (account_id, user_id)
+                PRIMARY KEY (list_id, user_id)
               );
 
               ALTER TABLE todo
                 ADD COLUMN IF NOT EXISTS completed_at      TIMESTAMP,
                 ADD COLUMN IF NOT EXISTS completor_user_id BIGINT REFERENCES todo_users(id),
                 ADD COLUMN IF NOT EXISTS is_private        BOOLEAN NOT NULL DEFAULT FALSE,
-                ADD COLUMN IF NOT EXISTS account_id        BIGINT REFERENCES account(id);
+                ADD COLUMN IF NOT EXISTS list_id           BIGINT REFERENCES task_list(id);
 
               DELETE FROM todo;
               DELETE FROM todo_users;

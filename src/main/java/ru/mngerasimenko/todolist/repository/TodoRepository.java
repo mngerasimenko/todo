@@ -32,23 +32,23 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
     void deleteByUserId(Long userId);
 
     /**
-     * Возвращает все задачи аккаунта:
+     * Возвращает все задачи списка:
      * - публичные задачи (isPrivate = false)
      * - приватные задачи текущего пользователя (isPrivate = true AND user_id = userId)
      */
-    @Query("SELECT t FROM Todo t WHERE t.account.id = :accountId AND (t.isPrivate = false OR (t.isPrivate = true AND t.user.id = :userId))")
-    List<Todo> findByAccountIdVisibleToUser(@Param("accountId") Long accountId, @Param("userId") Long userId);
+    @Query("SELECT t FROM Todo t WHERE t.taskList.id = :listId AND (t.isPrivate = false OR (t.isPrivate = true AND t.user.id = :userId))")
+    List<Todo> findByListIdVisibleToUser(@Param("listId") Long listId, @Param("userId") Long userId);
 
     /**
-     * Возвращает только публичные задачи аккаунта.
+     * Возвращает только публичные задачи списка.
      */
-    List<Todo> findByAccountIdAndIsPrivateFalse(Long accountId);
+    List<Todo> findByListIdAndIsPrivateFalse(Long listId);
 
     /**
-     * Удалить приватные задачи пользователя в конкретном аккаунте.
-     * Используется при выходе пользователя из аккаунта.
+     * Удалить приватные задачи пользователя в конкретном списке.
+     * Используется при выходе пользователя из списка.
      */
     @Modifying
-    @Query("DELETE FROM Todo t WHERE t.account.id = :accountId AND t.user.id = :userId AND t.isPrivate = true")
-    void deletePrivateTodosByAccountIdAndUserId(@Param("accountId") Long accountId, @Param("userId") Long userId);
+    @Query("DELETE FROM Todo t WHERE t.taskList.id = :listId AND t.user.id = :userId AND t.isPrivate = true")
+    void deletePrivateTodosByListIdAndUserId(@Param("listId") Long listId, @Param("userId") Long userId);
 }

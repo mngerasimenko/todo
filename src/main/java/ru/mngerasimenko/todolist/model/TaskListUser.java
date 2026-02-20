@@ -6,21 +6,21 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 /**
- * Связь пользователя с аккаунтом (many-to-many).
- * Хранит роль пользователя внутри конкретного аккаунта.
+ * Связь пользователя со списком задач (many-to-many).
+ * Хранит роль пользователя внутри конкретного списка.
  */
 @Entity
-@Table(name = "account_user")
+@Table(name = "task_list_user")
 @JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"})
-public class AccountUser {
+public class TaskListUser {
 
     @EmbeddedId
-    private AccountUserId id;
+    private TaskListUserId id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @MapsId("accountId")
-    @JoinColumn(name = "account_id")
-    private Account account;
+    @MapsId("listId")
+    @JoinColumn(name = "list_id")
+    private TaskList taskList;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @MapsId("userId")
@@ -29,17 +29,17 @@ public class AccountUser {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "role", nullable = false, length = 16)
-    private AccountRole role;
+    private TaskListRole role;
 
     @Column(name = "joined_at", nullable = false)
     private LocalDateTime joinedAt;
 
-    public AccountUser() {
+    public TaskListUser() {
     }
 
-    public AccountUser(Account account, User user, AccountRole role) {
-        this.id = new AccountUserId(account.getId(), user.getId());
-        this.account = account;
+    public TaskListUser(TaskList taskList, User user, TaskListRole role) {
+        this.id = new TaskListUserId(taskList.getId(), user.getId());
+        this.taskList = taskList;
         this.user = user;
         this.role = role;
         this.joinedAt = LocalDateTime.now();
@@ -52,20 +52,20 @@ public class AccountUser {
         }
     }
 
-    public AccountUserId getId() {
+    public TaskListUserId getId() {
         return id;
     }
 
-    public void setId(AccountUserId id) {
+    public void setId(TaskListUserId id) {
         this.id = id;
     }
 
-    public Account getAccount() {
-        return account;
+    public TaskList getTaskList() {
+        return taskList;
     }
 
-    public void setAccount(Account account) {
-        this.account = account;
+    public void setTaskList(TaskList taskList) {
+        this.taskList = taskList;
     }
 
     public User getUser() {
@@ -76,11 +76,11 @@ public class AccountUser {
         this.user = user;
     }
 
-    public AccountRole getRole() {
+    public TaskListRole getRole() {
         return role;
     }
 
-    public void setRole(AccountRole role) {
+    public void setRole(TaskListRole role) {
         this.role = role;
     }
 

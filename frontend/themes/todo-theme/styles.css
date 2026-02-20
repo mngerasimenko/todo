@@ -168,6 +168,51 @@ html {
   gap: var(--lumo-space-l);
 }
 
+/* === Селектор списка в хедере === */
+.list-selector {
+  --vaadin-input-field-border-radius: var(--lumo-border-radius-m);
+}
+
+/* === Диалог управления списками === */
+.list-management-dialog {
+  border-radius: var(--lumo-border-radius-l);
+}
+
+/* Карточка списка */
+.list-card {
+  padding: var(--lumo-space-s) var(--lumo-space-m);
+  border: 1px solid var(--lumo-contrast-10pct);
+  border-radius: var(--lumo-border-radius-m);
+  background: #ffffff;
+  transition: background-color 0.15s ease;
+}
+
+.list-card:hover {
+  background-color: var(--lumo-contrast-5pct);
+}
+
+/* Карточка участника */
+.member-card {
+  padding: var(--lumo-space-s) var(--lumo-space-m);
+  border: 1px solid var(--lumo-contrast-10pct);
+  border-radius: var(--lumo-border-radius-m);
+  background: #ffffff;
+}
+
+/* === Цветной индикатор пользователя === */
+.color-indicator {
+  width: 12px;
+  height: 12px;
+  min-width: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* === Иконка замка (приватная задача) === */
+.private-icon {
+  color: var(--lumo-tertiary-text-color);
+}
+
 /* === Адаптивность === */
 @media (max-width: 768px) {
   .list-view {
@@ -185,5 +230,10 @@ html {
 
   .editing .todo-form {
     width: 100% !important;
+  }
+
+  .list-selector {
+    min-width: 140px !important;
+    max-width: 180px !important;
   }
 }

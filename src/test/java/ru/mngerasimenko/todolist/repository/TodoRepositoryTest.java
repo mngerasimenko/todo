@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.test.context.ActiveProfiles;
-import ru.mngerasimenko.todolist.model.Account;
+import ru.mngerasimenko.todolist.model.TaskList;
 import ru.mngerasimenko.todolist.model.Todo;
 import ru.mngerasimenko.todolist.model.User;
 
@@ -27,17 +27,17 @@ class TodoRepositoryTest {
     private UserRepository userRepository;
 
     @Autowired
-    private AccountRepository accountRepository;
+    private TaskListRepository taskListRepository;
 
     private User testUser;
-    private Account testAccount;
+    private TaskList testTaskList;
     private Todo todo1;
     private Todo todo2;
 
     @BeforeEach
     void setUp() {
         todoRepository.deleteAll();
-        accountRepository.deleteAll();
+        taskListRepository.deleteAll();
         userRepository.deleteAll();
 
         testUser = new User();
@@ -47,20 +47,20 @@ class TodoRepositoryTest {
         testUser.setPassword("password123");
         userRepository.save(testUser);
 
-        testAccount = new Account("TestAccount", "$2a$10$hashedPass");
-        accountRepository.save(testAccount);
+        testTaskList = new TaskList("TestList", "$2a$10$hashedPass");
+        taskListRepository.save(testTaskList);
 
         todo1 = new Todo();
         todo1.setName("First Task");
         todo1.setUser(testUser);
-        todo1.setAccount(testAccount);
+        todo1.setTaskList(testTaskList);
         todo1.setCreatedAt(LocalDateTime.now().minusDays(1));
         todo1.setDone(false);
 
         todo2 = new Todo();
         todo2.setName("Second Task");
         todo2.setUser(testUser);
-        todo2.setAccount(testAccount);
+        todo2.setTaskList(testTaskList);
         todo2.setCreatedAt(LocalDateTime.now());
         todo2.setDone(true);
 
@@ -137,7 +137,7 @@ class TodoRepositoryTest {
         Todo todo = new Todo();
         todo.setName(null);
         todo.setUser(testUser);
-        todo.setAccount(testAccount);
+        todo.setTaskList(testTaskList);
         todo.setCreatedAt(LocalDateTime.now());
         todo.setDone(false);
 
@@ -151,7 +151,7 @@ class TodoRepositoryTest {
         Todo todo = new Todo();
         todo.setName("Valid Name");
         todo.setUser(testUser);
-        todo.setAccount(testAccount);
+        todo.setTaskList(testTaskList);
         todo.setCreatedAt(null);
         todo.setDone(false);
 
@@ -165,7 +165,7 @@ class TodoRepositoryTest {
         Todo todo = new Todo();
         todo.setName("Valid Name");
         todo.setUser(null);
-        todo.setAccount(testAccount);
+        todo.setTaskList(testTaskList);
         todo.setCreatedAt(LocalDateTime.now());
         todo.setDone(false);
 
