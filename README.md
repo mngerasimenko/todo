@@ -1,4 +1,4 @@
-# 🛒 Todo List
+# Todo List
 
 ![Java](https://img.shields.io/badge/Java-17-007396?logo=java)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5.6-6DB33F?logo=spring)
@@ -7,194 +7,188 @@
 ![Docker](https://img.shields.io/badge/Docker-24+-2496ED?logo=docker)
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?logo=github-actions)
 
-Простое веб-приложение для управления списком задач и покупок с современным интерфейсом на Vaadin.
-- ✅ **Современный UI/UX** — кастомная тема с адаптивным дизайном
-- ✅ **Автоматический деплой при пуше в `master`** через GitHub Actions
-- ✅ **Автоматическая проверка пулл-реквестов** перед мержем
-- ✅ **Проверка покрытия кода через JaCoCo** перед каждым деплоем
-- ✅ **Защита от мержа сломанного кода** — тесты + проверка покрытия для всех PR
+Веб-приложение для совместного управления списком задач. Система аккаунтов позволяет нескольким пользователям работать в общем пространстве, видеть задачи друг друга и отмечать их выполнение.
 
 ---
 
-## 🌐 Демо
-/
+## Demo
+
 Приложение развернуто и доступно по адресу:
 
-**👉 [Попробовать онлайн](http://185.244.172.45:8090)**  
+**[Попробовать онлайн](http://185.244.172.45:8090)**
 Логин: `testUser` | Пароль: `testUser`
 
+---
 
-## 📌 Описание
+## Возможности
 
-## 📌 Возможности приложения
-- ✅ Добавление, редактирование и удаление задач
-- ✅ Отметка задач как выполненных
-- ✅ Фильтрация и поиск задач
-- ✅ Счетчик выполненных задач
-- ✅ Визуальная индикация статуса (цветовая раскраска)
-- ✅ Хранение данных в PostgreSQL с сохранением между перезапусками
-- ✅ Современный SPA-интерфейс без перезагрузки страницы (Vaadin)
-- ✅ Кастомная тема с адаптивным дизайном
-- ✅ Авторизация пользователей (Spring Security)
-- ✅ JWT аутентификация для REST API
-- ✅ Структурированное логирование (Logback, профили dev/production, ротация файлов)
-- ✅ Автоматический деплой при пуше в `master`
-- ✅ Автоматическая проверка пулл-реквестов
-
-**Статус:** Активная разработка
-**Последнее обновление:** Spring Boot 3.5.6, Vaadin 24.9.10
+- Совместная работа через аккаунты (создание, вступление по паролю, роли ADMIN/USER)
+- Приватные задачи, видимые только создателю
+- Цвета пользователей для визуальной идентификации задач
+- Отметка задач как выполненных с фиксацией даты и исполнителя
+- JWT аутентификация для REST API + session-based для Vaadin UI
+- BCrypt хэширование паролей
+- Фильтрация и поиск задач
+- Кастомная Vaadin тема с адаптивным дизайном
+- Автоматический CI/CD через GitHub Actions
+- 208 тестов с проверкой покрытия (JaCoCo)
 
 ---
 
-## ⚙️ Технологический стек
+## Технологический стек
 
-| Категория      | Технология               | Версия |
-|----------------|--------------------------|--------|
-| **Язык**       | Java                     | 17     |
-| **Backend**    | Spring Boot              | 3.5.6  |
-| **UI**         | Vaadin                   | 24.9.10 |
-| **Frontend**   | Vite + TypeScript        | —      |
-| **База данных**| PostgreSQL               | 17     |
-| **Сборка**     | Maven                    | 3.9    |
-| **Тестирование**| JUnit 5 + Mockito + AssertJ | —    |
-| **Покрытие**   | JaCoCo                   | 0.8.14 |
-| **Логирование**| SLF4j + Logback          | —      |
-| **Контейнеры** | Docker + Docker Compose  | 24+    |
-| **CI/CD**      | GitHub Actions           | —      |
+| Категория       | Технология                        | Версия  |
+|-----------------|-----------------------------------|---------|
+| **Язык**        | Java                              | 17      |
+| **Backend**     | Spring Boot                       | 3.5.6   |
+| **UI**          | Vaadin                            | 24.9.10 |
+| **БД**          | PostgreSQL                        | 17      |
+| **Безопасность**| Spring Security + JWT (jjwt)      | 6.4.6   |
+| **Сборка**      | Maven                             | 3.9     |
+| **Тесты**       | JUnit 5 + Mockito + AssertJ       | -       |
+| **Покрытие**    | JaCoCo                            | 0.8.14  |
+| **Контейнеры**  | Docker + Docker Compose           | 24+     |
+| **CI/CD**       | GitHub Actions                    | -       |
 
 ---
 
-## 🚀 Быстрый запуск
+## REST API
+
+### Аутентификация
+
+| Метод | Эндпоинт | Описание |
+|-------|----------|----------|
+| POST | `/api/auth/register` | Регистрация (возвращает JWT) |
+| POST | `/api/auth/login` | Вход (возвращает JWT) |
+| POST | `/api/auth/refresh` | Обновление access токена |
+
+### Аккаунты
+
+| Метод | Эндпоинт | Описание |
+|-------|----------|----------|
+| POST | `/api/accounts` | Создать аккаунт (роль ADMIN) |
+| POST | `/api/accounts/join` | Вступить в аккаунт по паролю |
+| GET | `/api/accounts` | Мои аккаунты |
+| GET | `/api/accounts/{id}/members` | Участники аккаунта |
+| GET | `/api/accounts/{id}/todos` | Задачи аккаунта (с учётом приватности) |
+| DELETE | `/api/accounts/{id}/leave` | Покинуть аккаунт |
+
+### Задачи
+
+| Метод | Эндпоинт | Описание |
+|-------|----------|----------|
+| POST | `/api/todos/create` | Создать задачу |
+| GET | `/api/todos/all` | Все задачи |
+| GET | `/api/todos/{id}` | Задача по ID |
+| GET | `/api/todos/user/{userId}` | Задачи пользователя |
+| PUT | `/api/todos/{id}` | Обновить задачу |
+| DELETE | `/api/todos/{id}` | Удалить задачу |
+
+### Пользователи
+
+| Метод | Эндпоинт | Описание |
+|-------|----------|----------|
+| POST | `/api/users/create` | Создать пользователя |
+| GET | `/api/users/all` | Все пользователи |
+| GET | `/api/users/{id}` | Пользователь по ID |
+| PUT | `/api/users/{id}` | Обновить пользователя |
+| PUT | `/api/users/{id}/colors` | Обновить цвета задач |
+| DELETE | `/api/users/{id}` | Удалить пользователя |
+
+Все эндпоинты (кроме auth, status, appName) требуют заголовок `Authorization: Bearer <token>`.
+
+Postman-коллекция: `postman/TodoList_API.postman_collection.json`
+
+---
+
+## Быстрый запуск
 
 ### Требования
 - Docker и Docker Compose
-- Или Java 17 + Maven 3.9 (для локального запуска)
+- Или Java 17 + Maven 3.9 + PostgreSQL (для локального запуска)
 
 ### Локально (без Docker)
 
 ```bash
-# Требования: Java 17 + Maven 3.9
 mvn spring-boot:run
-# Запуск тестов
-mvn test
-
-# Просмотр отчёта покрытия
-mvn test jacoco:report && open target/site/jacoco/index.html
 ```
 Приложение будет доступно по адресу: http://localhost:8090
 
-### Запуск через Docker Compose (рекомендуется)
+### Docker Compose
 
 ```bash
-# Сборка и запуск контейнеров
 docker compose up -d --build
-
-# Проверка статуса
 docker compose ps
-
-# Просмотр логов приложения (консоль)
 docker compose logs -f todo-app
-
-# Просмотр логов приложения (файл)
-docker exec todo-app tail -f logs/todo-app.log
-
-# Остановка
 docker compose down
 ```
 
-## ☁️ Автоматический деплой (CI/CD)
+### Тесты
 
-~~ Проект использует пайплайн на основе GitHub Actions:
-- Проект использует единый пайплайн .github/workflows/deploy.yml с двумя этапами:
-- 🔄 Этап 1: Тестирование (test)
-- Запускается для всех пулов в master и при пуше в master:
-- ✅ Запуск тестов с временной БД PostgreSQL
-- ✅ Генерация отчёта покрытия через JaCoCo
-- ✅ Проверка порога покрытия (минимум 70% инструкций, 70% строк)
-- ✅ Загрузка отчёта покрытия как артефакта
-- ❌ Если тесты упали или покрытие ниже порога — пайплайн останавливается
-- 🚀 Этап 2: Деплой (deploy)
-- Запускается только при пуше в master и только после успешного этапа test:
-- ✅ Сборка JAR-файла (без повторного запуска тестов)
-- ✅ Сборка оптимизированного Docker-образа
-- ✅ Отправка в Docker Hub (mngerasimenko/todo-app)
-- ✅ Автоматический деплой на сервер через SSH
-- ✅ Перезапуск контейнеров с БД и приложением
-- 🔒 Защита ветки master
-- В настройках репозитория включена защита:
-- ✅ Требуется пулл-реквест для мержа в master
-- ✅ Требуется успешное прохождение этапа test (все тесты + покрытие)
-- ✅ Защита распространяется даже на администраторов
-- Результат: 
-  - В продакшен попадает только код, прошедший все тесты и проверку покрытия.
-  - Приложение автоматически обновляется на сервере.
-
-## 🔧 Первоначальная настройка сервера (для администраторов)
-
-Для развёртывания на **чистом сервере** (Ubuntu/Debian) выполните один раз:
-
-
-# 1. Склонируйте репозиторий
 ```bash
-git clone https://github.com/mngerasimenko/todo.git
-cd todo
-```
-# 2. Запустите инициализационный скрипт (требуются права root)
-```bash
-chmod +x setup-server.sh
-./setup-server.sh
-```
-Скрипт автоматически:
-- ✅ Устанавливает системные обновления и сертификаты
-- ✅ Устанавливает Docker
-- ✅ Создаст сеть todo-network
-- ✅ Запускает контейнер с PostgreSQL 17
-- ✅ Дождётся готовности БД
-- ⚠️ Важно: Скрипт нужно запускать ТОЛЬКО ОДИН РАЗ при подготовке нового сервера.
-  - Данные БД сохраняются в именованном томе postgres-data
-  - Дальнейшие деплои выполняются автоматически через git push origin master
+# Все тесты
+mvn test
 
-## 📁 Структура проекта
-```
-.
-├── src/
-│   ├── main/
-│   │   ├── java/ru/mngerasimenko/todolist/
-│   │   │   ├── controller/      # Spring MVC контроллеры (REST API)
-│   │   │   ├── service/         # Бизнес-логика (полностью покрыта тестами)
-│   │   │   ├── repository/      # Spring Data JPA репозитории
-│   │   │   ├── model/           # Сущности JPA
-│   │   │   ├── dto/             # Data Transfer Objects
-│   │   │   ├── mapper/          # Мапперы
-│   │   │   ├── security/        # Конфигурация Spring Security
-│   │   │   ├── view/            # Vaadin UI компоненты
-│   │   │   └── TodolistApplication.java
-│   │   └── resources/
-│   │       └── application.properties
-│   └── test/java/ru/mngerasimenko/todolist/
-│       ├── controller/          # Тесты REST API (@WebMvcTest)
-│       ├── service/             # Тесты сервисов (@ExtendWith)
-│       ├── repository/          # Тесты репозиториев (@DataJpaTest)
-│       └── mapper/              # Тесты мапперов
-├── frontend/
-│   └── themes/
-│       └── todo-theme/          # Кастомная Vaadin тема
-│           ├── theme.json       # Конфигурация темы (Lumo)
-│           ├── styles.css       # Глобальные CSS custom properties
-│           └── components/      # Shadow DOM стили компонентов
-├── pom.xml                     # Конфигурация Maven + JaCoCo
-├── Dockerfile                  # Двухстадийная сборка образа
-├── docker-compose.yml          # Оркестрация (БД + приложение)
-├── setup-server.sh             # Скрипт первоначальной настройки сервера
-└── .github/workflows/
-    └── deploy.yml              # Единый пайплайн: тесты → деплой
+# С отчётом покрытия
+mvn test jacoco:report
 ```
 
 ---
 
-## 📱 Android-приложение
+## CI/CD
+
+Проект использует пайплайн `.github/workflows/deploy.yml`:
+
+**Этап 1 — Тесты** (все PR и push в master):
+- 208 тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
+
+**Этап 2 — Деплой** (только push в master):
+- Сборка JAR + Docker-образ
+- Push в Docker Hub (`mngerasimenko/todo-app`)
+- SQL-миграция БД на сервере (идемпотентная)
+- Перезапуск контейнера через SSH
+
+Защита ветки master: обязательный PR + успешные тесты.
+
+---
+
+## Первоначальная настройка сервера
+
+```bash
+git clone https://github.com/mngerasimenko/todo.git
+cd todo
+chmod +x setup-server.sh
+./setup-server.sh
+```
+
+Скрипт устанавливает Docker, создаёт сеть и запускает PostgreSQL. Выполняется один раз.
+
+---
+
+## Структура проекта
+
+```
+src/main/java/ru/mngerasimenko/todolist/
+├── controller/      REST-контроллеры (5: App, Todo, User, Account, Auth)
+├── service/         Бизнес-логика (3 интерфейса + 4 реализации)
+├── repository/      Spring Data JPA (5 репозиториев)
+├── model/           JPA-сущности (User, Todo, Account, AccountUser, AccountRole)
+├── dto/             DTO + account/ + auth/ подпакеты
+├── mapper/          Ручные мапперы (Todo, User, Account)
+├── security/        Spring Security + JWT (2 цепочки: API + Vaadin)
+├── view/            Vaadin UI (Login, Main, List, TodoForm)
+├── exception/       GlobalExceptionHandler + кастомные исключения
+└── TodolistApplication.java
+
+src/test/java/       208 тестов (controller, service, repository, mapper)
+frontend/themes/     Кастомная Vaadin тема
+postman/             Postman-коллекция + окружения
+```
+
+---
+
+## Android-приложение
 
 Нативное Android-приложение для этого сервера (Kotlin + Jetpack Compose):
 
-**👉 [todolist-android](https://github.com/mngerasimenko/todolist-android)**
-
+**[todolist-android](https://github.com/mngerasimenko/todolist-android)**
