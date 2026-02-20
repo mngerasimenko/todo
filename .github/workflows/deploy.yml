@@ -87,10 +87,10 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd /root
-            
+
             # Создаём сеть, если не существует
             docker network create todo-network 2>/dev/null || true
-            
+
             # Запускаем/перезапускаем PostgreSQL
             if [ ! "$(docker ps -q -f name=postgres-db)" ]; then
               if [ "$(docker ps -aq -f status=exited -f name=postgres-db)" ]; then
@@ -106,8 +106,54 @@ jobs:
                 --restart unless-stopped \
                 postgres:15
             fi
-            
-            # Запускаем/перезапускаем приложение
+
+            # Ожидание готовности PostgreSQL
+            for i in $(seq 1 30); do
+              docker exec postgres-db pg_isready -U postgres && break
+              echo "Ожидание PostgreSQL... ($i/30)"
+              sleep 2
+            done
+
+            # === Миграция БД (Stage 3): аккаунты, BCrypt, цвета ===
+            docker exec postgres-db psql -U postgres -d todo -c "
+              DO \$\$ BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='todo' AND column_name='date_time') THEN
+                  ALTER TABLE todo RENAME COLUMN date_time TO created_at;
+                END IF;
+              END \$\$;
+
+              ALTER TABLE todo_users
+                ADD COLUMN IF NOT EXISTS created_task_color  VARCHAR(7) NOT NULL DEFAULT '#4285F4',
+                ADD COLUMN IF NOT EXISTS completed_task_color VARCHAR(7) NOT NULL DEFAULT '#34A853';
+
+              CREATE TABLE IF NOT EXISTS account (
+                id            BIGSERIAL PRIMARY KEY,
+                name          VARCHAR(128) NOT NULL UNIQUE,
+                password_hash VARCHAR(128) NOT NULL,
+                created_at    TIMESTAMP NOT NULL DEFAULT NOW()
+              );
+
+              CREATE TABLE IF NOT EXISTS account_user (
+                account_id BIGINT NOT NULL REFERENCES account(id),
+                user_id    BIGINT NOT NULL REFERENCES todo_users(id),
+                role       VARCHAR(16) NOT NULL DEFAULT 'USER',
+                joined_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (account_id, user_id)
+              );
+
+              ALTER TABLE todo
+                ADD COLUMN IF NOT EXISTS completed_at      TIMESTAMP,
+                ADD COLUMN IF NOT EXISTS completor_user_id BIGINT REFERENCES todo_users(id),
+                ADD COLUMN IF NOT EXISTS is_private        BOOLEAN NOT NULL DEFAULT FALSE,
+                ADD COLUMN IF NOT EXISTS account_id        BIGINT REFERENCES account(id);
+
+              DELETE FROM todo;
+              DELETE FROM todo_users;
+            "
+            echo "Миграция БД завершена"
+            # === Конец миграции ===
+
+            # Остановка старого приложения
             docker pull mngerasimenko/todo-app:${{ github.sha }}
             docker stop todo-app 2>/dev/null || true
             docker rm todo-app 2>/dev/null || true
