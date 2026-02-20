@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+import ru.mngerasimenko.todolist.dto.UpdateColorsRequest;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.dto.UserRequest;
 import ru.mngerasimenko.todolist.dto.UserResponse;
@@ -23,6 +24,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -310,6 +312,39 @@ class UserRestControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"USER"})
+    void updateColors_WithValidRequest_ReturnsUpdatedUser() throws Exception {
+        UpdateColorsRequest colorsRequest = new UpdateColorsRequest("#FF0000", "#00FF00");
+
+        UserDto updatedDto = new UserDto();
+        updatedDto.setId(1L);
+        updatedDto.setName("testuser");
+        updatedDto.setEmail("test@mail.ru");
+        updatedDto.setCreatedTaskColor("#FF0000");
+        updatedDto.setCompletedTaskColor("#00FF00");
+
+        UserResponse updatedResponse = new UserResponse();
+        updatedResponse.setId(1L);
+        updatedResponse.setName("testuser");
+        updatedResponse.setEmail("test@mail.ru");
+        updatedResponse.setCreatedTaskColor("#FF0000");
+        updatedResponse.setCompletedTaskColor("#00FF00");
+
+        when(userService.updateColors(eq(1L), eq("#FF0000"), eq("#00FF00"))).thenReturn(updatedDto);
+        when(userMapper.toResponse(any(UserDto.class))).thenReturn(updatedResponse);
+
+        mockMvc.perform(put("/api/users/1/colors")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(colorsRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.created_task_color").value("#FF0000"))
+                .andExpect(jsonPath("$.completed_task_color").value("#00FF00"));
+
+        verify(userService, times(1)).updateColors(eq(1L), eq("#FF0000"), eq("#00FF00"));
     }
 
     @Test

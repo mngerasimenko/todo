@@ -22,7 +22,9 @@ import com.vaadin.flow.router.Route;
 import jakarta.annotation.security.PermitAll;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.dto.UserDto;
+import ru.mngerasimenko.todolist.dto.account.AccountResponse;
 import ru.mngerasimenko.todolist.security.VaadinSecurityService;
+import ru.mngerasimenko.todolist.service.AccountService;
 import ru.mngerasimenko.todolist.service.TodoService;
 
 import java.time.format.DateTimeFormatter;
@@ -34,26 +36,32 @@ import java.util.List;
 public class ListView extends VerticalLayout {
     private final VaadinSecurityService vaadinSecurityService;
     private final TodoService todoService;
+    private final AccountService accountService;
     private final Grid<TodoDto> grid = new Grid<>(TodoDto.class);
     private final TextField filterText = new TextField();
     private final Span todoCountLabel = new Span();
     private TodoForm form;
     private UserDto authenticatedUser;
     private Div emptyState;
+    /** ID первого аккаунта пользователя — используется при создании задач через UI. */
+    private Long defaultAccountId;
 
     private static final DateTimeFormatter DATE_FORMATTER =
             DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
     public ListView(TodoService todoService,
-                    VaadinSecurityService vaadinSecurityService) {
+                    VaadinSecurityService vaadinSecurityService,
+                    AccountService accountService) {
         this.todoService = todoService;
         this.vaadinSecurityService = vaadinSecurityService;
+        this.accountService = accountService;
 
         init();
     }
 
     private void init() {
         authenticatedUser = vaadinSecurityService.getAuthenticatedUser();
+        resolveDefaultAccount();
         addClassName("list-view");
         setSizeFull();
         configureGrid();
@@ -63,6 +71,16 @@ public class ListView extends VerticalLayout {
         add(getToolBar(), getContent());
         updateList();
         closeEditor();
+    }
+
+    /**
+     * Берём первый аккаунт пользователя — он будет использоваться при создании задач через UI.
+     */
+    private void resolveDefaultAccount() {
+        List<AccountResponse> accounts = accountService.getAccountsByUserId(authenticatedUser.getId());
+        if (!accounts.isEmpty()) {
+            defaultAccountId = accounts.get(0).getId();
+        }
     }
 
     private void configureEmptyState() {
@@ -159,8 +177,8 @@ public class ListView extends VerticalLayout {
         // Колонка: Дата
         grid.addColumn(new ComponentRenderer<>(todo -> {
             Span dateSpan = new Span(
-                    todo.getDateTime() != null
-                            ? todo.getDateTime().format(DATE_FORMATTER)
+                    todo.getCreatedAt() != null
+                            ? todo.getCreatedAt().format(DATE_FORMATTER)
                             : "");
             dateSpan.getStyle()
                     .set("color", "var(--lumo-secondary-text-color)")
@@ -212,8 +230,17 @@ public class ListView extends VerticalLayout {
     }
 
     private void addTodo() {
+        if (defaultAccountId == null) {
+            com.vaadin.flow.component.notification.Notification
+                    .show("Сначала вступите в аккаунт через мобильное приложение",
+                            4000,
+                            com.vaadin.flow.component.notification.Notification.Position.MIDDLE);
+            return;
+        }
         grid.asSingleSelect().clear();
-        editTodo(new TodoDto(authenticatedUser.getId()));
+        TodoDto newTodo = new TodoDto(authenticatedUser.getId());
+        newTodo.setAccountId(defaultAccountId);
+        editTodo(newTodo);
     }
 
     private Component getContent() {

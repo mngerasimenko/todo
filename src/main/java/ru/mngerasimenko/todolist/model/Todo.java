@@ -16,20 +16,42 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "todo")
 public class Todo {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
     @Column(name = "name", nullable = false)
     @NotBlank
     @Size(min = 2, max = 120)
     private String name;
-    @Column(name = "date_time", nullable = false)
+
+    /**
+     * Дата создания задачи (было: date_time).
+     */
+    @Column(name = "created_at", nullable = false)
     @NotNull
-    private LocalDateTime dateTime;
+    private LocalDateTime createdAt;
+
+    /**
+     * Дата выполнения задачи. Устанавливается при done=true, очищается при done=false.
+     */
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
+
     @Column(name = "done", nullable = false)
     @NotNull
     private Boolean done;
 
+    /**
+     * Приватная задача — видна только создателю.
+     */
+    @Column(name = "is_private", nullable = false)
+    private boolean isPrivate = false;
+
+    /**
+     * Создатель задачи.
+     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     @JsonBackReference
@@ -39,6 +61,27 @@ public class Todo {
 
     @Column(name = "user_id", insertable = false, updatable = false)
     private Long userId;
+
+    /**
+     * Пользователь, выполнивший задачу. Nullable.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "completor_user_id")
+    private User completorUser;
+
+    @Column(name = "completor_user_id", insertable = false, updatable = false)
+    private Long completorUserId;
+
+    /**
+     * Аккаунт, к которому принадлежит задача.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "account_id", nullable = false)
+    @NotNull
+    private Account account;
+
+    @Column(name = "account_id", insertable = false, updatable = false)
+    private Long accountId;
 
     public Todo() {
     }
@@ -54,7 +97,6 @@ public class Todo {
     public Todo(String title, User user) {
         this(null, title, user, false);
     }
-
 
     public Todo(Long id, String title, User user, Boolean done) {
         this.id = id;
@@ -91,12 +133,20 @@ public class Todo {
         }
     }
 
-    public LocalDateTime getDateTime() {
-        return dateTime;
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
     }
 
-    public void setDateTime(LocalDateTime dateTime) {
-        this.dateTime = dateTime;
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getCompletedAt() {
+        return completedAt;
+    }
+
+    public void setCompletedAt(LocalDateTime completedAt) {
+        this.completedAt = completedAt;
     }
 
     public Boolean isDone() {
@@ -105,6 +155,14 @@ public class Todo {
 
     public void setDone(boolean done) {
         this.done = done;
+    }
+
+    public boolean getIsPrivate() {
+        return isPrivate;
+    }
+
+    public void setIsPrivate(boolean isPrivate) {
+        this.isPrivate = isPrivate;
     }
 
     @JsonIgnore
@@ -118,5 +176,47 @@ public class Todo {
 
     public void setUserId(Long userId) {
         this.userId = userId;
+    }
+
+    @JsonIgnore
+    public User getCompletorUser() {
+        return completorUser;
+    }
+
+    public void setCompletorUser(User completorUser) {
+        this.completorUser = completorUser;
+        if (completorUser != null) {
+            this.completorUserId = completorUser.getId();
+        } else {
+            this.completorUserId = null;
+        }
+    }
+
+    public Long getCompletorUserId() {
+        return completorUserId;
+    }
+
+    public void setCompletorUserId(Long completorUserId) {
+        this.completorUserId = completorUserId;
+    }
+
+    @JsonIgnore
+    public Account getAccount() {
+        return account;
+    }
+
+    public void setAccount(Account account) {
+        this.account = account;
+        if (account != null) {
+            this.accountId = account.getId();
+        }
+    }
+
+    public Long getAccountId() {
+        return accountId;
+    }
+
+    public void setAccountId(Long accountId) {
+        this.accountId = accountId;
     }
 }

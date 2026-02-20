@@ -1,6 +1,5 @@
 package ru.mngerasimenko.todolist.security;
 
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -8,9 +7,10 @@ import org.springframework.stereotype.Component;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.service.UserService;
 
-import java.util.Collections;
-import java.util.List;
-
+/**
+ * Сервис загрузки данных пользователя для Spring Security.
+ * Используется при аутентификации через JWT и Vaadin form-login.
+ */
 @Component
 public class TodoUserDetailsService implements UserDetailsService {
 
@@ -29,26 +29,13 @@ public class TodoUserDetailsService implements UserDetailsService {
             throw new UsernameNotFoundException("User not found: " + username);
         }
 
+        // Используем пароль из БД (уже BCrypt-хэш).
+        // Роль — только USER; роли ADMIN/USER управляются через account_user (per-account).
         return org.springframework.security.core.userdetails.User
-                .withDefaultPasswordEncoder()
+                .builder()
                 .username(userDto.getName())
                 .password(userDto.getPassword())
-                .roles("USER", "ADMIN")
+                .roles("USER")
                 .build();
-    }
-
-    /**
-     * Получение ролей/прав пользователя
-     */
-    private List<SimpleGrantedAuthority> getAuthorities(UserDto userDto) {
-
-        // if (user.isAdmin()) {
-        //     return List.of(
-        //         new SimpleGrantedAuthority("ROLE_USER"),
-        //         new SimpleGrantedAuthority("ROLE_ADMIN")
-        //     );
-        // }
-
-        return Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"));
     }
 }

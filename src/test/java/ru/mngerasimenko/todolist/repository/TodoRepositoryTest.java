@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.test.context.ActiveProfiles;
+import ru.mngerasimenko.todolist.model.Account;
 import ru.mngerasimenko.todolist.model.Todo;
 import ru.mngerasimenko.todolist.model.User;
 
@@ -25,13 +26,18 @@ class TodoRepositoryTest {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private AccountRepository accountRepository;
+
     private User testUser;
+    private Account testAccount;
     private Todo todo1;
     private Todo todo2;
 
     @BeforeEach
     void setUp() {
         todoRepository.deleteAll();
+        accountRepository.deleteAll();
         userRepository.deleteAll();
 
         testUser = new User();
@@ -41,16 +47,21 @@ class TodoRepositoryTest {
         testUser.setPassword("password123");
         userRepository.save(testUser);
 
+        testAccount = new Account("TestAccount", "$2a$10$hashedPass");
+        accountRepository.save(testAccount);
+
         todo1 = new Todo();
         todo1.setName("First Task");
         todo1.setUser(testUser);
-        todo1.setDateTime(LocalDateTime.now().minusDays(1));
+        todo1.setAccount(testAccount);
+        todo1.setCreatedAt(LocalDateTime.now().minusDays(1));
         todo1.setDone(false);
 
         todo2 = new Todo();
         todo2.setName("Second Task");
         todo2.setUser(testUser);
-        todo2.setDateTime(LocalDateTime.now());
+        todo2.setAccount(testAccount);
+        todo2.setCreatedAt(LocalDateTime.now());
         todo2.setDone(true);
 
         todoRepository.save(todo1);
@@ -126,7 +137,8 @@ class TodoRepositoryTest {
         Todo todo = new Todo();
         todo.setName(null);
         todo.setUser(testUser);
-        todo.setDateTime(LocalDateTime.now());
+        todo.setAccount(testAccount);
+        todo.setCreatedAt(LocalDateTime.now());
         todo.setDone(false);
 
         assertThatThrownBy(() -> todoRepository.saveAndFlush(todo))
@@ -135,11 +147,12 @@ class TodoRepositoryTest {
     }
 
     @Test
-    void saveTodo_WithNullDateTime_ThrowsException() {
+    void saveTodo_WithNullCreatedAt_ThrowsException() {
         Todo todo = new Todo();
         todo.setName("Valid Name");
         todo.setUser(testUser);
-        todo.setDateTime(null);
+        todo.setAccount(testAccount);
+        todo.setCreatedAt(null);
         todo.setDone(false);
 
         assertThatThrownBy(() -> todoRepository.saveAndFlush(todo))
@@ -152,7 +165,8 @@ class TodoRepositoryTest {
         Todo todo = new Todo();
         todo.setName("Valid Name");
         todo.setUser(null);
-        todo.setDateTime(LocalDateTime.now());
+        todo.setAccount(testAccount);
+        todo.setCreatedAt(LocalDateTime.now());
         todo.setDone(false);
 
         assertThatThrownBy(() -> todoRepository.saveAndFlush(todo))

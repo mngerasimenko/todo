@@ -19,6 +19,8 @@ public class UserMapper {
                 .email(user.getEmail())
                 .password(user.getPassword())
                 .name(user.getName())
+                .createdTaskColor(user.getCreatedTaskColor())
+                .completedTaskColor(user.getCompletedTaskColor())
                 .build();
     }
 
@@ -56,6 +58,8 @@ public class UserMapper {
                 .id(dto.getId())
                 .email(dto.getEmail())
                 .name(dto.getName())
+                .createdTaskColor(dto.getCreatedTaskColor())
+                .completedTaskColor(dto.getCompletedTaskColor())
                 .build();
     }
 }

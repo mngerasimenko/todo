@@ -32,18 +32,35 @@ public class User {
     @NotBlank
     @Size(max = 128)
     private String email;
+
     @Column(name = "password", nullable = false)
     @NotBlank
     @Size(min = 5, max = 128)
     private String password;
+
     @Column(name = "name", nullable = false, unique = true)
     private String name;
 
+    /**
+     * Цвет иконки задачи при создании (HEX, например #4285F4).
+     */
+    @Column(name = "created_task_color", nullable = false, length = 7)
+    private String createdTaskColor = "#4285F4";
+
+    /**
+     * Цвет иконки задачи при выполнении (HEX, например #34A853).
+     */
+    @Column(name = "completed_task_color", nullable = false, length = 7)
+    private String completedTaskColor = "#34A853";
+
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "user")
-    @OrderBy("dateTime DESC")
+    @OrderBy("createdAt DESC")
     @JsonManagedReference
     @OnDelete(action = OnDeleteAction.CASCADE)
     private List<Todo> todoList = new ArrayList<>();
+
+    @OneToMany(fetch = FetchType.LAZY, mappedBy = "user")
+    private List<AccountUser> accountUsers = new ArrayList<>();
 
     public User() {
     }
@@ -100,6 +117,22 @@ public class User {
         this.authId = authId;
     }
 
+    public String getCreatedTaskColor() {
+        return createdTaskColor;
+    }
+
+    public void setCreatedTaskColor(String createdTaskColor) {
+        this.createdTaskColor = createdTaskColor;
+    }
+
+    public String getCompletedTaskColor() {
+        return completedTaskColor;
+    }
+
+    public void setCompletedTaskColor(String completedTaskColor) {
+        this.completedTaskColor = completedTaskColor;
+    }
+
     @JsonIgnore
     public List<Todo> getTodoList() {
         return todoList;
@@ -109,4 +142,12 @@ public class User {
         this.todoList = todoList;
     }
 
+    @JsonIgnore
+    public List<AccountUser> getAccountUsers() {
+        return accountUsers;
+    }
+
+    public void setAccountUsers(List<AccountUser> accountUsers) {
+        this.accountUsers = accountUsers;
+    }
 }

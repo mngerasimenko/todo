@@ -20,16 +20,23 @@ public class TodoMapper {
         return TodoDto.builder()
                 .id(todo.getId())
                 .name(todo.getName())
-                .dateTime(todo.getDateTime())
+                .createdAt(todo.getCreatedAt())
+                .completedAt(todo.getCompletedAt())
                 .done(todo.isDone())
+                .isPrivate(todo.getIsPrivate())
                 .userId(todo.getUser() != null ? todo.getUser().getId() : null)
                 .userName(todo.getUser() != null ? todo.getUser().getName() : null)
                 .userEmail(todo.getUser() != null ? todo.getUser().getEmail() : null)
+                .creatorColor(todo.getUser() != null ? todo.getUser().getCreatedTaskColor() : null)
+                .completorUserId(todo.getCompletorUser() != null ? todo.getCompletorUser().getId() : null)
+                .completorUserName(todo.getCompletorUser() != null ? todo.getCompletorUser().getName() : null)
+                .completorColor(todo.getCompletorUser() != null ? todo.getCompletorUser().getCompletedTaskColor() : null)
+                .accountId(todo.getAccount() != null ? todo.getAccount().getId() : null)
                 .build();
     }
 
     /**
-     * Конвертация TodoDto в сущность
+     * Конвертация TodoDto в сущность (без установки связанных объектов)
      */
     public Todo toEntity(TodoDto todoDto) {
         if (todoDto == null) {
@@ -39,14 +46,16 @@ public class TodoMapper {
         Todo todo = new Todo();
         todo.setId(todoDto.getId());
         todo.setName(todoDto.getName());
-        todo.setDateTime(todoDto.getDateTime());
+        todo.setCreatedAt(todoDto.getCreatedAt());
+        todo.setCompletedAt(todoDto.getCompletedAt());
         todo.setDone(todoDto.isDone());
+        todo.setIsPrivate(todoDto.isPrivate());
         todo.setUserId(todoDto.getUserId());
         return todo;
     }
 
     /**
-     * Обновление существующей сущности из запроса
+     * Обновление существующей сущности из запроса (имя и флаг done)
      */
     public void updateEntityFromDto(TodoDto todoDto, Todo todo) {
         if (todoDto == null || todo == null) {
@@ -54,10 +63,11 @@ public class TodoMapper {
         }
 
         todo.setName(todoDto.getName());
-        todo.setDateTime(todoDto.getDateTime());
         todo.setDone(todoDto.isDone());
+        if (todoDto.isPrivate() != todo.getIsPrivate()) {
+            todo.setIsPrivate(todoDto.isPrivate());
+        }
     }
-
 
     public TodoDto toDto(TodoRequest request) {
         return TodoDto.builder()
@@ -65,7 +75,8 @@ public class TodoMapper {
                 .userId(request.getUserId())
                 .name(request.getName())
                 .done(request.getDone())
-                .dateTime(request.getDateTime())
+                .isPrivate(request.isPrivate())
+                .accountId(request.getAccountId())
                 .build();
     }
 
@@ -77,11 +88,17 @@ public class TodoMapper {
         return TodoResponse.builder()
                 .id(todoDto.getId())
                 .name(todoDto.getName())
-                .dateTime(todoDto.getDateTime())
+                .createdAt(todoDto.getCreatedAt())
+                .completedAt(todoDto.getCompletedAt())
                 .done(todoDto.getDone())
+                .isPrivate(todoDto.isPrivate())
                 .userId(todoDto.getUserId())
                 .userName(todoDto.getUserName())
-                .createdAt(todoDto.getDateTime())
+                .completorUserId(todoDto.getCompletorUserId())
+                .completorUserName(todoDto.getCompletorUserName())
+                .accountId(todoDto.getAccountId())
+                .creatorColor(todoDto.getCreatorColor())
+                .completorColor(todoDto.getCompletorColor())
                 .build();
     }
 }

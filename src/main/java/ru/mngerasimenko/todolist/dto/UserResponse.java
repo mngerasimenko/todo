@@ -22,4 +22,10 @@ public class UserResponse {
     private String email;
 
     private String name;
+
+    @JsonProperty("created_task_color")
+    private String createdTaskColor;
+
+    @JsonProperty("completed_task_color")
+    private String completedTaskColor;
 }
