@@ -47,6 +47,9 @@ jobs:
     needs: test
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
+    env:
+      APP_VERSION_MAJOR: 0
+      APP_VERSION_MINOR: 0
 
     steps:
       - name: Checkout code
@@ -185,6 +188,8 @@ jobs:
               -e SPRING_DATASOURCE_PASSWORD=postgres \
               -e SPRING_JPA_HIBERNATE_DDL_AUTO=update \
               -e SPRING_PROFILES_ACTIVE=production \
+              -e APP_VERSION=${{ env.APP_VERSION_MAJOR }}.${{ env.APP_VERSION_MINOR }}.${{ github.run_number }} \
+              -e MIN_ANDROID_VERSION=1 \
               -v todo-logs:/todo/logs \
               --network todo-network \
               --restart unless-stopped \

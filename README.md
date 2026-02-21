@@ -31,6 +31,7 @@
 - Фильтрация и поиск задач
 - Кастомная Vaadin тема с адаптивным дизайном
 - Автоматический CI/CD через GitHub Actions
+- Автоверсионирование (MAJOR.MINOR.PATCH) с проверкой совместимости Android-клиента
 - 208 тестов с проверкой покрытия (JaCoCo)
 
 ---
@@ -95,6 +96,13 @@
 | PUT | `/api/users/{id}/colors` | Обновить цвета задач |
 | DELETE | `/api/users/{id}` | Удалить пользователя |
 
+### Служебные
+
+| Метод | Эндпоинт | Описание |
+|-------|----------|----------|
+| GET | `/api/status` | Статус, версия, min_android_version |
+| GET | `/api/appName` | Название приложения |
+
 Все эндпоинты (кроме auth, status, appName) требуют заголовок `Authorization: Bearer <token>`.
 
 Postman-коллекция: `postman/TodoList_API.postman_collection.json`
@@ -147,6 +155,7 @@ mvn test jacoco:report
 - Push в Docker Hub (`mngerasimenko/todo-app`)
 - SQL-миграция БД на сервере (идемпотентная)
 - Перезапуск контейнера через SSH
+- Версия приложения: `APP_VERSION_MAJOR.APP_VERSION_MINOR.github.run_number` (автоинкремент PATCH)
 
 Защита ветки master: обязательный PR + успешные тесты.
 
@@ -176,6 +185,7 @@ src/main/java/ru/mngerasimenko/todolist/
 ├── dto/             DTO + list/ + auth/ подпакеты
 ├── mapper/          Ручные мапперы (Todo, User, TaskList)
 ├── security/        Spring Security + JWT (2 цепочки: API + Vaadin)
+├── settings/        Константы + AppProperties (версия, min_android_version)
 ├── view/            Vaadin UI (Login, Main, List, TodoForm)
 ├── exception/       GlobalExceptionHandler + кастомные исключения
 └── TodolistApplication.java

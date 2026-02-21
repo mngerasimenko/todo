@@ -1255,6 +1255,18 @@
 									"pm.test(\"Status is true\", function () {",
 									"    var jsonData = pm.response.json();",
 									"    pm.expect(jsonData.status).to.eql(true);",
+									"});",
+									"",
+									"pm.test(\"Version is present (MAJOR.MINOR.PATCH)\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.version).to.exist;",
+									"    pm.expect(jsonData.version).to.match(/^\\\\d+\\\\.\\\\d+\\\\.\\\\d+$/);",
+									"});",
+									"",
+									"pm.test(\"min_android_version is present\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.min_android_version).to.exist;",
+									"    pm.expect(jsonData.min_android_version).to.be.a('number');",
 									"});"
 								],
 								"type": "text/javascript"
@@ -1274,7 +1286,7 @@
 								"status"
 							]
 						},
-						"description": "Проверка статуса приложения.\n\n**Открытый эндпоинт** (не требует JWT)."
+						"description": "Проверка статуса приложения.\n\n**Открытый эндпоинт** (не требует JWT).\n\n**Ответ:** `{\"status\": true, \"version\": \"0.0.1\", \"min_android_version\": 1}`\n- `version` — версия сервера (MAJOR.MINOR.PATCH)\n- `min_android_version` — минимальная поддерживаемая версия Android-клиента"
 					},
 					"response": []
 				},
