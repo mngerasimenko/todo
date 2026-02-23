@@ -348,6 +348,23 @@ class UserRestControllerTest {
     }
 
     @Test
+    @WithMockUser(username = "testuser", roles = {"USER"})
+    void getCurrentUser_ReturnsCurrentUser() throws Exception {
+        when(userService.getUserByUserName("testuser")).thenReturn(testUserDto);
+        when(userMapper.toResponse(testUserDto)).thenReturn(testUserResponse);
+
+        mockMvc.perform(get("/api/users/me"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.name").value("testuser"))
+                .andExpect(jsonPath("$.email").value("test@mail.ru"));
+
+        verify(userService, times(1)).getUserByUserName("testuser");
+        verify(userMapper, times(1)).toResponse(testUserDto);
+    }
+
+    @Test
     @WithMockUser(username = "user", roles = {"USER"})
     void createUserThenGetUser_ReturnsCreatedUser() throws Exception {
         UserDto createdUserDto = new UserDto();

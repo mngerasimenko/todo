@@ -13,12 +13,14 @@ import org.springframework.test.web.servlet.MockMvc;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.dto.TodoRequest;
 import ru.mngerasimenko.todolist.dto.TodoResponse;
+import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.exception.TodoNotFoundException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
 import ru.mngerasimenko.todolist.config.TestSecurityConfig;
 import ru.mngerasimenko.todolist.security.ApiSecurityConfig;
 import ru.mngerasimenko.todolist.service.TodoService;
+import ru.mngerasimenko.todolist.service.UserService;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -44,6 +46,9 @@ class TodoRestControllerTest {
 
     @MockitoBean
     private TodoMapper todoMapper;
+
+    @MockitoBean
+    private UserService userService;
 
     private TodoDto testTodoDto;
     private TodoResponse testTodoResponse;
@@ -371,6 +376,91 @@ class TodoRestControllerTest {
                 .when(todoService).deleteTodo(999L);
 
         mockMvc.perform(delete("/api/todos/999"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Todo not found with id: 999"));
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"USER"})
+    void markAsDone_ValidId_ReturnsMarkedTodo() throws Exception {
+        UserDto currentUser = new UserDto();
+        currentUser.setId(1L);
+        currentUser.setName("user");
+
+        TodoDto markedDto = new TodoDto();
+        markedDto.setId(1L);
+        markedDto.setName("Test Todo");
+        markedDto.setDone(true);
+        markedDto.setUserId(1L);
+
+        TodoResponse markedResponse = new TodoResponse();
+        markedResponse.setId(1L);
+        markedResponse.setName("Test Todo");
+        markedResponse.setDone(true);
+        markedResponse.setUserId(1L);
+
+        when(userService.getUserByUserName("user")).thenReturn(currentUser);
+        when(todoService.markAsDone(1L, 1L)).thenReturn(markedDto);
+        when(todoMapper.toResponse(markedDto)).thenReturn(markedResponse);
+
+        mockMvc.perform(patch("/api/todos/1/done"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.done").value(true));
+
+        verify(userService, times(1)).getUserByUserName("user");
+        verify(todoService, times(1)).markAsDone(1L, 1L);
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"USER"})
+    void markAsDone_NonExistentId_ReturnsNotFound() throws Exception {
+        UserDto currentUser = new UserDto();
+        currentUser.setId(1L);
+        currentUser.setName("user");
+
+        when(userService.getUserByUserName("user")).thenReturn(currentUser);
+        when(todoService.markAsDone(999L, 1L))
+                .thenThrow(new TodoNotFoundException("Todo not found with id: 999"));
+
+        mockMvc.perform(patch("/api/todos/999/done"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Todo not found with id: 999"));
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"USER"})
+    void markAsUndone_ValidId_ReturnsUnmarkedTodo() throws Exception {
+        TodoDto unmarkedDto = new TodoDto();
+        unmarkedDto.setId(1L);
+        unmarkedDto.setName("Test Todo");
+        unmarkedDto.setDone(false);
+        unmarkedDto.setUserId(1L);
+
+        TodoResponse unmarkedResponse = new TodoResponse();
+        unmarkedResponse.setId(1L);
+        unmarkedResponse.setName("Test Todo");
+        unmarkedResponse.setDone(false);
+        unmarkedResponse.setUserId(1L);
+
+        when(todoService.markAsUndone(1L)).thenReturn(unmarkedDto);
+        when(todoMapper.toResponse(unmarkedDto)).thenReturn(unmarkedResponse);
+
+        mockMvc.perform(patch("/api/todos/1/undone"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.done").value(false));
+
+        verify(todoService, times(1)).markAsUndone(1L);
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"USER"})
+    void markAsUndone_NonExistentId_ReturnsNotFound() throws Exception {
+        when(todoService.markAsUndone(999L))
+                .thenThrow(new TodoNotFoundException("Todo not found with id: 999"));
+
+        mockMvc.perform(patch("/api/todos/999/undone"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("Todo not found with id: 999"));
     }

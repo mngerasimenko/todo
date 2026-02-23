@@ -162,10 +162,21 @@ public class TodoServiceImpl implements TodoService {
     @Override
     @Transactional
     public TodoDto markAsDone(Long id) {
+        return markAsDone(id, null);
+    }
+
+    @Override
+    @Transactional
+    public TodoDto markAsDone(Long id, Long completorUserId) {
         Todo todo = todoRepository.findById(id)
                 .orElseThrow(() -> new TodoNotFoundException("Todo not found with id: " + id));
         todo.setDone(true);
         todo.setCompletedAt(LocalDateTime.now());
+        if (completorUserId != null) {
+            User completor = userRepository.findById(completorUserId)
+                    .orElse(null);
+            todo.setCompletorUser(completor);
+        }
         Todo updatedTodo = todoRepository.save(todo);
         return todoMapper.toDto(updatedTodo);
     }

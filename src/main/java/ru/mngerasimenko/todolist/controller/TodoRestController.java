@@ -4,12 +4,16 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.dto.TodoRequest;
 import ru.mngerasimenko.todolist.dto.TodoResponse;
+import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
 import ru.mngerasimenko.todolist.service.TodoService;
+import ru.mngerasimenko.todolist.service.UserService;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -21,6 +25,7 @@ public class TodoRestController {
 
     private final TodoService todoService;
     private final TodoMapper todoMapper;
+    private final UserService userService;
 
     @PostMapping("/create")
     public ResponseEntity<TodoResponse> create(@Valid @RequestBody TodoRequest request) {
@@ -62,6 +67,22 @@ public class TodoRestController {
                 .map(todoMapper::toResponse)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(responses);
+    }
+
+    @PatchMapping("/{id}/done")
+    public ResponseEntity<TodoResponse> markAsDone(@PathVariable Long id,
+                                                   @AuthenticationPrincipal UserDetails userDetails) {
+        UserDto currentUser = userService.getUserByUserName(userDetails.getUsername());
+        TodoDto todoDto = todoService.markAsDone(id, currentUser.getId());
+        TodoResponse response = todoMapper.toResponse(todoDto);
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/{id}/undone")
+    public ResponseEntity<TodoResponse> markAsUndone(@PathVariable Long id) {
+        TodoDto todoDto = todoService.markAsUndone(id);
+        TodoResponse response = todoMapper.toResponse(todoDto);
+        return ResponseEntity.ok(response);
     }
 
     @DeleteMapping("/{id}")

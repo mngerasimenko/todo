@@ -12,7 +12,13 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import ru.mngerasimenko.todolist.security.jwt.JwtAuthenticationFilter;
+import ru.mngerasimenko.todolist.settings.AppProperties;
+
+import java.util.List;
 
 /**
  * Конфигурация безопасности для REST API с JWT аутентификацией.
@@ -23,6 +29,7 @@ import ru.mngerasimenko.todolist.security.jwt.JwtAuthenticationFilter;
 public class ApiSecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final AppProperties appProperties;
 
     /**
      * Настраивает цепочку фильтров безопасности для REST API
@@ -35,6 +42,7 @@ public class ApiSecurityConfig {
     public SecurityFilterChain apiSecurityFilterChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher("/api/**")
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
                         // Открытые эндпоинты (без аутентификации)
                         .requestMatchers(
@@ -70,12 +78,20 @@ public class ApiSecurityConfig {
         return http.build();
     }
 
-    /**
-     * Создаёт AuthenticationManager для использования в контроллерах
-     *
-     * @param config конфигурация аутентификации
-     * @return AuthenticationManager
-     */
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(appProperties.getCorsOrigins());
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        config.setAllowCredentials(true);
+        config.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/**", config);
+        return source;
+    }
+
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();

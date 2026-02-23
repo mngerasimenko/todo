@@ -536,6 +536,44 @@ public class TodoServiceImplTest {
     }
 
     @Test
+    void markAsDone_WithCompletorUserId_SetsCompletorUser() {
+        User completor = new User();
+        completor.setId(2L);
+        completor.setName("completor");
+
+        Todo todoToMark = new Todo();
+        todoToMark.setId(1L);
+        todoToMark.setName("Todo");
+        todoToMark.setDone(false);
+
+        Todo markedTodo = new Todo();
+        markedTodo.setId(1L);
+        markedTodo.setName("Todo");
+        markedTodo.setDone(true);
+        markedTodo.setCompletedAt(LocalDateTime.now());
+        markedTodo.setCompletorUser(completor);
+
+        TodoDto markedDto = new TodoDto();
+        markedDto.setId(1L);
+        markedDto.setName("Todo");
+        markedDto.setDone(true);
+        markedDto.setCompletorUserId(2L);
+
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(todoToMark));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(completor));
+        when(todoRepository.save(any(Todo.class))).thenReturn(markedTodo);
+        when(todoMapper.toDto(markedTodo)).thenReturn(markedDto);
+
+        TodoDto result = todoService.markAsDone(1L, 2L);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getDone()).isTrue();
+        assertThat(result.getCompletorUserId()).isEqualTo(2L);
+        verify(userRepository, times(1)).findById(2L);
+        assertThat(todoToMark.getCompletorUser()).isEqualTo(completor);
+    }
+
+    @Test
     void markAsUndone_WithValidId_MarksTodoAsUndone() {
         Todo todoToMark = new Todo();
         todoToMark.setId(1L);

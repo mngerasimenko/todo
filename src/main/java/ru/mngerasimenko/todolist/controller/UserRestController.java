@@ -4,6 +4,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import ru.mngerasimenko.todolist.dto.UpdateColorsRequest;
@@ -23,6 +25,13 @@ import java.util.stream.Collectors;
 public class UserRestController {
     private final UserService userService;
     private final UserMapper userMapper;
+
+    @GetMapping("/me")
+    public ResponseEntity<UserResponse> getCurrentUser(@AuthenticationPrincipal UserDetails userDetails) {
+        UserDto userDto = userService.getUserByUserName(userDetails.getUsername());
+        UserResponse response = userMapper.toResponse(userDto);
+        return ResponseEntity.ok(response);
+    }
 
     @PostMapping("/create")
     public ResponseEntity<UserResponse> create(@Valid @RequestBody UserRequest request) {

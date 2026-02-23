@@ -33,7 +33,24 @@ services:
     restart: unless-stopped
 
   # ========================================
-  # СЕРВИС 2: postgres база данных
+  # СЕРВИС 2: React UI (nginx)
+  # ========================================
+  todo-web:
+    image: mngerasimenko/todo-web:latest
+    container_name: todo-web
+    ports:
+      - "3000:80"
+
+    depends_on:
+      - todo-app
+
+    networks:
+      - todo-network
+
+    restart: unless-stopped
+
+  # ========================================
+  # СЕРВИС 3: postgres база данных
   # ========================================
   postgres-db:
     image: postgres:17

@@ -26,6 +26,8 @@ public interface TodoService {
 
     TodoDto markAsDone(Long id);
 
+    TodoDto markAsDone(Long id, Long completorUserId);
+
     TodoDto markAsUndone(Long id);
 
     List<TodoDto> getFilteredTodosByUserId(Long id, String filter);

@@ -9,6 +9,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import ru.mngerasimenko.todolist.security.jwt.JwtAuthenticationFilter;
 import ru.mngerasimenko.todolist.security.jwt.JwtProperties;
 import ru.mngerasimenko.todolist.security.jwt.JwtTokenProvider;
+import ru.mngerasimenko.todolist.settings.AppProperties;
 
 /**
  * Тестовая конфигурация для создания моков JWT компонентов в тестах.
@@ -36,6 +37,11 @@ public class TestSecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public AppProperties appProperties() {
+        return new AppProperties();
     }
 
     /**
