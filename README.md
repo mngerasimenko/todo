@@ -2,21 +2,21 @@
 
 ![Java](https://img.shields.io/badge/Java-17-007396?logo=java)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5.6-6DB33F?logo=spring)
-![Vaadin](https://img.shields.io/badge/Vaadin-24.9.10-2D3E50?logo=vaadin)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791?logo=postgresql)
 ![Docker](https://img.shields.io/badge/Docker-24+-2496ED?logo=docker)
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?logo=github-actions)
 
-Веб-приложение для совместного управления списком задач. Система списков задач позволяет нескольким пользователям работать в общем пространстве, видеть задачи друг друга и отмечать их выполнение.
+REST API бэкенд для совместного управления списком задач. Система списков позволяет нескольким пользователям работать в общем пространстве, видеть задачи друг друга и отмечать их выполнение. Клиенты: React SPA и нативное Android-приложение.
 
 ---
 
 ## Demo
 
-Приложение развернуто и доступно по адресу:
-
-**[Попробовать онлайн](http://185.244.172.45:8090)**
-Логин: `testUser` | Пароль: `testUser`
+| Клиент | URL | Логин |
+|--------|-----|-------|
+| React UI | **[http://185.244.172.45:3000](http://185.244.172.45:3000)** | `testUser` / `testUser` |
+| Vaadin UI | **[http://185.244.172.45:8090](http://185.244.172.45:8090)** | `testUser` / `testUser` |
+| REST API | `http://185.244.172.45:8090/api/` | JWT |
 
 ---
 
@@ -26,12 +26,11 @@
 - Приватные задачи, видимые только создателю
 - Цвета пользователей для визуальной идентификации задач
 - Отметка задач как выполненных с фиксацией даты и исполнителя
-- JWT аутентификация для REST API + session-based для Vaadin UI
+- REST API с JWT аутентификацией (React SPA, Android-клиент)
 - BCrypt хэширование паролей
-- Фильтрация и поиск задач
-- Кастомная Vaadin тема с адаптивным дизайном
-- Автоматический CI/CD через GitHub Actions
+- CORS для поддержки React SPA и прямых API-запросов
 - Автоверсионирование (MAJOR.MINOR.PATCH) с проверкой совместимости Android-клиента
+- Автоматический CI/CD через GitHub Actions
 - 208 тестов с проверкой покрытия (JaCoCo)
 
 ---
@@ -42,7 +41,6 @@
 |-----------------|-----------------------------------|---------|
 | **Язык**        | Java                              | 17      |
 | **Backend**     | Spring Boot                       | 3.5.6   |
-| **UI**          | Vaadin                            | 24.9.10 |
 | **БД**          | PostgreSQL                        | 17      |
 | **Безопасность**| Spring Security + JWT (jjwt)      | 6.4.6   |
 | **Сборка**      | Maven                             | 3.9     |
@@ -83,6 +81,8 @@
 | GET | `/api/todos/{id}` | Задача по ID |
 | GET | `/api/todos/user/{userId}` | Задачи пользователя |
 | PUT | `/api/todos/{id}` | Обновить задачу |
+| PATCH | `/api/todos/{id}/done` | Отметить задачу выполненной |
+| PATCH | `/api/todos/{id}/undone` | Снять отметку выполнения |
 | DELETE | `/api/todos/{id}` | Удалить задачу |
 
 ### Пользователи
@@ -91,6 +91,7 @@
 |-------|----------|----------|
 | POST | `/api/users/create` | Создать пользователя |
 | GET | `/api/users/all` | Все пользователи |
+| GET | `/api/users/me` | Текущий пользователь (по JWT) |
 | GET | `/api/users/{id}` | Пользователь по ID |
 | PUT | `/api/users/{id}` | Обновить пользователя |
 | PUT | `/api/users/{id}/colors` | Обновить цвета задач |
@@ -184,21 +185,19 @@ src/main/java/ru/mngerasimenko/todolist/
 ├── model/           JPA-сущности (User, Todo, TaskList, TaskListUser, TaskListRole)
 ├── dto/             DTO + list/ + auth/ подпакеты
 ├── mapper/          Ручные мапперы (Todo, User, TaskList)
-├── security/        Spring Security + JWT (2 цепочки: API + Vaadin)
-├── settings/        Константы + AppProperties (версия, min_android_version)
+├── security/        Spring Security + JWT (ApiSecurityConfig + VaadinSecurityConfig)
+├── settings/        AppProperties (corsOrigins, версия, min_android_version)
 ├── view/            Vaadin UI (Login, Main, List, TodoForm)
 ├── exception/       GlobalExceptionHandler + кастомные исключения
 └── TodolistApplication.java
 
 src/test/java/       208 тестов (controller, service, repository, mapper)
-frontend/themes/     Кастомная Vaadin тема
 postman/             Postman-коллекция + окружения
 ```
 
 ---
 
-## Android-приложение
+## Связанные проекты
 
-Нативное Android-приложение для этого сервера (Kotlin + Jetpack Compose):
-
-**[todolist-android](https://github.com/mngerasimenko/todolist-android)**
+- **[todolist-web](https://github.com/mngerasimenko/todolist-web)** — React SPA (TypeScript + Vite + Tailwind CSS)
+- **[todolist-android](https://github.com/mngerasimenko/todolist-android)** — нативный Android-клиент (Kotlin + Jetpack Compose)
