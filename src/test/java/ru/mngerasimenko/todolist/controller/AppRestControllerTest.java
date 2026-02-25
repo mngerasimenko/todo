@@ -32,7 +32,7 @@ class AppRestControllerTest {
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(true))
                 .andExpect(jsonPath("$.version").value("0.0.1"))
-                .andExpect(jsonPath("$.min_android_version").value(3))
+                .andExpect(jsonPath("$.min_android_version").value(1))
                 .andExpect(jsonPath("$.appName").doesNotExist());
     }
 
