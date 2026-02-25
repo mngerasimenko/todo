@@ -189,7 +189,7 @@ jobs:
               -e SPRING_JPA_HIBERNATE_DDL_AUTO=update \
               -e SPRING_PROFILES_ACTIVE=production \
               -e APP_VERSION=${{ env.APP_VERSION_MAJOR }}.${{ env.APP_VERSION_MINOR }}.${{ github.run_number }} \
-              -e MIN_ANDROID_VERSION=1 \
+              -e MIN_ANDROID_VERSION=3 \
               -v todo-logs:/todo/logs \
               --network todo-network \
               --restart unless-stopped \
