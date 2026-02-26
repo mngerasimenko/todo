@@ -15,7 +15,6 @@ REST API бэкенд для совместного управления спи�
 | Клиент | URL | Логин |
 |--------|-----|-------|
 | React UI | **[http://185.244.172.45:3000](http://185.244.172.45:3000)** | `testUser` / `testUser` |
-| Vaadin UI | **[http://185.244.172.45:8090](http://185.244.172.45:8090)** | `testUser` / `testUser` |
 | REST API | `http://185.244.172.45:8090/api/` | JWT |
 
 ---
@@ -31,7 +30,7 @@ REST API бэкенд для совместного управления спи�
 - CORS для поддержки React SPA и прямых API-запросов
 - Автоверсионирование (MAJOR.MINOR.PATCH) с проверкой совместимости Android-клиента
 - Автоматический CI/CD через GitHub Actions
-- 208 тестов с проверкой покрытия (JaCoCo)
+- 196 тестов с проверкой покрытия (JaCoCo)
 
 ---
 
@@ -149,7 +148,7 @@ mvn test jacoco:report
 Проект использует пайплайн `.github/workflows/deploy.yml`:
 
 **Этап 1 — Тесты** (все PR и push в master):
-- 208 тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
+- 196 тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
 
 **Этап 2 — Деплой** (только push в master):
 - Сборка JAR + Docker-образ
@@ -180,18 +179,17 @@ chmod +x setup-server.sh
 ```
 src/main/java/ru/mngerasimenko/todolist/
 ├── controller/      REST-контроллеры (5: App, Todo, User, TaskList, Auth)
-├── service/         Бизнес-логика (3 интерфейса + 4 реализации)
+├── service/         Бизнес-логика (3 интерфейса + 3 реализации)
 ├── repository/      Spring Data JPA (5 репозиториев)
 ├── model/           JPA-сущности (User, Todo, TaskList, TaskListUser, TaskListRole)
 ├── dto/             DTO + list/ + auth/ подпакеты
 ├── mapper/          Ручные мапперы (Todo, User, TaskList)
-├── security/        Spring Security + JWT (ApiSecurityConfig + VaadinSecurityConfig)
+├── security/        Spring Security + JWT (ApiSecurityConfig)
 ├── settings/        AppProperties (corsOrigins, версия, min_android_version)
-├── view/            Vaadin UI (Login, Main, List, TodoForm)
 ├── exception/       GlobalExceptionHandler + кастомные исключения
 └── TodolistApplication.java
 
-src/test/java/       208 тестов (controller, service, repository, mapper)
+src/test/java/       196 тестов (controller, service, repository, mapper)
 postman/             Postman-коллекция + окружения
 ```
 

@@ -18,8 +18,6 @@
         <logger name="ru.mngerasimenko.todolist" level="DEBUG"/>
         <logger name="org.hibernate.SQL" level="DEBUG"/>
         <logger name="org.hibernate.type.descriptor.sql" level="TRACE"/>
-        <logger name="com.vaadin" level="WARN"/>
-
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
         </root>
@@ -44,8 +42,6 @@
 
         <logger name="ru.mngerasimenko.todolist" level="DEBUG"/>
         <logger name="org.hibernate.SQL" level="DEBUG"/>
-        <logger name="com.vaadin" level="WARN"/>
-
         <root level="WARN">
             <appender-ref ref="CONSOLE"/>
             <appender-ref ref="FILE"/>

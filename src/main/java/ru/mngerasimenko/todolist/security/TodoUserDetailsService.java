@@ -9,7 +9,7 @@ import ru.mngerasimenko.todolist.service.UserService;
 
 /**
  * Сервис загрузки данных пользователя для Spring Security.
- * Используется при аутентификации через JWT и Vaadin form-login.
+ * Используется при JWT-аутентификации.
  */
 @Component
 public class TodoUserDetailsService implements UserDetailsService {

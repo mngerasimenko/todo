@@ -2,8 +2,6 @@ target/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
-frontend/*
-!frontend/themes/
 
 ### STS ###
 .apt_generated
@@ -31,10 +29,3 @@ build/
 !**/src/test/**/build/
 
 /node_modules/
-
-### Vaadin (автогенерируемые) ###
-vite.generated.ts
-vite.config.ts.timestamp-*
-package.json
-package-lock.json
-src/main/bundles/
