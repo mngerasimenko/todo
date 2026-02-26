@@ -1,5 +1,5 @@
-# Исключаем папки сборки и тестов
-target/
+# target/ intentionally NOT excluded — pre-built JAR is copied into Docker image
+# Build the JAR first with: mvn clean package -DskipTests
 .mvn/
 .mvnw
 .mvnw.cmd
