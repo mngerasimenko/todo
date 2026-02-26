@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       APP_VERSION_MAJOR: 0
-      APP_VERSION_MINOR: 0
+      APP_VERSION_MINOR: 1
 
     steps:
       - name: Checkout code
