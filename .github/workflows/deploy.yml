@@ -50,10 +50,14 @@ jobs:
     env:
       APP_VERSION_MAJOR: 0
       APP_VERSION_MINOR: 1
+      APP_VERSION_PATCH_OFFSET: 60
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Compute patch version
+        run: echo "APP_PATCH=$(( ${{ github.run_number }} - ${{ env.APP_VERSION_PATCH_OFFSET }} ))" >> $GITHUB_ENV
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -129,7 +133,7 @@ jobs:
               -e SPRING_DATASOURCE_PASSWORD=postgres \
               -e SPRING_JPA_HIBERNATE_DDL_AUTO=update \
               -e SPRING_PROFILES_ACTIVE=production \
-              -e APP_VERSION=${{ env.APP_VERSION_MAJOR }}.${{ env.APP_VERSION_MINOR }}.${{ github.run_number }} \
+              -e APP_VERSION=${{ env.APP_VERSION_MAJOR }}.${{ env.APP_VERSION_MINOR }}.${{ env.APP_PATCH }} \
               -v todo-logs:/todo/logs \
               --network todo-network \
               --restart unless-stopped \
