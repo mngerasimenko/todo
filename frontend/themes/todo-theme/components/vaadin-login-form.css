@@ -1,7 +1,0 @@
-:host {
-  border-radius: var(--lumo-border-radius-l);
-}
-
-[part="vaadin-login-native-form-wrapper"] {
-  padding: var(--lumo-space-l);
-}

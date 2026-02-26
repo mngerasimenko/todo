@@ -1,7 +1,0 @@
-:host {
-  --vaadin-app-layout-navbar-background: #ffffff;
-}
-
-[part="navbar"] {
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-}
