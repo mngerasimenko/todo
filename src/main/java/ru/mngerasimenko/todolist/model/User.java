@@ -62,6 +62,14 @@ public class User {
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "user")
     private List<TaskListUser> taskListUsers = new ArrayList<>();
 
+    /**
+     * Версия записи для оптимистичной блокировки.
+     * Hibernate автоматически инкрементирует при каждом UPDATE.
+     */
+    @Version
+    @Column(name = "version")
+    private Long version;
+
     public User() {
     }
 
@@ -149,5 +157,13 @@ public class User {
 
     public void setTaskListUsers(List<TaskListUser> taskListUsers) {
         this.taskListUsers = taskListUsers;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
     }
 }

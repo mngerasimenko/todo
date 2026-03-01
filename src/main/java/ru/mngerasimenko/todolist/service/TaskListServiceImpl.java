@@ -2,6 +2,7 @@ package ru.mngerasimenko.todolist.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,19 +38,20 @@ public class TaskListServiceImpl implements TaskListService {
     private final PasswordEncoder passwordEncoder;
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = DataIntegrityViolationException.class)
     public ListResponse createList(String name, String password, Long creatorUserId) {
-        if (taskListRepository.findByName(name).isPresent()) {
-            throw new IllegalArgumentException("Список с названием '" + name + "' уже существует");
-        }
-
         User creator = userRepository.findById(creatorUserId)
                 .orElseThrow(() -> new UserNotFoundException("User not found with id: " + creatorUserId));
 
         TaskList taskList = new TaskList(name, passwordEncoder.encode(password));
-        TaskList savedTaskList = taskListRepository.save(taskList);
 
-        // Создатель получает роль ADMIN
+        TaskList savedTaskList;
+        try {
+            savedTaskList = taskListRepository.saveAndFlush(taskList);
+        } catch (DataIntegrityViolationException e) {
+            throw new IllegalArgumentException("Список с названием '" + name + "' уже существует");
+        }
+
         TaskListUser taskListUser = new TaskListUser(savedTaskList, creator, TaskListRole.ADMIN);
         taskListUserRepository.save(taskListUser);
 
@@ -70,13 +72,11 @@ public class TaskListServiceImpl implements TaskListService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
 
-        // Проверяем — пользователь уже в списке?
-        if (taskListUserRepository.existsByIdListIdAndIdUserId(taskList.getId(), userId)) {
-            // Возвращаем текущую роль
-            TaskListUser existing = taskListUserRepository.findByIdListIdAndIdUserId(taskList.getId(), userId)
-                    .orElseThrow();
+        java.util.Optional<TaskListUser> existing =
+                taskListUserRepository.findByIdListIdAndIdUserId(taskList.getId(), userId);
+        if (existing.isPresent()) {
             log.info("Пользователь уже в списке: listId={}, userId={}", taskList.getId(), userId);
-            return taskListMapper.toResponse(taskList, existing.getRole());
+            return taskListMapper.toResponse(taskList, existing.get().getRole());
         }
 
         TaskListUser taskListUser = new TaskListUser(taskList, user, TaskListRole.USER);
@@ -98,7 +98,6 @@ public class TaskListServiceImpl implements TaskListService {
     @Override
     @Transactional(readOnly = true)
     public List<ListMemberResponse> getMembers(Long listId, Long requestingUserId) {
-        // Проверяем, что запрашивающий является участником списка
         if (!taskListUserRepository.existsByIdListIdAndIdUserId(listId, requestingUserId)) {
             throw new IllegalArgumentException("Вы не являетесь участником данного списка");
         }
@@ -112,12 +111,10 @@ public class TaskListServiceImpl implements TaskListService {
     @Override
     @Transactional(readOnly = true)
     public List<TodoDto> getTodosByList(Long listId, Long requestingUserId) {
-        // Проверяем, что запрашивающий является участником списка
         if (!taskListUserRepository.existsByIdListIdAndIdUserId(listId, requestingUserId)) {
             throw new IllegalArgumentException("Вы не являетесь участником данного списка");
         }
 
-        // Возвращаем публичные + приватные задачи текущего пользователя
         return todoRepository.findByListIdVisibleToUser(listId, requestingUserId).stream()
                 .map(todoMapper::toDto)
                 .collect(Collectors.toList());
@@ -130,10 +127,8 @@ public class TaskListServiceImpl implements TaskListService {
             throw new IllegalArgumentException("Вы не являетесь участником данного списка");
         }
 
-        // Удаляем приватные задачи пользователя в этом списке
         todoRepository.deletePrivateTodosByListIdAndUserId(listId, userId);
 
-        // Удаляем запись участия
         taskListUserRepository.deleteByListIdAndUserId(listId, userId);
 
         log.info("Пользователь вышел из списка: listId={}, userId={}", listId, userId);

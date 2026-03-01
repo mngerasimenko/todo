@@ -6,6 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
@@ -174,60 +175,40 @@ class UserServiceImplTest {
         savedUser.setPassword("newpass");
         savedUser.setAuthId("generated-auth-id");
 
-        when(repository.getUserByEmail("new@mail.ru")).thenReturn(null);
-        when(repository.getUserByName("newuser")).thenReturn(null);
         when(mapper.toEntity(newUserDto)).thenReturn(newUser);
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$10$encodedPassword");
-        when(repository.save(any(User.class))).thenReturn(savedUser);
+        when(repository.saveAndFlush(any(User.class))).thenReturn(savedUser);
         when(mapper.toDto(savedUser)).thenReturn(newUserDto);
 
         UserDto result = userService.createUser(newUserDto);
 
         assertThat(result).isEqualTo(newUserDto);
-        verify(repository, times(1)).save(any(User.class));
+        verify(repository, times(1)).saveAndFlush(any(User.class));
         verify(mapper, times(1)).toDto(savedUser);
         verify(passwordEncoder, times(1)).encode(anyString());
     }
 
     @Test
-    void createUser_WithExistingEmail_ThrowsIllegalArgumentException() {
+    void createUser_WithDuplicateEmailOrName_ThrowsIllegalArgumentException() {
+        // Уникальность гарантирует БД — saveAndFlush бросает DataIntegrityViolationException
         UserDto existingUserDto = new UserDto();
         existingUserDto.setName("existing");
         existingUserDto.setEmail("existing@mail.ru");
-        existingUserDto.setPassword("pass");
-
-        User existingUser = new User();
-        existingUser.setEmail("existing@mail.ru");
-
-        when(repository.getUserByEmail("existing@mail.ru")).thenReturn(existingUser);
-
-        assertThatThrownBy(() -> userService.createUser(existingUserDto))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("User with email existing@mail.ru already exists");
-
-        verify(repository, never()).save(any(User.class));
-        verify(mapper, never()).toEntity(any());
-    }
-
-    @Test
-    void createUser_WithExistingUserName_ThrowsIllegalArgumentException() {
-        UserDto existingUserDto = new UserDto();
-        existingUserDto.setName("existing");
-        existingUserDto.setEmail("new@mail.ru");
-        existingUserDto.setPassword("pass");
+        existingUserDto.setPassword("pass12345");
 
         User existingUser = new User();
         existingUser.setName("existing");
+        existingUser.setEmail("existing@mail.ru");
+        existingUser.setPassword("pass12345"); // mapper устанавливает пароль из DTO
 
-        when(repository.getUserByEmail("new@mail.ru")).thenReturn(null);
-        when(repository.getUserByName("existing")).thenReturn(existingUser);
+        when(mapper.toEntity(existingUserDto)).thenReturn(existingUser);
+        when(passwordEncoder.encode(anyString())).thenReturn("$2a$10$hash");
+        when(repository.saveAndFlush(any(User.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"));
 
         assertThatThrownBy(() -> userService.createUser(existingUserDto))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("User with name existing already exists");
-
-        verify(repository, never()).save(any(User.class));
-        verify(mapper, never()).toEntity(any());
+                .hasMessageContaining("уже существует");
     }
 
     @Test
@@ -244,11 +225,9 @@ class UserServiceImplTest {
         newUser.setPassword("newpass");
         newUser.setAuthId(null);
 
-        when(repository.getUserByEmail("new@mail.ru")).thenReturn(null);
-        when(repository.getUserByName("newuser")).thenReturn(null);
         when(mapper.toEntity(newUserDto)).thenReturn(newUser);
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$10$encodedPassword");
-        when(repository.save(any(User.class))).thenAnswer(invocation -> {
+        when(repository.saveAndFlush(any(User.class))).thenAnswer(invocation -> {
             User saved = invocation.getArgument(0);
             saved.setId(2L);
             if (saved.getAuthId() == null) {
@@ -257,13 +236,13 @@ class UserServiceImplTest {
             return saved;
         });
         when(mapper.toDto(any(User.class))).thenAnswer(invocation -> {
-            User user = invocation.getArgument(0);
+            User u = invocation.getArgument(0);
             UserDto dto = new UserDto();
-            dto.setId(user.getId());
-            dto.setName(user.getName());
-            dto.setEmail(user.getEmail());
-            dto.setPassword(user.getPassword());
-            dto.setAuthId(user.getAuthId());
+            dto.setId(u.getId());
+            dto.setName(u.getName());
+            dto.setEmail(u.getEmail());
+            dto.setPassword(u.getPassword());
+            dto.setAuthId(u.getAuthId());
             return dto;
         });
 
@@ -271,7 +250,7 @@ class UserServiceImplTest {
 
         assertThat(result.getAuthId()).isNotNull();
         assertThat(result.getAuthId()).isNotEmpty();
-        verify(repository, times(1)).save(any(User.class));
+        verify(repository, times(1)).saveAndFlush(any(User.class));
     }
 
     @Test

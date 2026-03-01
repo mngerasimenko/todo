@@ -1,0 +1,90 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-create-todo
+      author: todolist
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: todo
+      changes:
+        - createTable:
+            tableName: todo
+            columns:
+              - column:
+                  name: id
+                  type: bigserial
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: name
+                  type: varchar(120)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: created_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: completed_at
+                  type: timestamp
+
+              - column:
+                  name: done
+                  type: boolean
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: is_private
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: user_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: completor_user_id
+                  type: bigint
+
+              - column:
+                  name: list_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: version
+                  type: bigint
+
+        - addForeignKeyConstraint:
+            baseTableName: todo
+            baseColumnNames: user_id
+            referencedTableName: todo_users
+            referencedColumnNames: id
+            constraintName: fk_todo_user
+            onDelete: CASCADE
+
+        - addForeignKeyConstraint:
+            baseTableName: todo
+            baseColumnNames: completor_user_id
+            referencedTableName: todo_users
+            referencedColumnNames: id
+            constraintName: fk_todo_completor_user
+
+        - addForeignKeyConstraint:
+            baseTableName: todo
+            baseColumnNames: list_id
+            referencedTableName: task_list
+            referencedColumnNames: id
+            constraintName: fk_todo_list

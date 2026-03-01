@@ -3,6 +3,7 @@ package ru.mngerasimenko.todolist.service;
 import io.micrometer.common.util.StringUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,15 +56,8 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = DataIntegrityViolationException.class)
     public UserDto createUser(UserDto userDto) {
-        if (existsByEmail(userDto.getEmail())) {
-            throw new IllegalArgumentException("User with email " + userDto.getEmail() + " already exists");
-        }
-        if (existsByUserName(userDto.getName())) {
-            throw new IllegalArgumentException("User with name " + userDto.getName() + " already exists");
-        }
-
         User user = mapper.toEntity(userDto);
 
         if (user.getAuthId() == null) {
@@ -74,9 +68,15 @@ public class UserServiceImpl implements UserService {
         // Хэшируем пароль перед сохранением
         user.setPassword(passwordEncoder.encode(user.getPassword()));
 
-        User savedUser = repository.save(user);
-        log.info("Создан пользователь: id={}, name='{}'", savedUser.getId(), savedUser.getName());
-        return mapper.toDto(savedUser);
+        // Атомарная вставка: нет TOCTOU — уникальность гарантирует БД (UNIQUE на name, email)
+        try {
+            User savedUser = repository.saveAndFlush(user);
+            log.info("Создан пользователь: id={}, name='{}'", savedUser.getId(), savedUser.getName());
+            return mapper.toDto(savedUser);
+        } catch (DataIntegrityViolationException e) {
+            throw new IllegalArgumentException(
+                    "Пользователь с таким именем или email уже существует");
+        }
     }
 
     @Override

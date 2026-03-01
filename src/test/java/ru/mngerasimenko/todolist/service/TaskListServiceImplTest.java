@@ -6,6 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.dto.list.ListMemberResponse;
@@ -90,10 +91,9 @@ class TaskListServiceImplTest {
         ListResponse expectedResponse = ListResponse.builder()
                 .id(10L).name("TestList").role("ADMIN").build();
 
-        when(taskListRepository.findByName("TestList")).thenReturn(Optional.empty());
         when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
         when(passwordEncoder.encode("pass123")).thenReturn("$2a$10$encodedPass");
-        when(taskListRepository.save(any(TaskList.class))).thenReturn(testTaskList);
+        when(taskListRepository.saveAndFlush(any(TaskList.class))).thenReturn(testTaskList);
         when(taskListUserRepository.save(any(TaskListUser.class))).thenReturn(testTaskListUser);
         when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN)).thenReturn(expectedResponse);
 
@@ -102,31 +102,32 @@ class TaskListServiceImplTest {
         assertThat(result).isNotNull();
         assertThat(result.getId()).isEqualTo(10L);
         assertThat(result.getRole()).isEqualTo("ADMIN");
-        verify(taskListRepository).save(any(TaskList.class));
+        verify(taskListRepository).saveAndFlush(any(TaskList.class));
         verify(taskListUserRepository).save(any(TaskListUser.class));
     }
 
     @Test
     void createList_WithDuplicateName_ThrowsIllegalArgumentException() {
-        when(taskListRepository.findByName("TestList")).thenReturn(Optional.of(testTaskList));
+        // Уникальность гарантирует БД — saveAndFlush бросает DataIntegrityViolationException
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+        when(passwordEncoder.encode("pass")).thenReturn("$2a$10$encodedPass");
+        when(taskListRepository.saveAndFlush(any(TaskList.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key: name"));
 
         assertThatThrownBy(() -> taskListService.createList("TestList", "pass", 1L))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("TestList");
-
-        verify(taskListRepository, never()).save(any());
     }
 
     @Test
     void createList_WithNonExistentUser_ThrowsUserNotFoundException() {
-        when(taskListRepository.findByName("NewList")).thenReturn(Optional.empty());
         when(userRepository.findById(999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> taskListService.createList("NewList", "pass", 999L))
                 .isInstanceOf(UserNotFoundException.class)
                 .hasMessage("User not found with id: 999");
 
-        verify(taskListRepository, never()).save(any());
+        verify(taskListRepository, never()).saveAndFlush(any());
     }
 
     // --- joinList ---
@@ -139,7 +140,8 @@ class TaskListServiceImplTest {
         when(taskListRepository.findByName("TestList")).thenReturn(Optional.of(testTaskList));
         when(passwordEncoder.matches("pass123", "$2a$10$hashedListPass")).thenReturn(true);
         when(userRepository.findById(2L)).thenReturn(Optional.of(testUser));
-        when(taskListUserRepository.existsByIdListIdAndIdUserId(10L, 2L)).thenReturn(false);
+        // findBy возвращает пустой Optional — пользователь не в списке
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 2L)).thenReturn(Optional.empty());
         when(taskListUserRepository.save(any(TaskListUser.class))).thenReturn(testTaskListUser);
         when(taskListMapper.toResponse(testTaskList, TaskListRole.USER)).thenReturn(expectedResponse);
 
@@ -161,7 +163,7 @@ class TaskListServiceImplTest {
         when(taskListRepository.findByName("TestList")).thenReturn(Optional.of(testTaskList));
         when(passwordEncoder.matches("pass123", "$2a$10$hashedListPass")).thenReturn(true);
         when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(taskListUserRepository.existsByIdListIdAndIdUserId(10L, 1L)).thenReturn(true);
+        // findBy возвращает существующую запись — один запрос вместо existsBy + findBy
         when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
                 .thenReturn(Optional.of(existingMembership));
         when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN)).thenReturn(expectedResponse);

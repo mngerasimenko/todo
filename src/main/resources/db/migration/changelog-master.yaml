@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - include:
+      file: db/migration/001-create-users.yaml
+  - include:
+      file: db/migration/002-create-task-list.yaml
+  - include:
+      file: db/migration/003-create-task-list-user.yaml
+  - include:
+      file: db/migration/004-create-todo.yaml
+  - include:
+      file: db/migration/005-insert-test-user.yaml

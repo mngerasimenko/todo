@@ -1,5 +1,6 @@
 package ru.mngerasimenko.todolist.repository;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -20,6 +21,11 @@ public interface TaskListUserRepository extends JpaRepository<TaskListUser, Task
 
     Optional<TaskListUser> findByIdListIdAndIdUserId(Long listId, Long userId);
 
+    /**
+     * Загружает участников списка вместе с данными пользователей (JOIN FETCH).
+     * Избегает N+1 запросов при обращении к user.name в маппере.
+     */
+    @EntityGraph(attributePaths = {"user"})
     List<TaskListUser> findByIdListId(Long listId);
 
     /**

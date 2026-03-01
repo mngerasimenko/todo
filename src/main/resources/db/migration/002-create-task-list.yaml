@@ -1,0 +1,42 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-create-task-list
+      author: todolist
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: task_list
+      changes:
+        - createTable:
+            tableName: task_list
+            columns:
+              - column:
+                  name: id
+                  type: bigserial
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: name
+                  type: varchar(128)
+                  constraints:
+                    nullable: false
+                    unique: true
+
+              - column:
+                  name: password_hash
+                  type: varchar(128)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: created_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: version
+                  type: bigint

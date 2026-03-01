@@ -16,7 +16,6 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-db:5432/todo
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=postgres
-      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
       - SPRING_PROFILES_ACTIVE=production
 
     volumes:

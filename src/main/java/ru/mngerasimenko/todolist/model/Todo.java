@@ -27,7 +27,7 @@ public class Todo {
     private String name;
 
     /**
-     * Дата создания задачи (было: date_time).
+     * Дата создания задачи
      */
     @Column(name = "created_at", nullable = false)
     @NotNull
@@ -82,6 +82,14 @@ public class Todo {
 
     @Column(name = "list_id", insertable = false, updatable = false)
     private Long listId;
+
+    /**
+     * Версия записи для оптимистичной блокировки.
+     * Hibernate автоматически инкрементирует при каждом UPDATE.
+     */
+    @Version
+    @Column(name = "version")
+    private Long version;
 
     public Todo() {
     }
@@ -218,5 +226,13 @@ public class Todo {
 
     public void setListId(Long listId) {
         this.listId = listId;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
     }
 }

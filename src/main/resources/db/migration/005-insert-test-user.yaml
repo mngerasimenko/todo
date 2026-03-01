@@ -1,0 +1,32 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-insert-test-user
+      author: todolist
+      comment: "Insert default test user (password: testUser) for demo server"
+      preConditions:
+        - onFail: MARK_RAN
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM todo_users WHERE name = 'testUser'
+      changes:
+        - insert:
+            tableName: todo_users
+            columns:
+              - column:
+                  name: auth_id
+                  value: test-user-default-auth-id
+              - column:
+                  name: email
+                  value: testuser@todolist.ru
+              - column:
+                  name: password
+                  value: $2a$10$XSoxHKKXQyicmn1S5NxunefIMlYWtUrwPJfZUZp.vPVbo8Xi6OYXu
+              - column:
+                  name: name
+                  value: testUser
+              - column:
+                  name: created_task_color
+                  value: '#4285F4'
+              - column:
+                  name: completed_task_color
+                  value: '#34A853'

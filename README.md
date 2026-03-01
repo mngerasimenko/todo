@@ -3,6 +3,7 @@
 ![Java](https://img.shields.io/badge/Java-17-007396?logo=java)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5.6-6DB33F?logo=spring)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791?logo=postgresql)
+![Liquibase](https://img.shields.io/badge/Liquibase-migrations-2962FF?logo=liquibase)
 ![Docker](https://img.shields.io/badge/Docker-24+-2496ED?logo=docker)
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?logo=github-actions)
 
@@ -29,8 +30,11 @@ REST API бэкенд для совместного управления спи�
 - BCrypt хэширование паролей
 - CORS для поддержки React SPA и прямых API-запросов
 - Автоверсионирование (MAJOR.MINOR.PATCH) с проверкой совместимости Android-клиента
+- Оптимистичная блокировка (`@Version`) на всех Entity — защита от потерянных обновлений
+- Защита от race conditions (TOCTOU) — атомарные операции через UNIQUE constraints
+- Миграции БД через Liquibase (безопасно для существующих данных)
 - Автоматический CI/CD через GitHub Actions
-- 196 тестов с проверкой покрытия (JaCoCo)
+- 195 unit-тестов с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
 
 ---
 
@@ -41,9 +45,11 @@ REST API бэкенд для совместного управления спи�
 | **Язык**        | Java                              | 17      |
 | **Backend**     | Spring Boot                       | 3.5.6   |
 | **БД**          | PostgreSQL                        | 17      |
+| **Миграции**    | Liquibase                         | (BOM)   |
 | **Безопасность**| Spring Security + JWT (jjwt)      | 6.4.6   |
 | **Сборка**      | Maven                             | 3.9     |
 | **Тесты**       | JUnit 5 + Mockito + AssertJ       | -       |
+| **Нагрузочные** | TestContainers (PostgreSQL)       | (BOM)   |
 | **Покрытие**    | JaCoCo                            | 0.8.14  |
 | **Контейнеры**  | Docker + Docker Compose           | 24+     |
 | **CI/CD**       | GitHub Actions                    | -       |
@@ -125,20 +131,33 @@ mvn spring-boot:run
 ### Docker Compose
 
 ```bash
+# Сборка JAR (обязательно перед docker build)
+mvn clean package -DskipTests
+
+# Собрать образы и запустить контейнеры в фоне
 docker compose up -d --build
+# Проверить статус контейнеров
 docker compose ps
+# Смотреть логи приложения в реальном времени
 docker compose logs -f todo-app
+# Остановить и удалить все контейнеры
 docker compose down
 ```
 
 ### Тесты
 
 ```bash
-# Все тесты
+# Unit-тесты (195 тестов, без Docker)
 mvn test
 
 # С отчётом покрытия
 mvn test jacoco:report
+
+# Нагрузочные тесты (требуют Docker)
+mvn test -Pintegration -Djacoco.skip=true
+
+# Все тесты (unit + нагрузочные)
+mvn test -Pintegration
 ```
 
 ---
@@ -148,12 +167,13 @@ mvn test jacoco:report
 Проект использует пайплайн `.github/workflows/deploy.yml`:
 
 **Этап 1 — Тесты** (все PR и push в master):
-- 196 тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
+- 195 unit-тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
+- Нагрузочные тесты (3 шт.) запускаются отдельно: `mvn test -Pintegration` (требуют Docker)
 
 **Этап 2 — Деплой** (только push в master):
 - Сборка JAR + Docker-образ
 - Push в Docker Hub (`mngerasimenko/todo-app`)
-- SQL-миграция БД на сервере (идемпотентная)
+- Миграция БД через Liquibase (автоматически при старте приложения)
 - Перезапуск контейнера через SSH
 - Версия приложения: `APP_VERSION_MAJOR.APP_VERSION_MINOR.github.run_number` (автоинкремент PATCH)
 
@@ -180,8 +200,8 @@ chmod +x setup-server.sh
 src/main/java/ru/mngerasimenko/todolist/
 ├── controller/      REST-контроллеры (5: App, Todo, User, TaskList, Auth)
 ├── service/         Бизнес-логика (3 интерфейса + 3 реализации)
-├── repository/      Spring Data JPA (5 репозиториев)
-├── model/           JPA-сущности (User, Todo, TaskList, TaskListUser, TaskListRole)
+├── repository/      Spring Data JPA (4 репозитория)
+├── model/           JPA-сущности (User, Todo, TaskList, TaskListUser, TaskListRole) + @Version
 ├── dto/             DTO + list/ + auth/ подпакеты
 ├── mapper/          Ручные мапперы (Todo, User, TaskList)
 ├── security/        Spring Security + JWT (ApiSecurityConfig)
@@ -189,7 +209,8 @@ src/main/java/ru/mngerasimenko/todolist/
 ├── exception/       GlobalExceptionHandler + кастомные исключения
 └── TodolistApplication.java
 
-src/test/java/       196 тестов (controller, service, repository, mapper)
+src/main/resources/db/migration/   Liquibase-миграции (master + 5 changeset-файлов)
+src/test/java/       195+ тестов (controller, service, repository, mapper, concurrency)
 postman/             Postman-коллекция + окружения
 ```
 

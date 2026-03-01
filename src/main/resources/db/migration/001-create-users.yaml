@@ -1,0 +1,64 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-users
+      author: todolist
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: todo_users
+      changes:
+        - createTable:
+            tableName: todo_users
+            columns:
+              - column:
+                  name: id
+                  type: bigserial
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: auth_id
+                  type: varchar(128)
+                  constraints:
+                    nullable: false
+                    unique: true
+
+              - column:
+                  name: email
+                  type: varchar(128)
+                  constraints:
+                    nullable: false
+                    unique: true
+
+              - column:
+                  name: password
+                  type: varchar(128)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: name
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+                    unique: true
+
+              - column:
+                  name: created_task_color
+                  type: varchar(7)
+                  defaultValue: '#4285F4'
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: completed_task_color
+                  type: varchar(7)
+                  defaultValue: '#34A853'
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: version
+                  type: bigint

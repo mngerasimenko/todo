@@ -32,11 +32,12 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
     void deleteByUserId(Long userId);
 
     /**
-     * Возвращает все задачи списка:
+     * Возвращает задачи списка, видимые пользователю:
      * - публичные задачи (isPrivate = false)
      * - приватные задачи текущего пользователя (isPrivate = true AND user_id = userId)
+     * JOIN FETCH t.user и LEFT JOIN FETCH t.completorUser — устраняют N+1 запросы при маппинге.
      */
-    @Query("SELECT t FROM Todo t WHERE t.taskList.id = :listId AND (t.isPrivate = false OR (t.isPrivate = true AND t.user.id = :userId))")
+    @Query("SELECT t FROM Todo t JOIN FETCH t.user LEFT JOIN FETCH t.completorUser WHERE t.taskList.id = :listId AND (t.isPrivate = false OR (t.isPrivate = true AND t.user.id = :userId))")
     List<Todo> findByListIdVisibleToUser(@Param("listId") Long listId, @Param("userId") Long userId);
 
     /**

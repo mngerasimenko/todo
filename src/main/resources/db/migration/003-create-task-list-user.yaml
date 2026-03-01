@@ -1,0 +1,59 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-create-task-list-user
+      author: todolist
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: task_list_user
+      changes:
+        - createTable:
+            tableName: task_list_user
+            columns:
+              - column:
+                  name: list_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: user_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: role
+                  type: varchar(16)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: joined_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: version
+                  type: bigint
+
+        - addPrimaryKey:
+            tableName: task_list_user
+            columnNames: list_id, user_id
+            constraintName: pk_task_list_user
+
+        - addForeignKeyConstraint:
+            baseTableName: task_list_user
+            baseColumnNames: list_id
+            referencedTableName: task_list
+            referencedColumnNames: id
+            constraintName: fk_task_list_user_list
+
+        - addForeignKeyConstraint:
+            baseTableName: task_list_user
+            baseColumnNames: user_id
+            referencedTableName: todo_users
+            referencedColumnNames: id
+            constraintName: fk_task_list_user_user

@@ -34,6 +34,14 @@ public class TaskListUser {
     @Column(name = "joined_at", nullable = false)
     private LocalDateTime joinedAt;
 
+    /**
+     * Версия записи для оптимистичной блокировки.
+     * Hibernate автоматически инкрементирует при каждом UPDATE.
+     */
+    @Version
+    @Column(name = "version")
+    private Long version;
+
     public TaskListUser() {
     }
 
@@ -90,5 +98,13 @@ public class TaskListUser {
 
     public void setJoinedAt(LocalDateTime joinedAt) {
         this.joinedAt = joinedAt;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
     }
 }

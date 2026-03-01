@@ -131,7 +131,6 @@ jobs:
               -e SPRING_DATASOURCE_URL='jdbc:postgresql://postgres-db:5432/todo' \
               -e SPRING_DATASOURCE_USERNAME=postgres \
               -e SPRING_DATASOURCE_PASSWORD=postgres \
-              -e SPRING_JPA_HIBERNATE_DDL_AUTO=update \
               -e SPRING_PROFILES_ACTIVE=production \
               -e APP_VERSION=${{ env.APP_VERSION_MAJOR }}.${{ env.APP_VERSION_MINOR }}.${{ env.APP_PATCH }} \
               -v todo-logs:/todo/logs \
