@@ -19,6 +19,7 @@ REST API бэкенд для совместного управления спи�
 | React UI | **[http://185.244.172.45:3000](http://185.244.172.45:3000)** | `testUser` / `testUser` |
 | REST API | `http://185.244.172.45:8090/api/` | JWT |
 | Swagger UI | **[http://185.244.172.45:8090/api/swagger-ui.html](http://185.244.172.45:8090/api/swagger-ui.html)** | — |
+| Android | **[todolist-android](https://github.com/mngerasimenko/todolist-android)** | `testUser` / `testUser` |
 
 ---
 
