@@ -46,7 +46,10 @@ public class ApiSecurityConfig {
                         .requestMatchers(
                                 "/api/status",
                                 "/api/appName",
-                                "/api/auth/**"
+                                "/api/auth/**",
+                                "/api/v3/api-docs/**",
+                                "/api/swagger-ui/**",
+                                "/api/swagger-ui.html"
                         ).permitAll()
                         // Административные эндпоинты (требуют роль ADMIN)
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
