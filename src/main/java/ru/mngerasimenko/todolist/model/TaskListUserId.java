@@ -45,8 +45,7 @@ public class TaskListUserId implements Serializable {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof TaskListUserId)) return false;
-        TaskListUserId that = (TaskListUserId) o;
+        if (!(o instanceof TaskListUserId that)) return false;
         return Objects.equals(listId, that.listId) && Objects.equals(userId, that.userId);
     }
 

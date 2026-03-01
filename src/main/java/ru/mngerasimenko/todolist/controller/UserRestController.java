@@ -16,7 +16,6 @@ import ru.mngerasimenko.todolist.mapper.UserMapper;
 import ru.mngerasimenko.todolist.service.UserService;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/users")
@@ -46,7 +45,7 @@ public class UserRestController {
         List<UserDto> users = userService.getAll();
         List<UserResponse> response = users.stream()
                 .map(userMapper::toResponse)
-                .collect(Collectors.toList());
+                .toList();
         return ResponseEntity.ok(response);
     }
 

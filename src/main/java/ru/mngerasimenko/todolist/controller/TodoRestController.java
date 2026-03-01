@@ -16,7 +16,6 @@ import ru.mngerasimenko.todolist.service.TodoService;
 import ru.mngerasimenko.todolist.service.UserService;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/todos")
@@ -56,7 +55,7 @@ public class TodoRestController {
         List<TodoDto> todos = todoService.getAllTodos();
         List<TodoResponse> responses = todos.stream()
                 .map(todoMapper::toResponse)
-                .collect(Collectors.toList());
+                .toList();
         return ResponseEntity.ok(responses);
     }
 
@@ -65,7 +64,7 @@ public class TodoRestController {
         List<TodoDto> todos = todoService.getTodosByUserId(userId);
         List<TodoResponse> responses = todos.stream()
                 .map(todoMapper::toResponse)
-                .collect(Collectors.toList());
+                .toList();
         return ResponseEntity.ok(responses);
     }
 

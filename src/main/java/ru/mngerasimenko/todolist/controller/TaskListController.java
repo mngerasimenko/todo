@@ -17,7 +17,6 @@ import ru.mngerasimenko.todolist.service.TaskListService;
 import ru.mngerasimenko.todolist.service.UserService;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * REST контроллер для управления списками задач.
@@ -88,7 +87,7 @@ public class TaskListController {
         Long userId = getUserId(userDetails);
         List<TodoResponse> todos = taskListService.getTodosByList(id, userId).stream()
                 .map(todoMapper::toResponse)
-                .collect(Collectors.toList());
+                .toList();
         return ResponseEntity.ok(todos);
     }
 

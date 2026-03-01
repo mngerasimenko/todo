@@ -17,7 +17,6 @@ import ru.mngerasimenko.todolist.repository.UserRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -106,7 +105,7 @@ public class TodoServiceImpl implements TodoService {
     public List<TodoDto> getAllTodos() {
         return todoRepository.findAll().stream()
                 .map(todoMapper::toDto)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
@@ -114,7 +113,7 @@ public class TodoServiceImpl implements TodoService {
     public List<TodoDto> getFilteredTodosByUserId(Long userId, String filter) {
         return todoRepository.findAllByUserIdAndNameContainingIgnoreCase(userId, filter).stream()
                 .map(todoMapper::toDto)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
@@ -124,7 +123,7 @@ public class TodoServiceImpl implements TodoService {
         log.debug("Загрузка задач для userId={}, найдено: {}", userId, todos.size());
         return todos.stream()
                 .map(todoMapper::toDto)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
@@ -132,7 +131,7 @@ public class TodoServiceImpl implements TodoService {
     public List<TodoDto> getActiveTodosByUserId(Long userId) {
         return todoRepository.findByUserIdAndDone(userId, false).stream()
                 .map(todoMapper::toDto)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
@@ -140,7 +139,7 @@ public class TodoServiceImpl implements TodoService {
     public List<TodoDto> getCompletedTodosByUserId(Long userId) {
         return todoRepository.findByUserIdAndDone(userId, true).stream()
                 .map(todoMapper::toDto)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override

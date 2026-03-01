@@ -15,7 +15,6 @@ import ru.mngerasimenko.todolist.repository.UserRepository;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -30,7 +29,7 @@ public class UserServiceImpl implements UserService {
     public List<UserDto> getAll() {
         return repository.findAll().stream()
                 .map(mapper::toDto)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override

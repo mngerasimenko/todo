@@ -22,7 +22,6 @@ import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -92,7 +91,7 @@ public class TaskListServiceImpl implements TaskListService {
         List<TaskListUser> taskListUsers = taskListUserRepository.findByUserId(userId);
         return taskListUsers.stream()
                 .map(tlu -> taskListMapper.toResponse(tlu.getTaskList(), tlu.getRole()))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
@@ -105,7 +104,7 @@ public class TaskListServiceImpl implements TaskListService {
         List<TaskListUser> members = taskListUserRepository.findByIdListId(listId);
         return members.stream()
                 .map(taskListMapper::toMemberResponse)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
@@ -117,7 +116,7 @@ public class TaskListServiceImpl implements TaskListService {
 
         return todoRepository.findByListIdVisibleToUser(listId, requestingUserId).stream()
                 .map(todoMapper::toDto)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
