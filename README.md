@@ -2,7 +2,7 @@
 
 ![Java](https://img.shields.io/badge/Java-17-007396?logo=java)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5.6-6DB33F?logo=spring)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791?logo=postgresql)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-336791?logo=postgresql)
 ![Liquibase](https://img.shields.io/badge/Liquibase-migrations-2962FF?logo=liquibase)
 ![Docker](https://img.shields.io/badge/Docker-24+-2496ED?logo=docker)
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?logo=github-actions)
