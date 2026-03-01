@@ -6,6 +6,7 @@
 ![Liquibase](https://img.shields.io/badge/Liquibase-migrations-2962FF?logo=liquibase)
 ![Docker](https://img.shields.io/badge/Docker-24+-2496ED?logo=docker)
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?logo=github-actions)
+![Swagger](https://img.shields.io/badge/Swagger-OpenAPI_3-85EA2D?logo=swagger)
 
 REST API бэкенд для совместного управления списком задач. Система списков позволяет нескольким пользователям работать в общем пространстве, видеть задачи друг друга и отмечать их выполнение. Клиенты: React SPA и нативное Android-приложение.
 
@@ -17,6 +18,7 @@ REST API бэкенд для совместного управления спи�
 |--------|-----|-------|
 | React UI | **[http://185.244.172.45:3000](http://185.244.172.45:3000)** | `testUser` / `testUser` |
 | REST API | `http://185.244.172.45:8090/api/` | JWT |
+| Swagger UI | **[http://185.244.172.45:8090/api/swagger-ui.html](http://185.244.172.45:8090/api/swagger-ui.html)** | — |
 
 ---
 
@@ -34,6 +36,7 @@ REST API бэкенд для совместного управления спи�
 - Защита от race conditions (TOCTOU) — атомарные операции через UNIQUE constraints
 - Миграции БД через Liquibase (безопасно для существующих данных)
 - Автоматический CI/CD через GitHub Actions
+- Интерактивная документация API (Swagger UI / OpenAPI 3)
 - 195 unit-тестов с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
 
 ---
@@ -52,6 +55,7 @@ REST API бэкенд для совместного управления спи�
 | **Нагрузочные** | TestContainers (PostgreSQL)       | (BOM)   |
 | **Покрытие**    | JaCoCo                            | 0.8.14  |
 | **Контейнеры**  | Docker + Docker Compose           | 24+     |
+| **Документация**| springdoc-openapi (Swagger UI)    | 2.8.6   |
 | **CI/CD**       | GitHub Actions                    | -       |
 
 ---
@@ -110,6 +114,8 @@ REST API бэкенд для совместного управления спи�
 | GET | `/api/appName` | Название приложения |
 
 Все эндпоинты (кроме auth, status, appName) требуют заголовок `Authorization: Bearer <token>`.
+
+Интерактивная документация: **[Swagger UI](http://185.244.172.45:8090/api/swagger-ui.html)** (локально: `http://localhost:8090/api/swagger-ui.html`)
 
 Postman-коллекция: `postman/TodoList_API.postman_collection.json`
 
@@ -204,6 +210,7 @@ src/main/java/ru/mngerasimenko/todolist/
 ├── model/           JPA-сущности (User, Todo, TaskList, TaskListUser, TaskListRole) + @Version
 ├── dto/             DTO + list/ + auth/ подпакеты
 ├── mapper/          Ручные мапперы (Todo, User, TaskList)
+├── config/          OpenApiConfig (Swagger UI / OpenAPI)
 ├── security/        Spring Security + JWT (ApiSecurityConfig)
 ├── settings/        AppProperties (corsOrigins, версия, min_android_version)
 ├── exception/       GlobalExceptionHandler + кастомные исключения
