@@ -104,15 +104,15 @@ public class JwtTokenProvider {
                     .parseSignedClaims(token);
             return true;
         } catch (SecurityException ex) {
-            log.error("Неверная подпись JWT токена", ex);
+            log.warn("Неверная подпись JWT токена");
         } catch (MalformedJwtException ex) {
-            log.error("Некорректный JWT токен", ex);
+            log.warn("Некорректный JWT токен");
         } catch (ExpiredJwtException ex) {
             log.warn("JWT токен истёк: user={}", ex.getClaims().getSubject());
         } catch (UnsupportedJwtException ex) {
-            log.error("Неподдерживаемый JWT токен", ex);
+            log.warn("Неподдерживаемый JWT токен");
         } catch (IllegalArgumentException ex) {
-            log.error("JWT claims пустой", ex);
+            log.warn("JWT claims пустой");
         }
         return false;
     }
