@@ -12,6 +12,9 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+/**
+ * DTO входящего запроса на создание/обновление задачи.
+ */
 @Data
 @Builder
 @NoArgsConstructor

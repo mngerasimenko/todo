@@ -9,6 +9,9 @@ import ru.mngerasimenko.todolist.model.Todo;
 
 import java.util.List;
 
+/**
+ * Репозиторий для работы с задачами (таблица todo).
+ */
 @Repository
 public interface TodoRepository extends JpaRepository<Todo, Long> {
 

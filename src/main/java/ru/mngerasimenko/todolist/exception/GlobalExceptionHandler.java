@@ -18,28 +18,43 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Глобальный обработчик исключений для REST API.
+ */
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
 
+    /**
+     * Обрабатывает исключение «пользователь не найден» (HTTP 404).
+     */
     @ExceptionHandler(UserNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleUserNotFound(UserNotFoundException ex) {
         log.warn("USER Not Found: {}", ex.getMessage());
         return createErrorResponse(HttpStatus.NOT_FOUND, "USER Not Found", ex.getMessage());
     }
 
+    /**
+     * Обрабатывает исключение «задача не найдена» (HTTP 404).
+     */
     @ExceptionHandler(TodoNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleTodoNotFound(TodoNotFoundException ex) {
         log.warn("TODO Not Found: {}", ex.getMessage());
         return createErrorResponse(HttpStatus.NOT_FOUND, "TODO Not Found", ex.getMessage());
     }
 
+    /**
+     * Обрабатывает некорректные аргументы запроса (HTTP 400).
+     */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
         log.warn("Bad Request: {}", ex.getMessage());
         return createErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
     }
 
+    /**
+     * Обрабатывает ошибки валидации полей запроса (HTTP 400).
+     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, String>> handleValidationExceptions(
             MethodArgumentNotValidException ex) {
@@ -56,6 +71,9 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(errors, HttpStatus.BAD_REQUEST);
     }
 
+    /**
+     * Обрабатывает несоответствие типов параметров запроса (HTTP 400).
+     */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<Map<String, String>> handleTypeMismatch(
             MethodArgumentTypeMismatchException ex) {
@@ -71,6 +89,9 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
     }
 
+    /**
+     * Обрабатывает ошибки парсинга JSON в теле запроса (HTTP 400).
+     */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Map<String, Object>> handleJsonParseError(
             HttpMessageNotReadableException ex) {
@@ -91,18 +112,27 @@ public class GlobalExceptionHandler {
                 "Данные были изменены другим пользователем. Пожалуйста, повторите запрос.");
     }
 
+    /**
+     * Обрабатывает ошибки аутентификации (HTTP 401).
+     */
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<Map<String, Object>> handleAuthenticationException(AuthenticationException ex) {
         log.warn("Authentication failed: {}", ex.getMessage());
         return createErrorResponse(HttpStatus.UNAUTHORIZED, "Unauthorized", ex.getMessage());
     }
 
+    /**
+     * Обрабатывает обращение к несуществующему статическому ресурсу (HTTP 404).
+     */
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<Map<String, Object>> handleNoResourceFound(NoResourceFoundException ex) {
         log.warn("Static resource not found: {}", ex.getResourcePath());
         return createErrorResponse(HttpStatus.NOT_FOUND, "Not Found", ex.getMessage());
     }
 
+    /**
+     * Обрабатывает все непредвиденные исключения (HTTP 500).
+     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGenericException(Exception ex) {
 
@@ -111,6 +141,9 @@ public class GlobalExceptionHandler {
         return createErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error", ex.getMessage());
     }
 
+    /**
+     * Обрабатывает нарушения ограничений валидации (HTTP 400).
+     */
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<Map<String, String>> handleConstraintViolation(
             ConstraintViolationException ex) {

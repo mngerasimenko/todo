@@ -6,6 +6,9 @@ import ru.mngerasimenko.todolist.dto.TodoRequest;
 import ru.mngerasimenko.todolist.dto.TodoResponse;
 import ru.mngerasimenko.todolist.model.Todo;
 
+/**
+ * Маппер для конвертации между Todo, TodoDto, TodoRequest и TodoResponse.
+ */
 @Component
 public class TodoMapper {
 
@@ -69,6 +72,9 @@ public class TodoMapper {
         }
     }
 
+    /**
+     * Конвертирует TodoRequest в TodoDto.
+     */
     public TodoDto toDto(TodoRequest request) {
         return TodoDto.builder()
                 .id(request.getId())
@@ -80,6 +86,9 @@ public class TodoMapper {
                 .build();
     }
 
+    /**
+     * Конвертирует TodoDto в TodoResponse.
+     */
     public TodoResponse toResponse(TodoDto todoDto) {
         if (todoDto == null) {
             return null;

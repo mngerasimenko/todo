@@ -6,6 +6,9 @@ import ru.mngerasimenko.todolist.model.TaskList;
 
 import java.util.Optional;
 
+/**
+ * Репозиторий для работы со списками задач (таблица task_list).
+ */
 @Repository
 public interface TaskListRepository extends JpaRepository<TaskList, Long> {
 

@@ -10,6 +10,9 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+/**
+ * DTO ответа задачи для клиента.
+ */
 @Data
 @Builder
 @NoArgsConstructor

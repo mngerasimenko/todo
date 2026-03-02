@@ -9,6 +9,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
+/**
+ * HTTP-фильтр для логирования запросов (метод, URI, статус, время выполнения).
+ */
 @Component
 public class LoggingFilter extends OncePerRequestFilter {
 

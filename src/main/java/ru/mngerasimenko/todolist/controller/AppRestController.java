@@ -9,6 +9,10 @@ import ru.mngerasimenko.todolist.dto.AppTodoResponse;
 import ru.mngerasimenko.todolist.settings.AppProperties;
 import ru.mngerasimenko.todolist.settings.Constants;
 
+/**
+ * REST-контроллер для служебных эндпоинтов приложения.
+ * Предоставляет статус сервера, версию и название приложения.
+ */
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
@@ -16,6 +20,7 @@ public class AppRestController {
 
     private final AppProperties appProperties;
 
+    /** Статус приложения: версия сервера и минимальная версия Android-клиента */
     @GetMapping("/status")
     public ResponseEntity<AppTodoResponse> getStatus() {
         AppTodoResponse response = AppTodoResponse.builder()
@@ -26,6 +31,7 @@ public class AppRestController {
         return ResponseEntity.ok(response);
     }
 
+    /** Название приложения */
     @GetMapping("/appName")
     public ResponseEntity<AppTodoResponse> getAppName() {
         AppTodoResponse response = AppTodoResponse.builder()

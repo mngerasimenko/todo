@@ -13,6 +13,9 @@ import org.hibernate.annotations.OnDeleteAction;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * JPA-сущность пользователя (таблица todo_users).
+ */
 @Entity
 @Table(name = "todo_users")
 @JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"})

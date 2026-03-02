@@ -6,6 +6,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.util.List;
 
+/**
+ * Конфигурация приложения (версия, минимальная версия Android, CORS origins).
+ */
 @ConfigurationProperties(prefix = "app")
 @Getter
 @Setter

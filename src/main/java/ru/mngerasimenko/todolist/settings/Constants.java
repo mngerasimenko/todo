@@ -1,5 +1,8 @@
 package ru.mngerasimenko.todolist.settings;
 
+/**
+ * Строковые константы приложения.
+ */
 public interface Constants {
     String ALREADY_EXIST = "Already exist";
     String CREATED = "Created";

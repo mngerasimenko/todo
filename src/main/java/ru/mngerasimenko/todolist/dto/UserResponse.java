@@ -7,6 +7,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * DTO ответа пользователя для клиента.
+ */
 @Data
 @Builder
 @NoArgsConstructor

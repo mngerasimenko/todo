@@ -7,6 +7,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * DTO запроса создания списка задач.
+ */
 @Data
 @Builder
 @NoArgsConstructor

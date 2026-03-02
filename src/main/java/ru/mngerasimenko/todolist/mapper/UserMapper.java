@@ -6,9 +6,15 @@ import ru.mngerasimenko.todolist.dto.UserRequest;
 import ru.mngerasimenko.todolist.dto.UserResponse;
 import ru.mngerasimenko.todolist.model.User;
 
+/**
+ * Маппер для конвертации между User, UserDto и UserResponse.
+ */
 @Component
 public class UserMapper {
 
+    /**
+     * Конвертирует сущность User в UserDto.
+     */
     public UserDto toDto(User user) {
         if (user == null) {
             return null;
@@ -24,6 +30,9 @@ public class UserMapper {
                 .build();
     }
 
+    /**
+     * Конвертирует UserRequest в UserDto.
+     */
     public UserDto toDto(UserRequest request) {
         if (request == null) {
             return null;
@@ -37,6 +46,9 @@ public class UserMapper {
                 .build();
     }
 
+    /**
+     * Конвертирует UserDto в сущность User.
+     */
     public User toEntity(UserDto userDto) {
         if (userDto == null) {
             return null;
@@ -50,6 +62,9 @@ public class UserMapper {
         );
     }
 
+    /**
+     * Конвертирует UserDto в UserResponse.
+     */
     public UserResponse toResponse(UserDto dto) {
         if (dto == null) {
             return null;

@@ -11,6 +11,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 
+/**
+ * Внутренний DTO пользователя для передачи между слоями.
+ */
 @Data
 @Builder
 @NoArgsConstructor

@@ -7,6 +7,9 @@ import ru.mngerasimenko.todolist.model.TaskList;
 import ru.mngerasimenko.todolist.model.TaskListRole;
 import ru.mngerasimenko.todolist.model.TaskListUser;
 
+/**
+ * Маппер для конвертации TaskList и TaskListUser в DTO ответов.
+ */
 @Component
 public class TaskListMapper {
 

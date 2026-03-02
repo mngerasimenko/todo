@@ -5,7 +5,13 @@ import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 
+/**
+ * Утилитарный класс.
+ */
 public class Utils {
+    /**
+     * Возвращает MAC-адрес первого сетевого интерфейса.
+     */
     public static String getMacAddress() {
         StringBuilder sb = new StringBuilder();
         try {

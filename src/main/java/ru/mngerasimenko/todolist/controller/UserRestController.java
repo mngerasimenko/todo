@@ -17,6 +17,10 @@ import ru.mngerasimenko.todolist.service.UserService;
 
 import java.util.List;
 
+/**
+ * REST-контроллер для управления пользователями.
+ * Эндпоинты: CRUD пользователей, получение текущего пользователя, обновление цветов.
+ */
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
@@ -25,6 +29,7 @@ public class UserRestController {
     private final UserService userService;
     private final UserMapper userMapper;
 
+    /** Получение текущего пользователя по JWT-токену */
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getCurrentUser(@AuthenticationPrincipal UserDetails userDetails) {
         UserDto userDto = userService.getUserByUserName(userDetails.getUsername());
@@ -32,6 +37,7 @@ public class UserRestController {
         return ResponseEntity.ok(response);
     }
 
+    /** Создание нового пользователя */
     @PostMapping("/create")
     public ResponseEntity<UserResponse> create(@Valid @RequestBody UserRequest request) {
         UserDto userDto = userMapper.toDto(request);
@@ -40,6 +46,7 @@ public class UserRestController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    /** Получение списка всех пользователей */
     @GetMapping("/all")
     public ResponseEntity<List<UserResponse>> showAll() {
         List<UserDto> users = userService.getAll();
@@ -49,6 +56,7 @@ public class UserRestController {
         return ResponseEntity.ok(response);
     }
 
+    /** Получение пользователя по ID */
     @GetMapping("/{id}")
     public ResponseEntity<UserResponse> getUserById(@PathVariable Long id) {
         UserDto userDto = userService.getUserById(id);
@@ -56,6 +64,7 @@ public class UserRestController {
         return ResponseEntity.ok(response);
     }
 
+    /** Обновление данных пользователя по ID */
     @PutMapping("/{id}")
     public ResponseEntity<UserResponse> updateUser(
             @PathVariable Long id,
@@ -78,6 +87,7 @@ public class UserRestController {
         return ResponseEntity.ok(response);
     }
 
+    /** Удаление пользователя по ID */
     @DeleteMapping("/{id}")
     public ResponseEntity<String> deleteUser(@PathVariable int id) {
         userService.delete(id);

@@ -9,6 +9,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * DTO входящего запроса на создание/обновление пользователя.
+ */
 @Data
 @Builder
 @NoArgsConstructor

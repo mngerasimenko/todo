@@ -12,6 +12,9 @@ import ru.mngerasimenko.todolist.model.TaskListUserId;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Репозиторий для работы со связью пользователей и списков (таблица task_list_user).
+ */
 @Repository
 public interface TaskListUserRepository extends JpaRepository<TaskListUser, TaskListUserId> {
 

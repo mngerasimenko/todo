@@ -13,6 +13,9 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+/**
+ * Внутренний DTO задачи для передачи между слоями.
+ */
 @Data
 @Builder
 @NoArgsConstructor
