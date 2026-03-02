@@ -1,5 +1,5 @@
 <a href="https://github.com/devxb/gitanimals">
-  <img src="https://render.gitanimals.org/lines/mngerasimenko" width="900" height="200"/>
+  <img src="https://render.gitanimals.org/lines/mngerasimenko" width="900" height="250"/>
 </a>
 
 # Todo List
