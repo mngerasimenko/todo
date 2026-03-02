@@ -1,3 +1,7 @@
+<a href="https://github.com/mngerasimenko/gitanimals">
+  <img src="https://render.gitanimals.org/lines/{username}" width="1000" height="120"/>
+</a>
+
 # Todo List
 
 ![Java](https://img.shields.io/badge/Java-17-007396?logo=java)
