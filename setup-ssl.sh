@@ -76,7 +76,7 @@ rm -rf /tmp/nginx-ssl-init
 echo ""
 echo "=== SSL-сертификат успешно получен! ==="
 echo ""
-echo "Следующие шаги:"
+echo "Следующие шаги: "
 echo "1. Запустите полный стек: docker compose up -d"
 echo "2. Проверьте: curl -I https://$DOMAIN/api/status"
 echo ""
