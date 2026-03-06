@@ -11,13 +11,11 @@
 REST API бэкенд для совместного управления списком задач. Система списков позволяет нескольким пользователям работать в общем пространстве, видеть задачи друг друга и отмечать их выполнение. Клиенты: React SPA и нативное Android-приложение.
 
 ---
-
 <a href="https://github.com/devxb/gitanimals">
   <img src="https://render.gitanimals.org/lines/mngerasimenko?pet-id=816406221692682509" width="30%" height="100"/>
   <img src="https://render.gitanimals.org/lines/mngerasimenko?pet-id=816406221692682508" width="30%" height="100"/>
   <img src="https://render.gitanimals.org/lines/mngerasimenko?pet-id=816406221692682507" width="30%" height="120"/>  
 </a>
-
 ## Demo
 
 | Клиент | URL | Логин |
