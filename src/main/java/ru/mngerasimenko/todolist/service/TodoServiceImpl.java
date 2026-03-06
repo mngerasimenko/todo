@@ -12,6 +12,7 @@ import ru.mngerasimenko.todolist.model.TaskList;
 import ru.mngerasimenko.todolist.model.Todo;
 import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.repository.TaskListRepository;
+import ru.mngerasimenko.todolist.repository.TaskListUserRepository;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 
@@ -26,6 +27,7 @@ public class TodoServiceImpl implements TodoService {
     private final TodoRepository todoRepository;
     private final UserRepository userRepository;
     private final TaskListRepository taskListRepository;
+    private final TaskListUserRepository taskListUserRepository;
     private final TodoMapper todoMapper;
 
     @Override
@@ -38,6 +40,10 @@ public class TodoServiceImpl implements TodoService {
         TaskList taskList = taskListRepository.findById(todoDto.getListId())
                 .orElseThrow(() -> new IllegalArgumentException(
                         "List not found with id: " + todoDto.getListId()));
+
+        if (!taskListUserRepository.existsByIdListIdAndIdUserId(todoDto.getListId(), todoDto.getUserId())) {
+            throw new IllegalArgumentException("Пользователь не является участником данного списка");
+        }
 
         todoDto.setDone(false);
         todoDto.setUserId(user.getId());

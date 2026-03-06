@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import ru.mngerasimenko.todolist.model.TaskListRole;
 import ru.mngerasimenko.todolist.model.TaskListUser;
 import ru.mngerasimenko.todolist.model.TaskListUserId;
 
@@ -22,6 +23,8 @@ public interface TaskListUserRepository extends JpaRepository<TaskListUser, Task
 
     boolean existsByIdListIdAndIdUserId(Long listId, Long userId);
 
+    boolean existsByIdListIdAndRole(Long listId, TaskListRole role);
+
     Optional<TaskListUser> findByIdListIdAndIdUserId(Long listId, Long userId);
 
     /**
@@ -37,4 +40,11 @@ public interface TaskListUserRepository extends JpaRepository<TaskListUser, Task
     @Modifying
     @Query("DELETE FROM TaskListUser tlu WHERE tlu.taskList.id = :listId AND tlu.user.id = :userId")
     void deleteByListIdAndUserId(@Param("listId") Long listId, @Param("userId") Long userId);
+
+    /**
+     * Удалить всех участников списка. Используется при удалении списка администратором.
+     */
+    @Modifying
+    @Query("DELETE FROM TaskListUser tlu WHERE tlu.taskList.id = :listId")
+    void deleteByListId(@Param("listId") Long listId);
 }

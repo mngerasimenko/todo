@@ -55,4 +55,11 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
     @Modifying
     @Query("DELETE FROM Todo t WHERE t.taskList.id = :listId AND t.user.id = :userId AND t.isPrivate = true")
     void deletePrivateTodosByListIdAndUserId(@Param("listId") Long listId, @Param("userId") Long userId);
+
+    /**
+     * Удалить все задачи списка. Используется при удалении списка администратором.
+     */
+    @Modifying
+    @Query("DELETE FROM Todo t WHERE t.taskList.id = :listId")
+    void deleteByListId(@Param("listId") Long listId);
 }

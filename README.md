@@ -84,6 +84,7 @@ REST API бэкенд для совместного управления спи�
 | GET | `/api/lists` | Мои списки |
 | GET | `/api/lists/{id}/members` | Участники списка |
 | GET | `/api/lists/{id}/todos` | Задачи списка (с учётом приватности) |
+| DELETE | `/api/lists/{id}` | Удалить список (только ADMIN) |
 | DELETE | `/api/lists/{id}/leave` | Покинуть список |
 
 ### Задачи

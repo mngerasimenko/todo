@@ -1,6 +1,9 @@
 package ru.mngerasimenko.todolist.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import ru.mngerasimenko.todolist.model.TaskList;
 
@@ -13,4 +16,11 @@ import java.util.Optional;
 public interface TaskListRepository extends JpaRepository<TaskList, Long> {
 
     Optional<TaskList> findByName(String name);
+
+    /**
+     * Удалить список по ID через JPQL (минуя persistence context).
+     */
+    @Modifying
+    @Query("DELETE FROM TaskList t WHERE t.id = :listId")
+    void deleteByListId(@Param("listId") Long listId);
 }

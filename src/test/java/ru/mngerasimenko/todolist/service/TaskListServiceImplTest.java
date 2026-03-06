@@ -142,6 +142,8 @@ class TaskListServiceImplTest {
         when(userRepository.findById(2L)).thenReturn(Optional.of(testUser));
         // findBy возвращает пустой Optional — пользователь не в списке
         when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 2L)).thenReturn(Optional.empty());
+        // В списке уже есть ADMIN — вступающий получает роль USER
+        when(taskListUserRepository.existsByIdListIdAndRole(10L, TaskListRole.ADMIN)).thenReturn(true);
         when(taskListUserRepository.save(any(TaskListUser.class))).thenReturn(testTaskListUser);
         when(taskListMapper.toResponse(testTaskList, TaskListRole.USER)).thenReturn(expectedResponse);
 
@@ -149,6 +151,27 @@ class TaskListServiceImplTest {
 
         assertThat(result).isNotNull();
         assertThat(result.getRole()).isEqualTo("USER");
+        verify(taskListUserRepository).save(any(TaskListUser.class));
+    }
+
+    @Test
+    void joinList_WhenNoAdmin_AssignsAdminRole() {
+        ListResponse expectedResponse = ListResponse.builder()
+                .id(10L).name("TestList").role("ADMIN").build();
+
+        when(taskListRepository.findByName("TestList")).thenReturn(Optional.of(testTaskList));
+        when(passwordEncoder.matches("pass123", "$2a$10$hashedListPass")).thenReturn(true);
+        when(userRepository.findById(2L)).thenReturn(Optional.of(testUser));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 2L)).thenReturn(Optional.empty());
+        // В списке нет ADMIN — вступающий автоматически получает роль ADMIN
+        when(taskListUserRepository.existsByIdListIdAndRole(10L, TaskListRole.ADMIN)).thenReturn(false);
+        when(taskListUserRepository.save(any(TaskListUser.class))).thenReturn(testTaskListUser);
+        when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN)).thenReturn(expectedResponse);
+
+        ListResponse result = taskListService.joinList("TestList", "pass123", 2L);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getRole()).isEqualTo("ADMIN");
         verify(taskListUserRepository).save(any(TaskListUser.class));
     }
 
@@ -279,9 +302,12 @@ class TaskListServiceImplTest {
 
     @Test
     void leaveList_WhenUserIsMember_DeletesPrivateTodosAndRemovesMembership() {
-        when(taskListUserRepository.existsByIdListIdAndIdUserId(10L, 1L)).thenReturn(true);
-        doNothing().when(todoRepository).deletePrivateTodosByListIdAndUserId(10L, 1L);
-        doNothing().when(taskListUserRepository).deleteByListIdAndUserId(10L, 1L);
+        TaskListUser memberUser = new TaskListUser();
+        memberUser.setId(new TaskListUserId(10L, 1L));
+        memberUser.setRole(TaskListRole.USER);
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
+                .thenReturn(Optional.of(memberUser));
 
         taskListService.leaveList(10L, 1L);
 
@@ -290,13 +316,76 @@ class TaskListServiceImplTest {
     }
 
     @Test
+    void leaveList_WhenUserIsAdmin_ThrowsIllegalArgumentException() {
+        TaskListUser adminUser = new TaskListUser();
+        adminUser.setId(new TaskListUserId(10L, 1L));
+        adminUser.setRole(TaskListRole.ADMIN);
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
+                .thenReturn(Optional.of(adminUser));
+
+        assertThatThrownBy(() -> taskListService.leaveList(10L, 1L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Администратор не может покинуть список");
+
+        verify(todoRepository, never()).deletePrivateTodosByListIdAndUserId(anyLong(), anyLong());
+        verify(taskListUserRepository, never()).deleteByListIdAndUserId(anyLong(), anyLong());
+    }
+
+    @Test
     void leaveList_WhenUserIsNotMember_ThrowsIllegalArgumentException() {
-        when(taskListUserRepository.existsByIdListIdAndIdUserId(10L, 99L)).thenReturn(false);
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 99L))
+                .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> taskListService.leaveList(10L, 99L))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("участником");
 
         verify(taskListUserRepository, never()).deleteByListIdAndUserId(anyLong(), anyLong());
+    }
+
+    // --- deleteList ---
+
+    @Test
+    void deleteList_WhenUserIsAdmin_DeletesAllTodosAndMembersAndList() {
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
+                .thenReturn(Optional.of(testTaskListUser));
+
+        taskListService.deleteList(10L, 1L);
+
+        verify(todoRepository).deleteByListId(10L);
+        verify(taskListUserRepository).deleteByListId(10L);
+        verify(taskListRepository).deleteByListId(10L);
+    }
+
+    @Test
+    void deleteList_WhenUserIsNotAdmin_ThrowsIllegalArgumentException() {
+        TaskListUser memberUser = new TaskListUser();
+        memberUser.setId(new TaskListUserId(10L, 2L));
+        memberUser.setRole(TaskListRole.USER);
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 2L))
+                .thenReturn(Optional.of(memberUser));
+
+        assertThatThrownBy(() -> taskListService.deleteList(10L, 2L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("администратор");
+
+        verify(todoRepository, never()).deleteByListId(anyLong());
+        verify(taskListUserRepository, never()).deleteByListId(anyLong());
+        verify(taskListRepository, never()).deleteByListId(anyLong());
+    }
+
+    @Test
+    void deleteList_WhenUserIsNotMember_ThrowsIllegalArgumentException() {
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 99L))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> taskListService.deleteList(10L, 99L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("участником");
+
+        verify(todoRepository, never()).deleteByListId(anyLong());
+        verify(taskListRepository, never()).deleteByListId(anyLong());
     }
 }

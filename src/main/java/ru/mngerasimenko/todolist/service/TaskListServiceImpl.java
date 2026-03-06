@@ -78,11 +78,15 @@ public class TaskListServiceImpl implements TaskListService {
             return taskListMapper.toResponse(taskList, existing.get().getRole());
         }
 
-        TaskListUser taskListUser = new TaskListUser(taskList, user, TaskListRole.USER);
+        TaskListRole role = taskListUserRepository.existsByIdListIdAndRole(taskList.getId(), TaskListRole.ADMIN)
+                ? TaskListRole.USER
+                : TaskListRole.ADMIN;
+
+        TaskListUser taskListUser = new TaskListUser(taskList, user, role);
         taskListUserRepository.save(taskListUser);
 
-        log.info("Пользователь вступил в список: listId={}, userId={}", taskList.getId(), userId);
-        return taskListMapper.toResponse(taskList, TaskListRole.USER);
+        log.info("Пользователь вступил в список: listId={}, userId={}, role={}", taskList.getId(), userId, role);
+        return taskListMapper.toResponse(taskList, role);
     }
 
     @Override
@@ -122,14 +126,33 @@ public class TaskListServiceImpl implements TaskListService {
     @Override
     @Transactional
     public void leaveList(Long listId, Long userId) {
-        if (!taskListUserRepository.existsByIdListIdAndIdUserId(listId, userId)) {
-            throw new IllegalArgumentException("Вы не являетесь участником данного списка");
+        TaskListUser membership = taskListUserRepository.findByIdListIdAndIdUserId(listId, userId)
+                .orElseThrow(() -> new IllegalArgumentException("Вы не являетесь участником данного списка"));
+
+        if (membership.getRole() == TaskListRole.ADMIN) {
+            throw new IllegalArgumentException("Администратор не может покинуть список. Используйте удаление списка");
         }
 
         todoRepository.deletePrivateTodosByListIdAndUserId(listId, userId);
-
         taskListUserRepository.deleteByListIdAndUserId(listId, userId);
 
         log.info("Пользователь вышел из списка: listId={}, userId={}", listId, userId);
+    }
+
+    @Override
+    @Transactional
+    public void deleteList(Long listId, Long userId) {
+        TaskListUser membership = taskListUserRepository.findByIdListIdAndIdUserId(listId, userId)
+                .orElseThrow(() -> new IllegalArgumentException("Вы не являетесь участником данного списка"));
+
+        if (membership.getRole() != TaskListRole.ADMIN) {
+            throw new IllegalArgumentException("Только администратор может удалить список");
+        }
+
+        todoRepository.deleteByListId(listId);
+        taskListUserRepository.deleteByListId(listId);
+        taskListRepository.deleteByListId(listId);
+
+        log.info("Список удалён: listId={}, userId={}", listId, userId);
     }
 }

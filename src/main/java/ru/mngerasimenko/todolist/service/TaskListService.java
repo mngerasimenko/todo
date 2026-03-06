@@ -37,4 +37,10 @@ public interface TaskListService {
      * Выйти из списка. Приватные задачи пользователя в списке удаляются.
      */
     void leaveList(Long listId, Long userId);
+
+    /**
+     * Удалить список задач. Только администратор списка может выполнить удаление.
+     * Удаляются все задачи, все участники и сам список.
+     */
+    void deleteList(Long listId, Long userId);
 }

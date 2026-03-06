@@ -104,6 +104,18 @@ public class TaskListController {
     }
 
     /**
+     * Удалить список задач. Только администратор списка может выполнить удаление.
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteList(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = getUserId(userDetails);
+        taskListService.deleteList(id, userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
      * Получить ID текущего аутентифицированного пользователя по username.
      */
     private Long getUserId(UserDetails userDetails) {

@@ -14,6 +14,7 @@ import ru.mngerasimenko.todolist.model.TaskList;
 import ru.mngerasimenko.todolist.model.Todo;
 import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.repository.TaskListRepository;
+import ru.mngerasimenko.todolist.repository.TaskListUserRepository;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 
@@ -40,6 +41,9 @@ public class TodoServiceImplTest {
 
     @Mock
     private TaskListRepository taskListRepository;
+
+    @Mock
+    private TaskListUserRepository taskListUserRepository;
 
     @Mock
     private TodoMapper todoMapper;
@@ -109,6 +113,7 @@ public class TodoServiceImplTest {
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
         when(taskListRepository.findById(1L)).thenReturn(Optional.of(testTaskList));
+        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
         when(todoMapper.toEntity(newTodoDto)).thenReturn(newTodo);
         when(todoRepository.save(any(Todo.class))).thenReturn(savedTodo);
         when(todoMapper.toDto(savedTodo)).thenReturn(savedTodoDto);
@@ -145,6 +150,25 @@ public class TodoServiceImplTest {
     }
 
     @Test
+    void createTodo_WhenUserNotMember_ThrowsIllegalArgumentException() {
+        TodoDto newTodoDto = new TodoDto();
+        newTodoDto.setName("New Todo");
+        newTodoDto.setUserId(1L);
+        newTodoDto.setListId(1L);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+        when(taskListRepository.findById(1L)).thenReturn(Optional.of(testTaskList));
+        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(false);
+
+        assertThatThrownBy(() -> todoService.createTodo(newTodoDto))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Пользователь не является участником данного списка");
+
+        verify(todoRepository, never()).save(any(Todo.class));
+        verify(todoMapper, never()).toEntity(any());
+    }
+
+    @Test
     void createTodo_SetsDefaultValues() {
         TodoDto newTodoDto = new TodoDto();
         newTodoDto.setName("New Todo");
@@ -172,6 +196,7 @@ public class TodoServiceImplTest {
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
         when(taskListRepository.findById(1L)).thenReturn(Optional.of(testTaskList));
+        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
         when(todoMapper.toEntity(newTodoDto)).thenReturn(newTodo);
         when(todoRepository.save(any(Todo.class))).thenReturn(savedTodo);
         when(todoMapper.toDto(savedTodo)).thenReturn(savedTodoDto);
