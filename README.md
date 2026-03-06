@@ -42,7 +42,7 @@ REST API бэкенд для совместного управления спи�
 - Миграции БД через Liquibase (безопасно для существующих данных)
 - Автоматический CI/CD через GitHub Actions
 - Интерактивная документация API (Swagger UI / OpenAPI 3)
-- 195 unit-тестов с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
+- 201 unit-тест с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
 
 ---
 
@@ -159,7 +159,7 @@ docker compose down
 ### Тесты
 
 ```bash
-# Unit-тесты (195 тестов, без Docker)
+# Unit-тесты (201 тест, без Docker)
 mvn test
 
 # С отчётом покрытия
@@ -179,7 +179,7 @@ mvn test -Pintegration
 Проект использует пайплайн `.github/workflows/deploy.yml`:
 
 **Этап 1 — Тесты** (все PR и push в master):
-- 195 unit-тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
+- 201 unit-тест + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
 - Нагрузочные тесты (3 шт.) запускаются отдельно: `mvn test -Pintegration` (требуют Docker)
 
 **Этап 2 — Деплой** (только push в master):
@@ -223,7 +223,7 @@ src/main/java/ru/mngerasimenko/todolist/
 └── TodolistApplication.java
 
 src/main/resources/db/migration/   Liquibase-миграции (master + 5 changeset-файлов)
-src/test/java/       195+ тестов (controller, service, repository, mapper, concurrency)
+src/test/java/       201+ тестов (controller, service, repository, mapper, concurrency)
 postman/             Postman-коллекция + окружения
 ```
 
