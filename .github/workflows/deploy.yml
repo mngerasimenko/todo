@@ -127,7 +127,6 @@ jobs:
             docker rm todo-app 2>/dev/null || true
             docker run -d \
               --name todo-app \
-              -p 8090:8090 \
               -e SPRING_DATASOURCE_URL='jdbc:postgresql://postgres-db:5432/todo' \
               -e SPRING_DATASOURCE_USERNAME=postgres \
               -e SPRING_DATASOURCE_PASSWORD=postgres \
@@ -137,3 +136,6 @@ jobs:
               --network todo-network \
               --restart unless-stopped \
               mngerasimenko/todo-app:${{ github.sha }}
+
+            # Перезагрузка nginx-proxy для подхвата нового контейнера
+            docker exec nginx-proxy nginx -s reload 2>/dev/null || true

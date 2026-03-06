@@ -1,6 +1,49 @@
 services:
   # ========================================
-  # СЕРВИС 1: Spring Boot приложение todo
+  # СЕРВИС 1: Nginx reverse proxy (SSL termination)
+  # ========================================
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: nginx-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - certbot-conf:/etc/letsencrypt:ro
+      - certbot-www:/var/www/certbot:ro
+
+    depends_on:
+      - todo-app
+      - todo-web
+
+    networks:
+      - todo-network
+
+    restart: unless-stopped
+
+  # ========================================
+  # СЕРВИС 2: Certbot (автообновление SSL-сертификатов)
+  # ========================================
+  certbot:
+    image: certbot/certbot
+    container_name: certbot
+
+    volumes:
+      - certbot-conf:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+
+    # Проверка и обновление сертификатов каждые 12 часов
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done'"
+
+    networks:
+      - todo-network
+
+    restart: unless-stopped
+
+  # ========================================
+  # СЕРВИС 3: Spring Boot приложение todo
   # ========================================
   todo-app:
     image: todo-app:1.0
@@ -9,8 +52,7 @@ services:
       dockerfile: Dockerfile
 
     container_name: todo-app
-    ports:
-      - "8090:8090"
+    # Порты не пробрасываются наружу — доступ только через nginx-proxy
 
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-db:5432/todo
@@ -32,13 +74,12 @@ services:
     restart: unless-stopped
 
   # ========================================
-  # СЕРВИС 2: React UI (nginx)
+  # СЕРВИС 4: React UI (nginx)
   # ========================================
   todo-web:
     image: mngerasimenko/todo-web:latest
     container_name: todo-web
-    ports:
-      - "3000:80"
+    # Порты не пробрасываются наружу — доступ только через nginx-proxy
 
     depends_on:
       - todo-app
@@ -49,7 +90,7 @@ services:
     restart: unless-stopped
 
   # ========================================
-  # СЕРВИС 3: postgres база данных
+  # СЕРВИС 5: postgres база данных
   # ========================================
   postgres-db:
     image: postgres:17
@@ -85,8 +126,10 @@ networks:
 #    external: true
 
 # ========================================
-# ТОМЫ (для сохранения данных БД)
+# ТОМЫ
 # ========================================
 volumes:
   postgres-data:
   todo-logs:
+  certbot-conf:
+  certbot-www:
