@@ -1,13 +1,1418 @@
 {
   "info": {
     "_postman_id": "357d64d4-4d64-43ef-81e5-05f7e71a2490",
-    "name": "TodoList API",
-    "description": "Идемпотентная коллекция для тестирования REST API Todo List.\n\n**Особенности:**\n- Каждый запуск генерирует уникальный `runId` — имена пользователей и списков не конфликтуют\n- Создаётся второй пользователь, все операции выполняются с его данными\n- После тестов — cleanup: удаление задач, выход из списка\n- Коллекцию можно запускать повторно без ограничений\n\n**Запуск через Newman:**\n```\nnewman run postman/TodoList_API.postman_collection.json\n```\n\n**35 тестов:** App (2) + Auth (2) + Lists (2) + Second User (3) + Todos (9) + Users (6) + Cleanup (4) + Negative (7)",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    "name": "TodoList API - JWT Auth",
+    "description": "Коллекция для тестирования REST API Todo List с JWT аутентификацией.\n\n**Порядок выполнения:**\n1. Auth → Register (создать пользователя)\n2. Auth → Login (получить JWT токены)\n3. Lists → Create List (создать список, сохранится listId)\n4. Todos / Users / Lists (использовать access_token)\n\n**Переменные:**\n- `baseUrl`: http://localhost:8090\n- `accessToken`: автоматически сохраняется после login\n- `refreshToken`: автоматически сохраняется после login\n- `userId`: ID пользователя\n- `todoId`: ID задачи\n- `listId`: ID списка (сохраняется после создания списка)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "17385895"
   },
   "item": [
     {
-      "name": "1. App",
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Проверка успешной регистрации",
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has access_token\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.access_token).to.exist;",
+                  "    pm.expect(jsonData.refresh_token).to.exist;",
+                  "    ",
+                  "    // Сохранение токенов в переменные",
+                  "    pm.environment.set(\"accessToken\", jsonData.access_token);",
+                  "    pm.environment.set(\"refreshToken\", jsonData.refresh_token);",
+                  "    ",
+                  "    // Сохранение userId",
+                  "    pm.environment.set(\"userId\", jsonData.user.id);",
+                  "});",
+                  "",
+                  "pm.test(\"Token type is Bearer\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.token_type).to.eql(\"Bearer\");",
+                  "});",
+                  "",
+                  "pm.test(\"Response time is less than 2000ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test1@example.com\",\n  \"name\": \"testUser1\",\n  \"password\": \"testUser1\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Регистрация нового пользователя. Возвращает JWT токены.\n\n**Примечание:** Email и name должны быть уникальными."
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Проверка успешного входа",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has access_token\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.access_token).to.exist;",
+                  "    pm.expect(jsonData.refresh_token).to.exist;",
+                  "    ",
+                  "    // Автоматическое сохранение токенов",
+                  "    pm.environment.set(\"accessToken\", jsonData.access_token);",
+                  "    pm.environment.set(\"refreshToken\", jsonData.refresh_token);",
+                  "    ",
+                  "    // Сохранение userId",
+                  "    pm.environment.set(\"userId\", jsonData.user.id);",
+                  "});",
+                  "",
+                  "pm.test(\"Expires in 1 hour\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.expires_in).to.eql(3600);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"testUser1\",\n  \"password\": \"testUser1\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Вход пользователя. Возвращает JWT токены (access и refresh).\n\n**Токены автоматически сохраняются в переменные коллекции.**"
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"New tokens received\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.access_token).to.exist;",
+                  "    pm.expect(jsonData.refresh_token).to.exist;",
+                  "    ",
+                  "    // Обновление токенов",
+                  "    pm.environment.set(\"accessToken\", jsonData.access_token);",
+                  "    pm.environment.set(\"refreshToken\", jsonData.refresh_token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Обновление access токена с помощью refresh токена.\n\nИспользуется когда access токен истёк (время жизни 1 час)."
+          },
+          "response": []
+        }
+      ],
+      "description": "Эндпоинты аутентификации и регистрации"
+    },
+    {
+      "name": "Lists",
+      "item": [
+        {
+          "name": "Create List",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"List created successfully\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.id).to.exist;",
+                  "    pm.expect(jsonData.name).to.exist;",
+                  "    pm.expect(jsonData.role).to.eql(\"ADMIN\");",
+                  "    ",
+                  "    // Сохранение listId для дальнейших запросов",
+                  "    pm.environment.set(\"listId\", jsonData.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"МойСписок\",\n  \"password\": \"secret\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/lists",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lists"
+              ]
+            },
+            "description": "Создание нового списка.\n\nСоздатель автоматически получает роль `ADMIN`.\n\n**listId сохраняется автоматически в переменные.**\n\n**Ошибки:** `400` (название уже занято), `404` (пользователь не найден)"
+          },
+          "response": []
+        },
+        {
+          "name": "Join List",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Joined list successfully\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.id).to.exist;",
+                  "    pm.expect(jsonData.name).to.exist;",
+                  "    pm.expect(jsonData.role).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"МойСписок\",\n  \"password\": \"secret\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/lists/join",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lists",
+                "join"
+              ]
+            },
+            "description": "Вступление в существующий список по имени и паролю.\n\nЕсли пользователь уже является участником — возвращается его текущая роль без повторного добавления.\n\n**Ошибки:** `400` (список не найден, неверный пароль)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Lists",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is array\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test(\"Each list has id, name and role\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.length > 0) {",
+                  "        pm.expect(jsonData[0].id).to.exist;",
+                  "        pm.expect(jsonData[0].name).to.exist;",
+                  "        pm.expect(jsonData[0].role).to.exist;",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/lists",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lists"
+              ]
+            },
+            "description": "Получение списков текущего пользователя (определяется по JWT токену)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get List Members",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is array\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test(\"Each member has user_id, user_name and role\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.length > 0) {",
+                  "        pm.expect(jsonData[0].user_id).to.exist;",
+                  "        pm.expect(jsonData[0].user_name).to.exist;",
+                  "        pm.expect(jsonData[0].role).to.exist;",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/lists/{{listId}}/members",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lists",
+                "{{listId}}",
+                "members"
+              ]
+            },
+            "description": "Получение списка участников списка.\n\n**Доступ:** только для участников списка.\n\n**Ошибки:** `400` (не являетесь участником)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get List Todos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is array\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/lists/{{listId}}/todos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lists",
+                "{{listId}}",
+                "todos"
+              ]
+            },
+            "description": "Получение задач списка.\n\nВозвращает публичные задачи + приватные задачи текущего пользователя в этом списке.\n\n**Доступ:** только для участников списка.\n\n**Ошибки:** `400` (не являетесь участником)"
+          },
+          "response": []
+        },
+        {
+          "name": "Leave List",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () {",
+                  "    const res = pm.response.json();  ",
+                  "",
+                  "    pm.response.to.have.status(400);",
+                  "    pm.expect(pm.response.json()).to.have.property(\"error\");",
+                  "    pm.expect(res.error).to.eql(\"Bad Request\");",
+                  "    pm.expect(res.message).to.eql(\"Администратор не может покинуть список. Используйте удаление списка\");",
+                  "    ",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/lists/{{listId}}/leave",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lists",
+                "{{listId}}",
+                "leave"
+              ]
+            },
+            "description": "Выход из списка.\n\n⚠️ **Внимание:** При выходе автоматически удаляются все приватные задачи пользователя в данном списке.\n\n**Ошибки:** `400` (не являетесь участником)"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete List",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/lists/{{listId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lists",
+                "{{listId}}"
+              ]
+            },
+            "description": "Выход из списка.\n\n⚠️ **Внимание:** При выходе автоматически удаляются все приватные задачи пользователя в данном списке.\n\n**Ошибки:** `400` (не являетесь участником)"
+          },
+          "response": []
+        }
+      ],
+      "description": "Операции со списками задач (требуют JWT токен). Список — это общее пространство для совместного ведения задач.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Todos",
+      "item": [
+        {
+          "name": "Create List",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"List created successfully\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.id).to.exist;",
+                  "    pm.expect(jsonData.name).to.exist;",
+                  "    pm.expect(jsonData.role).to.eql(\"ADMIN\");",
+                  "    ",
+                  "    // Сохранение listId для дальнейших запросов",
+                  "    pm.environment.set(\"listId\", jsonData.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"МойСписок\",\n  \"password\": \"secret\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/lists",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lists"
+              ]
+            },
+            "description": "Создание нового списка.\n\nСоздатель автоматически получает роль `ADMIN`.\n\n**listId сохраняется автоматически в переменные.**\n\n**Ошибки:** `400` (название уже занято), `404` (пользователь не найден)"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Todo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Todo created successfully\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.id).to.exist;",
+                  "    pm.expect(jsonData.name).to.exist;",
+                  "    pm.expect(jsonData.done).to.eql(false);",
+                  "    pm.expect(jsonData.list_id).to.exist;",
+                  "    ",
+                  "    // Сохранение todoId для дальнейших запросов",
+                  "    pm.environment.set(\"todoId\", jsonData.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Купить молоко\",\n  \"user_id\": {{userId}},\n  \"list_id\": {{listId}},\n  \"is_private\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/todos/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "todos",
+                "create"
+              ]
+            },
+            "description": "Создание новой задачи.\n\n**Обязательные поля:** `name`, `user_id`, `list_id`\n\n**Требует JWT токен** в заголовке Authorization."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Private Todo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Private todo created\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.id).to.exist;",
+                  "    pm.expect(jsonData.is_private).to.eql(true);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Личная задача\",\n  \"user_id\": {{userId}},\n  \"list_id\": {{listId}},\n  \"is_private\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/todos/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "todos",
+                "create"
+              ]
+            },
+            "description": "Создание приватной задачи.\n\nПриватная задача видна только создателю — другие участники списка её не видят."
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Todos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is array\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/todos/all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "todos",
+                "all"
+              ]
+            },
+            "description": "Получение всех задач.\n\n**Требует JWT токен.**"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Todo by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Todo exists\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.id).to.exist;",
+                  "    pm.expect(jsonData.name).to.exist;",
+                  "    pm.expect(jsonData.list_id).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/todos/{{todoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "todos",
+                "{{todoId}}"
+              ]
+            },
+            "description": "Получение задачи по ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Todos by User ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is array\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/todos/user/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "todos",
+                "user",
+                "{{userId}}"
+              ]
+            },
+            "description": "Получение всех задач пользователя."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Todo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Todo updated\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.done).to.eql(true);",
+                  "    pm.expect(jsonData.completed_at).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Купить молоко (обновлено)\",\n  \"done\": true,\n  \"user_id\": {{userId}},\n  \"list_id\": {{listId}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/todos/{{todoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "todos",
+                "{{todoId}}"
+              ]
+            },
+            "description": "Обновление задачи.\n\nПри `done: true` автоматически устанавливается `completed_at`.\nПри `done: false` — `completed_at` и `completor_user_id` очищаются."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Todo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/todos/{{todoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "todos",
+                "{{todoId}}"
+              ]
+            },
+            "description": "Удаление задачи по ID.\n\n⚠️ **Осторожно:** Операция необратима!\n\n**Ошибки:** `404` (задача не найдена)"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete List",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/lists/{{listId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lists",
+                "{{listId}}"
+              ]
+            },
+            "description": "Выход из списка.\n\n⚠️ **Внимание:** При выходе автоматически удаляются все приватные задачи пользователя в данном списке.\n\n**Ошибки:** `400` (не являетесь участником)"
+          },
+          "response": []
+        }
+      ],
+      "description": "CRUD операции для задач (требуют JWT токен)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get All Users",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response is array\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "all"
+              ]
+            },
+            "description": "Получение списка всех пользователей."
+          },
+          "response": []
+        },
+        {
+          "name": "Get User by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"User exists\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.id).to.exist;",
+                  "    pm.expect(jsonData.name).to.exist;",
+                  "    pm.expect(jsonData.email).to.exist;",
+                  "    pm.expect(jsonData.created_task_color).to.exist;",
+                  "    pm.expect(jsonData.completed_task_color).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{userId}}"
+              ]
+            },
+            "description": "Получение пользователя по ID.\n\nОтвет включает `created_task_color` и `completed_task_color`."
+          },
+          "response": []
+        },
+        {
+          "name": "Create User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"User created\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.id).to.exist;",
+                  "    pm.expect(jsonData.name).to.exist;",
+                  "    pm.expect(jsonData.created_task_color).to.exist;",
+                  "    pm.expect(jsonData.completed_task_color).to.exist;",
+                  "    pm.environment.set(\"newUserId\", jsonData.id);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newuser@example.com\",\n  \"name\": \"newUser\",\n  \"password\": \"12345\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "create"
+              ]
+            },
+            "description": "Создание нового пользователя (через API, требует JWT).\n\n**Примечание:** Email и name должны быть уникальными."
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"updated@example.com\",\n  \"name\": \"updatedUser\",\n  \"password\": \"newpassword\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{newUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{newUserId}}"
+              ]
+            },
+            "description": "Обновление данных пользователя."
+          },
+          "response": []
+        },
+        {
+          "name": "Update User Colors",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Colors updated\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.created_task_color).to.eql(\"#FF0000\");",
+                  "    pm.expect(jsonData.completed_task_color).to.eql(\"#00FF00\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"created_task_color\": \"#FF0000\",\n  \"completed_task_color\": \"#00FF00\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{newUserId}}/colors",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{newUserId}}",
+                "colors"
+              ]
+            },
+            "description": "Обновление цветов задач пользователя.\n\n| Поле | Формат | Описание |\n|------|--------|----------|\n| created_task_color | #RRGGBB | Цвет иконки создаваемых задач |\n| completed_task_color | #RRGGBB | Цвет иконки выполненных задач |\n\n**Ошибки:** `400` (неверный формат HEX), `404` (пользователь не найден)"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{newUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{newUserId}}"
+              ]
+            },
+            "description": "Удаление пользователя.\n\n⚠️ **Осторожно:** Операция необратима!"
+          },
+          "response": []
+        }
+      ],
+      "description": "CRUD операции для пользователей (требуют JWT токен)"
+    },
+    {
+      "name": "App",
       "item": [
         {
           "name": "Get Status",
@@ -16,15 +1421,13 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 200', function () {",
+                  "pm.test(\"Status code is 200\", function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
                   "",
-                  "pm.test('Response has status=true and version', function () {",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json.status).to.eql(true);",
-                  "    pm.expect(json.version).to.be.a('string');",
-                  "    pm.expect(json.min_android_version).to.be.a('number');",
+                  "pm.test(\"Status is true\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(true);",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -36,10 +1439,17 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/status",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "status"]
-            }
-          }
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "status"
+              ]
+            },
+            "description": "Проверка статуса приложения.\n\n**Открытый эндпоинт** (не требует JWT)."
+          },
+          "response": []
         },
         {
           "name": "Get App Name",
@@ -48,14 +1458,13 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 200', function () {",
+                  "pm.test(\"Status code is 200\", function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
                   "",
-                  "pm.test('Response has appName', function () {",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json.appName).to.be.a('string');",
-                  "    pm.expect(json.appName).to.not.be.empty;",
+                  "pm.test(\"App name exists\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.appName).to.exist;",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -67,1120 +1476,23 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/appName",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "appName"]
-            }
-          }
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "appName"
+              ]
+            },
+            "description": "Получение названия приложения.\n\n**Открытый эндпоинт** (не требует JWT)."
+          },
+          "response": []
         }
-      ]
+      ],
+      "description": "Служебные эндпоинты приложения (открыты, не требуют JWT)"
     },
     {
-      "name": "2. Auth — testUser",
-      "item": [
-        {
-          "name": "Login",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Response has tokens and user', function () {",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json.access_token).to.be.a('string');",
-                  "    pm.expect(json.refresh_token).to.be.a('string');",
-                  "    pm.expect(json.user).to.be.an('object');",
-                  "    pm.expect(json.user.id).to.be.a('number');",
-                  "",
-                  "    pm.environment.set('accessToken', json.access_token);",
-                  "    pm.environment.set('refreshToken', json.refresh_token);",
-                  "    pm.environment.set('userId', json.user.id);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"username\": \"testUser\",\n  \"password\": \"testUser\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "login"]
-            }
-          }
-        },
-        {
-          "name": "Refresh Token",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('New access token received', function () {",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json.access_token).to.be.a('string');",
-                  "    pm.expect(json.refresh_token).to.be.a('string');",
-                  "",
-                  "    pm.environment.set('accessToken', json.access_token);",
-                  "    pm.environment.set('refreshToken', json.refresh_token);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/refresh",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "refresh"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "3. Lists — создание",
-      "item": [
-        {
-          "name": "Create List",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 201', function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "",
-                  "pm.test('List created with correct data', function () {",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json.id).to.be.a('number');",
-                  "    pm.expect(json.name).to.include('Test_');",
-                  "    pm.expect(json.role).to.eql('ADMIN');",
-                  "    pm.expect(json.created_at).to.be.a('string');",
-                  "",
-                  "    pm.environment.set('listId', json.id);",
-                  "    pm.environment.set('listName', json.name);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Test_{{runId}}\",\n  \"password\": \"secret\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/lists",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "lists"]
-            }
-          }
-        },
-        {
-          "name": "Get My Lists",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Response is array with our list', function () {",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json).to.be.an('array');",
-                  "    pm.expect(json.length).to.be.at.least(1);",
-                  "",
-                  "    var listName = pm.environment.get('listName');",
-                  "    var found = json.some(function(l) { return l.name === listName; });",
-                  "    pm.expect(found).to.be.true;",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/lists",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "lists"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "4. Second User",
-      "item": [
-        {
-          "name": "Register Second User",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 201', function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "",
-                  "pm.test('Second user registered', function () {",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json.access_token).to.be.a('string');",
-                  "    pm.expect(json.user).to.be.an('object');",
-                  "    pm.expect(json.user.id).to.be.a('number');",
-                  "",
-                  "    pm.environment.set('secondAccessToken', json.access_token);",
-                  "    pm.environment.set('secondUserId', json.user.id);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"runner_{{runId}}\",\n  \"email\": \"runner_{{runId}}@test.com\",\n  \"password\": \"runner123\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/register",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "register"]
-            }
-          }
-        },
-        {
-          "name": "Join List",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Joined with USER role', function () {",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json.role).to.eql('USER');",
-                  "    pm.expect(json.name).to.eql(pm.environment.get('listName'));",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{secondAccessToken}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"{{listName}}\",\n  \"password\": \"secret\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/lists/join",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "lists", "join"]
-            }
-          }
-        },
-        {
-          "name": "Get List Members",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('List has 2 members', function () {",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json).to.be.an('array');",
-                  "    pm.expect(json.length).to.eql(2);",
-                  "",
-                  "    var roles = json.map(function(m) { return m.role; });",
-                  "    pm.expect(roles).to.include('ADMIN');",
-                  "    pm.expect(roles).to.include('USER');",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/lists/{{listId}}/members",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "lists", "{{listId}}", "members"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "5. Todos — CRUD",
-      "item": [
-        {
-          "name": "Create Todo",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 201', function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "",
-                  "pm.test('Todo created', function () {",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json.id).to.be.a('number');",
-                  "    pm.expect(json.name).to.include('Todo_');",
-                  "    pm.expect(json.done).to.eql(false);",
-                  "    pm.expect(json.is_private).to.eql(false);",
-                  "",
-                  "    pm.environment.set('todoId', json.id);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{secondAccessToken}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Todo_{{runId}}\",\n  \"user_id\": {{secondUserId}},\n  \"list_id\": {{listId}},\n  \"is_private\": false\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/todos/create",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "todos", "create"]
-            }
-          }
-        },
-        {
-          "name": "Create Private Todo",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 201', function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "",
-                  "pm.test('Private todo created', function () {",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json.id).to.be.a('number');",
-                  "    pm.expect(json.is_private).to.eql(true);",
-                  "",
-                  "    pm.environment.set('privateTodoId', json.id);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{secondAccessToken}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Private_{{runId}}\",\n  \"user_id\": {{secondUserId}},\n  \"list_id\": {{listId}},\n  \"is_private\": true\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/todos/create",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "todos", "create"]
-            }
-          }
-        },
-        {
-          "name": "Get All Todos",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Response is array', function () {",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json).to.be.an('array');",
-                  "    pm.expect(json.length).to.be.at.least(1);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{secondAccessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/todos/all",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "todos", "all"]
-            }
-          }
-        },
-        {
-          "name": "Get Todo by ID",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Todo has correct fields', function () {",
-                  "    var json = pm.response.json();",
-                  "    var todoId = parseInt(pm.environment.get('todoId'));",
-                  "    pm.expect(json.id).to.eql(todoId);",
-                  "    pm.expect(json.name).to.include('Todo_');",
-                  "    pm.expect(json.list_id).to.be.a('number');",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{secondAccessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/todos/{{todoId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "todos", "{{todoId}}"]
-            }
-          }
-        },
-        {
-          "name": "Get Todos by User",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Response is array with user todos', function () {",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json).to.be.an('array');",
-                  "    pm.expect(json.length).to.be.at.least(1);",
-                  "",
-                  "    var secondUserId = parseInt(pm.environment.get('secondUserId'));",
-                  "    json.forEach(function(todo) {",
-                  "        pm.expect(todo.user_id).to.eql(secondUserId);",
-                  "    });",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{secondAccessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/todos/user/{{secondUserId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "todos", "user", "{{secondUserId}}"]
-            }
-          }
-        },
-        {
-          "name": "Update Todo",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Todo name updated', function () {",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json.name).to.include('Updated_');",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{secondAccessToken}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated_{{runId}}\",\n  \"user_id\": {{secondUserId}},\n  \"list_id\": {{listId}}\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/todos/{{todoId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "todos", "{{todoId}}"]
-            }
-          }
-        },
-        {
-          "name": "Mark as Done",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Todo marked as done', function () {",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json.done).to.eql(true);",
-                  "    pm.expect(json.completed_at).to.be.a('string');",
-                  "    pm.expect(json.completor_user_id).to.be.a('number');",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{secondAccessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/todos/{{todoId}}/done",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "todos", "{{todoId}}", "done"]
-            }
-          }
-        },
-        {
-          "name": "Mark as Undone",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Todo marked as undone', function () {",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json.done).to.eql(false);",
-                  "    pm.expect(json.completed_at).to.be.null;",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{secondAccessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/todos/{{todoId}}/undone",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "todos", "{{todoId}}", "undone"]
-            }
-          }
-        },
-        {
-          "name": "Get List Todos",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Response is array with list todos', function () {",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json).to.be.an('array');",
-                  "    pm.expect(json.length).to.be.at.least(1);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{secondAccessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/lists/{{listId}}/todos",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "lists", "{{listId}}", "todos"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "6. Users — операции",
-      "item": [
-        {
-          "name": "Get All Users",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Response is array with users', function () {",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json).to.be.an('array');",
-                  "    pm.expect(json.length).to.be.at.least(2);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/users/all",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "users", "all"]
-            }
-          }
-        },
-        {
-          "name": "Get User by ID",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('User has correct fields', function () {",
-                  "    var json = pm.response.json();",
-                  "    var secondUserId = parseInt(pm.environment.get('secondUserId'));",
-                  "    pm.expect(json.id).to.eql(secondUserId);",
-                  "    pm.expect(json.name).to.include('runner_');",
-                  "    pm.expect(json.email).to.include('@test.com');",
-                  "    pm.expect(json.created_task_color).to.match(/^#[0-9A-Fa-f]{6}$/);",
-                  "    pm.expect(json.completed_task_color).to.match(/^#[0-9A-Fa-f]{6}$/);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/users/{{secondUserId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "users", "{{secondUserId}}"]
-            }
-          }
-        },
-        {
-          "name": "Get Me",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Returns current user (secondUser)', function () {",
-                  "    var json = pm.response.json();",
-                  "    var secondUserId = parseInt(pm.environment.get('secondUserId'));",
-                  "    pm.expect(json.id).to.eql(secondUserId);",
-                  "    pm.expect(json.name).to.include('runner_');",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{secondAccessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/users/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "users", "me"]
-            }
-          }
-        },
-        {
-          "name": "Update User Colors",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Colors updated', function () {",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json.created_task_color).to.eql('#FF5733');",
-                  "    pm.expect(json.completed_task_color).to.eql('#28A745');",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"created_task_color\": \"#FF5733\",\n  \"completed_task_color\": \"#28A745\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/users/{{secondUserId}}/colors",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "users", "{{secondUserId}}", "colors"]
-            }
-          }
-        },
-        {
-          "name": "Create User",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 201', function () {",
-                  "    pm.response.to.have.status(201);",
-                  "});",
-                  "",
-                  "pm.test('Third user created', function () {",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json.id).to.be.a('number');",
-                  "    pm.expect(json.name).to.include('third_');",
-                  "",
-                  "    pm.environment.set('thirdUserId', json.id);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"third_{{runId}}\",\n  \"email\": \"third_{{runId}}@test.com\",\n  \"password\": \"third123\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/users/create",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "users", "create"]
-            }
-          }
-        },
-        {
-          "name": "Delete User (third)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('User deleted', function () {",
-                  "    var body = pm.response.text();",
-                  "    pm.expect(body).to.include('was deleted');",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/users/{{thirdUserId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "users", "{{thirdUserId}}"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "7. Cleanup",
-      "item": [
-        {
-          "name": "Delete Todo",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 204', function () {",
-                  "    pm.response.to.have.status(204);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{secondAccessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/todos/{{todoId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "todos", "{{todoId}}"]
-            }
-          }
-        },
-        {
-          "name": "Delete Private Todo",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 204', function () {",
-                  "    pm.response.to.have.status(204);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{secondAccessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/todos/{{privateTodoId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "todos", "{{privateTodoId}}"]
-            }
-          }
-        },
-        {
-          "name": "Leave List (second user)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 204', function () {",
-                  "    pm.response.to.have.status(204);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{secondAccessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/lists/{{listId}}/leave",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "lists", "{{listId}}", "leave"]
-            }
-          }
-        },
-        {
-          "name": "Leave List (testUser)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 204', function () {",
-                  "    pm.response.to.have.status(204);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/lists/{{listId}}/leave",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "lists", "{{listId}}", "leave"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "8. Negative Tests",
+      "name": "Negative Tests",
       "item": [
         {
           "name": "Unauthorized - No Token",
@@ -1189,7 +1501,7 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 401', function () {",
+                  "pm.test(\"Status code is 401\", function () {",
                   "    pm.response.to.have.status(401);",
                   "});"
                 ],
@@ -1202,19 +1514,27 @@
             "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/todos/all",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "todos", "all"]
-            }
-          }
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "todos",
+                "all"
+              ]
+            },
+            "description": "Попытка доступа к защищённому эндпоинту без JWT токена.\n\n**Ожидается:** 401 Unauthorized"
+          },
+          "response": []
         },
         {
-          "name": "Invalid Credentials",
+          "name": "Invalid Credentials - Login",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 401', function () {",
+                  "pm.test(\"Status code is 401\", function () {",
                   "    pm.response.to.have.status(401);",
                   "});"
                 ],
@@ -1232,19 +1552,22 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"testUser\",\n  \"password\": \"wrongPassword\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
+              "raw": "{\n  \"username\": \"invalidUser\",\n  \"password\": \"wrongPassword\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "auth", "login"]
-            }
-          }
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Попытка входа с неверными учётными данными.\n\n**Ожидается:** 401 Unauthorized"
+          },
+          "response": []
         },
         {
           "name": "Invalid Token",
@@ -1253,7 +1576,7 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 401', function () {",
+                  "pm.test(\"Status code is 401\", function () {",
                   "    pm.response.to.have.status(401);",
                   "});"
                 ],
@@ -1262,28 +1585,41 @@
             }
           ],
           "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "invalid.jwt.token",
+                  "type": "string"
+                }
+              ]
+            },
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer invalid.token.here"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/todos/all",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "todos", "all"]
-            }
-          }
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "todos",
+                "all"
+              ]
+            },
+            "description": "Попытка доступа с невалидным JWT токеном.\n\n**Ожидается:** 401 Unauthorized"
+          },
+          "response": []
         },
         {
-          "name": "Validation Error",
+          "name": "Validation Error - Create Todo",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 400', function () {",
+                  "pm.test(\"Status code is 400\", function () {",
                   "    pm.response.to.have.status(400);",
                   "});"
                 ],
@@ -1292,32 +1628,41 @@
             }
           ],
           "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"\",\n  \"user_id\": {{userId}},\n  \"list_id\": {{listId}}\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
+              "raw": "{\n  \"name\": \"\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/todos/create",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "todos", "create"]
-            }
-          }
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "todos",
+                "create"
+              ]
+            },
+            "description": "Попытка создать задачу с невалидными данными (пустое name).\n\n**Ожидается:** 400 Bad Request"
+          },
+          "response": []
         },
         {
           "name": "Not Found - Todo",
@@ -1326,7 +1671,7 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 404', function () {",
+                  "pm.test(\"Status code is 404\", function () {",
                   "    pm.response.to.have.status(404);",
                   "});"
                 ],
@@ -1335,28 +1680,41 @@
             }
           ],
           "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/todos/99999",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "todos", "99999"]
-            }
-          }
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "todos",
+                "99999"
+              ]
+            },
+            "description": "Попытка получить несуществующую задачу.\n\n**Ожидается:** 404 Not Found"
+          },
+          "response": []
         },
         {
-          "name": "Wrong List Password",
+          "name": "Wrong List Password - Join",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 400', function () {",
+                  "pm.test(\"Status code is 400\", function () {",
                   "    pm.response.to.have.status(400);",
                   "});"
                 ],
@@ -1365,88 +1723,206 @@
             }
           ],
           "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"{{listName}}\",\n  \"password\": \"wrongPassword\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
+              "raw": "{\n  \"name\": \"МойСписок\",\n  \"password\": \"wrongpassword\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/lists/join",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "lists", "join"]
-            }
-          }
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lists",
+                "join"
+              ]
+            },
+            "description": "Попытка вступить в список с неверным паролем.\n\n**Ожидается:** 400 Bad Request"
+          },
+          "response": []
         },
         {
-          "name": "Invalid HEX Color",
+          "name": "Invalid HEX Color - Update Colors",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 400', function () {",
+                  "pm.test(\"Status code is 400\", function () {",
                   "    pm.response.to.have.status(400);",
-                  "});",
-                  "",
-                  "// Очистка переменных для следующего запуска",
-                  "pm.environment.set('runId', '');",
-                  "pm.environment.set('accessToken', '');",
-                  "pm.environment.set('refreshToken', '');",
-                  "pm.environment.set('userId', '');",
-                  "pm.environment.set('listId', '');",
-                  "pm.environment.set('listName', '');",
-                  "pm.environment.set('secondAccessToken', '');",
-                  "pm.environment.set('secondUserId', '');",
-                  "pm.environment.set('todoId', '');",
-                  "pm.environment.set('privateTodoId', '');",
-                  "pm.environment.set('thirdUserId', '');"
+                  "});"
                 ],
                 "type": "text/javascript"
               }
             }
           ],
           "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "method": "PUT",
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"created_task_color\": \"not-hex\",\n  \"completed_task_color\": \"#ZZZ\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
+              "raw": "{\n  \"created_task_color\": \"not-a-hex\",\n  \"completed_task_color\": \"#00FF00\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/users/{{userId}}/colors",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "users", "{{userId}}", "colors"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{userId}}",
+                "colors"
+              ]
+            },
+            "description": "Попытка обновить цвет с невалидным HEX-значением.\n\n**Ожидается:** 400 Bad Request"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Todo List not found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test(\"Todo created successfully\", function () {",
+                  "    const res = pm.response.json(); ",
+                  "    pm.expect(pm.response.json()).to.have.property(\"error\");",
+                  "    pm.expect(res.error).to.eql(\"Bad Request\");",
+                  "    pm.expect(res.message).to.contain(\"List not found with\");",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
             }
-          }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Купить молоко\",\n  \"user_id\": {{userId}},\n  \"list_id\": {{listId}},\n  \"is_private\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/todos/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "todos",
+                "create"
+              ]
+            },
+            "description": "Создание новой задачи.\n\n**Обязательные поля:** `name`, `user_id`, `list_id`\n\n**Требует JWT токен** в заголовке Authorization."
+          },
+          "response": []
+        }
+      ],
+      "description": "Негативные тесты (проверка обработки ошибок)"
+    },
+    {
+      "name": "Clean",
+      "item": [
+        {
+          "name": "Delete user",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{userId}}"
+              ]
+            },
+            "description": "Удаление задачи по ID.\n\n⚠️ **Осторожно:** Операция необратима!\n\n**Ошибки:** `404` (задача не найдена)"
+          },
+          "response": []
         }
       ]
     }
@@ -1457,10 +1933,16 @@
       "script": {
         "type": "text/javascript",
         "exec": [
-          "// Уникальный суффикс для идемпотентности",
-          "if (!pm.environment.get('runId') || pm.environment.get('runId') === '') {",
-          "    pm.environment.set('runId', Date.now().toString().slice(-6));",
-          "}"
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
         ]
       }
     }
@@ -1468,51 +1950,33 @@
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:8090"
+      "value": "http://localhost:8090",
+      "type": "string"
     },
     {
       "key": "accessToken",
-      "value": ""
+      "value": "",
+      "type": "string"
     },
     {
       "key": "refreshToken",
-      "value": ""
+      "value": "",
+      "type": "string"
     },
     {
       "key": "userId",
-      "value": ""
-    },
-    {
-      "key": "listId",
-      "value": ""
-    },
-    {
-      "key": "listName",
-      "value": ""
-    },
-    {
-      "key": "secondAccessToken",
-      "value": ""
-    },
-    {
-      "key": "secondUserId",
-      "value": ""
+      "value": "",
+      "type": "string"
     },
     {
       "key": "todoId",
-      "value": ""
+      "value": "",
+      "type": "string"
     },
     {
-      "key": "privateTodoId",
-      "value": ""
-    },
-    {
-      "key": "thirdUserId",
-      "value": ""
-    },
-    {
-      "key": "runId",
-      "value": ""
+      "key": "listId",
+      "value": "",
+      "type": "string"
     }
   ]
 }
