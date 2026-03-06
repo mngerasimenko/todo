@@ -123,13 +123,17 @@ services:
 # ========================================
 networks:
   todo-network:
-#    external: true
+    external: true
 
 # ========================================
 # ТОМЫ
 # ========================================
 volumes:
   postgres-data:
+    external: true
   todo-logs:
+    external: true
   certbot-conf:
+    external: true
   certbot-www:
+    external: true
