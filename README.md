@@ -227,7 +227,6 @@ postman/             Postman-коллекция + окружения
 ```
 
 ---
-
 ## Связанные проекты
 
 - **[todolist-web](https://github.com/mngerasimenko/todolist-web)** — React SPA (TypeScript + Vite + Tailwind CSS)
