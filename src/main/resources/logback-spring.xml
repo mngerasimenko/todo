@@ -42,6 +42,9 @@
 
         <logger name="ru.mngerasimenko.todolist" level="DEBUG"/>
         <logger name="org.hibernate.SQL" level="DEBUG"/>
+        <!-- Логирование пула соединений и PostgreSQL-драйвера -->
+        <logger name="com.zaxxer.hikari" level="INFO"/>
+        <logger name="org.postgresql" level="WARN"/>
         <root level="WARN">
             <appender-ref ref="CONSOLE"/>
             <appender-ref ref="FILE"/>
