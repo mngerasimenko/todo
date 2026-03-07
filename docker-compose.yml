@@ -59,7 +59,7 @@ services:
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=postgres
       - SPRING_PROFILES_ACTIVE=production
-      - JAVA_TOOL_OPTIONS=-Xmx256m -Xms128m
+      - JAVA_TOOL_OPTIONS=-Xmx160m -Xms160m
       - APP_VERSION=${APP_VERSION:-0.0.1}
 
     volumes:
