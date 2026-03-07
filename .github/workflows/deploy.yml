@@ -84,7 +84,19 @@ jobs:
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Push to Docker Hub
-        run: docker push mngerasimenko/todo-app:${{ github.sha }}
+        run: |
+          docker tag mngerasimenko/todo-app:${{ github.sha }} mngerasimenko/todo-app:latest
+          docker push mngerasimenko/todo-app:${{ github.sha }}
+          docker push mngerasimenko/todo-app:latest
+
+      - name: Copy docker-compose.yml to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "docker-compose.yml"
+          target: "/root/todo/"
 
       - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -93,53 +105,24 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /root
+            cd /root/todo
 
-            # Создаём сеть, если не существует
+            # Создаём сеть и volumes, если не существуют
             docker network create todo-network 2>/dev/null || true
+            docker volume create postgres-data 2>/dev/null || true
+            docker volume create todo-logs 2>/dev/null || true
+            docker volume create certbot-conf 2>/dev/null || true
+            docker volume create certbot-www 2>/dev/null || true
 
-            # Запускаем/перезапускаем PostgreSQL
-            if [ ! "$(docker ps -q -f name=postgres-db)" ]; then
-              if [ "$(docker ps -aq -f status=exited -f name=postgres-db)" ]; then
-                docker rm postgres-db
-              fi
-              docker run -d \
-                --name postgres-db \
-                -e POSTGRES_DB=todo \
-                -e POSTGRES_USER=postgres \
-                -e POSTGRES_PASSWORD=postgres \
-                -v postgres-data:/var/lib/postgresql/data \
-                --network todo-network \
-                --restart unless-stopped \
-                postgres:17
-            fi
+            # Обновляем образ приложения
+            docker compose pull todo-app
 
-            # Ожидание готовности PostgreSQL
-            for i in $(seq 1 30); do
-              docker exec postgres-db pg_isready -U postgres && break
-              echo "Ожидание PostgreSQL... ($i/30)"
-              sleep 2
-            done
+            # Перезапуск через compose (depends_on гарантирует здоровый postgres)
+            APP_VERSION=${{ env.APP_VERSION_MAJOR }}.${{ env.APP_VERSION_MINOR }}.${{ env.APP_PATCH }} \
+              docker compose up -d todo-app
 
-            # Остановка старого приложения
-            docker pull mngerasimenko/todo-app:${{ github.sha }}
-            docker stop todo-app 2>/dev/null || true
-            docker rm todo-app 2>/dev/null || true
-            docker run -d \
-              --name todo-app \
-              -e SPRING_DATASOURCE_URL='jdbc:postgresql://postgres-db:5432/todo' \
-              -e SPRING_DATASOURCE_USERNAME=postgres \
-              -e SPRING_DATASOURCE_PASSWORD=postgres \
-              -e SPRING_PROFILES_ACTIVE=production \
-              -e JAVA_TOOL_OPTIONS='-Xmx256m -Xms128m' \
-              -e APP_VERSION=${{ env.APP_VERSION_MAJOR }}.${{ env.APP_VERSION_MINOR }}.${{ env.APP_PATCH }} \
-              -v todo-logs:/todo/logs \
-              --network todo-network \
-              --restart unless-stopped \
-              mngerasimenko/todo-app:${{ github.sha }}
-
-            # Очистка старых образов приложения
-            docker images --format '{{.Repository}}:{{.Tag}}' | grep 'mngerasimenko/todo-app:' | grep -v '${{ github.sha }}' | xargs -r docker rmi -f 2>/dev/null || true
+            # Очистка неиспользуемых образов
+            docker image prune -f 2>/dev/null || true
 
             # Перезагрузка nginx-proxy для подхвата нового контейнера
             docker exec nginx-proxy nginx -s reload 2>/dev/null || true

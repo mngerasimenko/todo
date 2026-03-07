@@ -46,7 +46,7 @@ services:
   # СЕРВИС 3: Spring Boot приложение todo
   # ========================================
   todo-app:
-    image: todo-app:1.0
+    image: mngerasimenko/todo-app:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -59,6 +59,8 @@ services:
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=postgres
       - SPRING_PROFILES_ACTIVE=production
+      - JAVA_TOOL_OPTIONS=-Xmx256m -Xms128m
+      - APP_VERSION=${APP_VERSION:-0.0.1}
 
     volumes:
       - todo-logs:/todo/logs
