@@ -183,10 +183,11 @@ mvn test -Pintegration
 - Нагрузочные тесты (3 шт.) запускаются отдельно: `mvn test -Pintegration` (требуют Docker)
 
 **Этап 2 — Деплой** (только push в master):
-- Сборка JAR + Docker-образ
-- Push в Docker Hub (`mngerasimenko/todo-app`)
+- Сборка JAR + Docker-образ → push в Docker Hub (`mngerasimenko/todo-app:{sha}` + `latest`)
+- SCP `docker-compose.yml` на сервер
+- `docker compose pull todo-app` → `docker compose up -d todo-app`
 - Миграция БД через Liquibase (автоматически при старте приложения)
-- Перезапуск контейнера через SSH
+- `depends_on: service_healthy` гарантирует готовность PostgreSQL
 - Версия приложения: `APP_VERSION_MAJOR.APP_VERSION_MINOR.github.run_number` (автоинкремент PATCH)
 
 Защита ветки master: обязательный PR + успешные тесты.
