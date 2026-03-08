@@ -108,11 +108,13 @@ services:
     # Оптимизация памяти для серверов с 1GB RAM
     command: >
       postgres
-      -c shared_buffers=64MB
-      -c work_mem=2MB
-      -c maintenance_work_mem=32MB
-      -c effective_cache_size=256MB
-      -c max_connections=50
+      -c shared_buffers=32MB
+      -c work_mem=1MB
+      -c maintenance_work_mem=16MB
+      -c effective_cache_size=128MB
+      -c max_connections=20
+
+    mem_limit: 256m
 
     volumes:
       - postgres-data:/var/lib/postgresql/data
