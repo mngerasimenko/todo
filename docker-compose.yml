@@ -118,9 +118,9 @@ services:
       - todo-network
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres && PGPASSWORD=$${POSTGRES_PASSWORD} psql -h 127.0.0.1 -U postgres -d todo -c 'SELECT 1' -q 2>/dev/null || psql -U postgres -c \"ALTER USER postgres PASSWORD '$${POSTGRES_PASSWORD}'\""]
+      test: ["CMD-SHELL", "pg_isready -U postgres && psql -h 127.0.0.1 -U postgres -d todo -c 'SELECT 1' -q || (sed -i 's/scram-sha-256/trust/' /var/lib/postgresql/data/pg_hba.conf && su postgres -c 'pg_ctl reload -D /var/lib/postgresql/data' && false)"]
       interval: 30s
-      timeout: 5s
+      timeout: 10s
       retries: 10
       start_period: 10s
 
