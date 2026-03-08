@@ -29,3 +29,6 @@ build/
 !**/src/test/**/build/
 
 /node_modules/
+
+### Monitoring secrets ###
+monitoring/monitor.conf

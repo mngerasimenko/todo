@@ -41,6 +41,7 @@ REST API бэкенд для совместного управления спи�
 - Защита от race conditions (TOCTOU) — атомарные операции через UNIQUE constraints
 - Миграции БД через Liquibase (безопасно для существующих данных)
 - Автоматический CI/CD через GitHub Actions
+- Мониторинг сервера через Telegram-бот (алерты + интерактивные команды)
 - Интерактивная документация API (Swagger UI / OpenAPI 3)
 - 201 unit-тест с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
 
@@ -194,6 +195,29 @@ mvn test -Pintegration
 
 ---
 
+## Мониторинг сервера
+
+Telegram-бот для мониторинга состояния сервера. Работает в двух режимах:
+
+**Автоматические алерты** (cron, каждые 5 минут):
+- RAM > 80%, Swap > 50%, Disk > 85%
+- Контейнер упал или API недоступен
+- PostgreSQL не принимает соединения
+
+**Интерактивные команды бота:**
+
+| Команда | Описание |
+|---------|----------|
+| `/status` | Полный отчёт (RAM, Swap, Disk, контейнеры, API) |
+| `/restart [контейнер]` | Перезапустить контейнер |
+| `/logs [N]` | Последние N строк логов |
+| `/errors` | Последние ошибки из логов |
+| `/help` | Справка |
+
+Конфигурация: `monitoring/monitor.conf` (Telegram Bot Token + Chat ID, не коммитится). Шаблон: `monitoring/monitor.conf.example`.
+
+---
+
 ## Первоначальная настройка сервера
 
 ```bash
@@ -226,6 +250,7 @@ src/main/java/ru/mngerasimenko/todolist/
 src/main/resources/db/migration/   Liquibase-миграции (master + 5 changeset-файлов)
 src/test/java/       201+ тестов (controller, service, repository, mapper, concurrency)
 postman/             Postman-коллекция + окружения
+monitoring/          Telegram-мониторинг (скрипты, systemd-сервис, конфиг)
 ```
 
 ---

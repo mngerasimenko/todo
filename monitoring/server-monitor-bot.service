@@ -1,0 +1,13 @@
+[Unit]
+Description=Telegram Server Monitor Bot
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /root/monitoring/telegram-bot.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
