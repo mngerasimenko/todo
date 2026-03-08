@@ -7,7 +7,7 @@ source "${SCRIPT_DIR}/monitor.conf"
 ALERT_STATE_FILE="/tmp/server-monitor-alert-state"
 
 # Пороги
-RAM_WARN=80        # % RAM
+RAM_WARN=90        # % RAM
 SWAP_WARN=50       # % Swap
 DISK_WARN=85       # % Disk
 
