@@ -104,12 +104,15 @@ services:
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=todo
       - POSTGRES_USER=postgres
-      # Оптимизация памяти для серверов с 1GB RAM
-      - POSTGRES_SHARED_BUFFERS=64MB
-      - POSTGRES_WORK_MEM=2MB
-      - POSTGRES_MAINTENANCE_WORK_MEM=32MB
-      - POSTGRES_EFFECTIVE_CACHE_SIZE=256MB
-      - POSTGRES_MAX_CONNECTIONS=50
+
+    # Оптимизация памяти для серверов с 1GB RAM
+    command: >
+      postgres
+      -c shared_buffers=64MB
+      -c work_mem=2MB
+      -c maintenance_work_mem=32MB
+      -c effective_cache_size=256MB
+      -c max_connections=50
 
     volumes:
       - postgres-data:/var/lib/postgresql/data
