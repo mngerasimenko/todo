@@ -6,11 +6,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/monitor.conf"
 ALERT_STATE_FILE="/tmp/server-monitor-alert-state"
 
-# Пороги
-RAM_WARN=90        # % RAM
-SWAP_WARN=50       # % Swap
-DISK_WARN=85       # % Disk
-
 send_telegram() {
     local message="$1"
     curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
@@ -28,7 +23,7 @@ should_alert() {
     if [ -f "$state_file" ]; then
         local last_alert=$(cat "$state_file")
         local diff=$((now - last_alert))
-        if [ "$diff" -lt 1800 ]; then
+        if [ "$diff" -lt "${ALERT_COOLDOWN:-1800}" ]; then
             return 1  # Ещё рано повторять
         fi
     fi
@@ -83,7 +78,7 @@ if [ "$disk_percent" -ge "$DISK_WARN" ]; then
 fi
 
 # === 4. Проверка контейнеров ===
-containers="todo-app postgres-db nginx-proxy todo-web"
+containers="${MONITOR_CONTAINERS:-todo-app postgres-db nginx-proxy todo-web}"
 for container in $containers; do
     status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
     if [ "$status" != "running" ]; then

@@ -1,2 +1,13 @@
 TELEGRAM_BOT_TOKEN="your-bot-token-here"
 TELEGRAM_CHAT_ID="your-chat-id-here"
+
+# Alert thresholds
+RAM_WARN=80        # % RAM usage
+SWAP_WARN=50       # % Swap usage
+DISK_WARN=85       # % Disk usage
+
+# Alert cooldown (seconds) - don't repeat same alert within this period
+ALERT_COOLDOWN=1800
+
+# Containers to monitor
+MONITOR_CONTAINERS="todo-app postgres-db nginx-proxy todo-web"

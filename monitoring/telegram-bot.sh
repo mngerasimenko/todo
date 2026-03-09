@@ -149,6 +149,20 @@ cmd_errors() {
 <pre>${errors}</pre>"
 }
 
+# Текущие настройки
+cmd_config() {
+    local chat_id="$1"
+    send_message "$chat_id" "⚙️ <b>Настройки алертов:</b>
+
+<b>RAM:</b> ${RAM_WARN:-80}%
+<b>Swap:</b> ${SWAP_WARN:-50}%
+<b>Disk:</b> ${DISK_WARN:-85}%
+<b>Cooldown:</b> $((${ALERT_COOLDOWN:-1800} / 60)) мин
+<b>Контейнеры:</b> ${MONITOR_CONTAINERS:-todo-app postgres-db nginx-proxy todo-web}
+
+Файл: /root/monitoring/monitor.conf"
+}
+
 # Справка
 cmd_help() {
     local chat_id="$1"
@@ -158,6 +172,7 @@ cmd_help() {
 /restart [контейнер] — перезапустить контейнер
 /logs [N] — последние N строк логов (по умолч. 20)
 /errors — последние ошибки из логов
+/config — настройки алертов
 /help — эта справка
 
 <b>Контейнеры:</b> todo-app, postgres-db, nginx-proxy, todo-web, certbot"
@@ -184,6 +199,7 @@ process_update() {
         /restart)  cmd_restart "$chat_id" "$arg" ;;
         /logs)     cmd_logs "$chat_id" "$arg" ;;
         /errors)   cmd_errors "$chat_id" ;;
+        /config)   cmd_config "$chat_id" ;;
         /help|/start) cmd_help "$chat_id" ;;
     esac
 }
