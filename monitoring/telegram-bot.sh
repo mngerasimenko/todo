@@ -9,6 +9,10 @@ source "${SCRIPT_DIR}/monitor.conf"
 OFFSET_FILE="/tmp/telegram-bot-offset"
 POLL_INTERVAL=2
 
+reload_config() {
+    source "${SCRIPT_DIR}/monitor.conf"
+}
+
 send_message() {
     local chat_id="$1"
     local text="$2"
@@ -193,6 +197,8 @@ process_update() {
 
     local cmd=$(echo "$text" | awk '{print $1}')
     local arg=$(echo "$text" | awk '{print $2}')
+
+    reload_config
 
     case "$cmd" in
         /status)   cmd_status "$chat_id" ;;
