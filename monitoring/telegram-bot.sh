@@ -67,6 +67,7 @@ cmd_status() {
     fi
 
     local pg_connections=$(docker exec postgres-db psql -U postgres -t -c "SELECT count(*) FROM pg_stat_activity;" 2>/dev/null | tr -d ' ')
+    local pg_max=$(docker exec postgres-db psql -U postgres -t -c "SHOW max_connections;" 2>/dev/null | tr -d ' ')
 
     send_message "$chat_id" "📊 <b>Статус: ${hostname}</b>
 📅 ${timestamp}
@@ -83,7 +84,7 @@ cmd_status() {
 ${docker_mem}
 
 <b>API:</b> ${api_status}
-<b>PG connections:</b> ${pg_connections:-N/A}/50"
+<b>PG connections:</b> ${pg_connections:-N/A}/${pg_max:-?}"
 }
 
 # Перезапуск контейнера
