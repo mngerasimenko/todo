@@ -44,7 +44,8 @@ REST API бэкенд для совместного управления спи�
 - Автоматический CI/CD через GitHub Actions
 - Мониторинг сервера через Telegram-бот (алерты + интерактивные команды)
 - Интерактивная документация API (Swagger UI / OpenAPI 3)
-- 201 unit-тест с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
+- Контроль доступа: изменение и удаление аккаунта только владельцем
+- 205 unit-тестов с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
 
 ---
 
@@ -110,9 +111,9 @@ REST API бэкенд для совместного управления спи�
 | GET | `/api/users/all` | Все пользователи |
 | GET | `/api/users/me` | Текущий пользователь (по JWT) |
 | GET | `/api/users/{id}` | Пользователь по ID |
-| PUT | `/api/users/{id}` | Обновить пользователя |
-| PUT | `/api/users/{id}/colors` | Обновить цвета задач |
-| DELETE | `/api/users/{id}` | Удалить пользователя |
+| PUT | `/api/users/{id}` | Обновить пользователя (только свой) |
+| PUT | `/api/users/{id}/colors` | Обновить цвета задач (только свой) |
+| DELETE | `/api/users/{id}` | Удалить пользователя (только свой) |
 
 ### Служебные
 
@@ -161,7 +162,7 @@ docker compose down
 ### Тесты
 
 ```bash
-# Unit-тесты (201 тест, без Docker)
+# Unit-тесты (205 тестов, без Docker)
 mvn test
 
 # С отчётом покрытия
@@ -181,7 +182,7 @@ mvn test -Pintegration
 Проект использует пайплайн `.github/workflows/deploy.yml`:
 
 **Этап 1 — Тесты** (все PR и push в master):
-- 201 unit-тест + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
+- 205 unit-тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
 - Нагрузочные тесты (3 шт.) запускаются отдельно: `mvn test -Pintegration` (требуют Docker)
 
 **Этап 2 — Деплой** (только push в master):
@@ -249,7 +250,7 @@ src/main/java/ru/mngerasimenko/todolist/
 └── TodolistApplication.java
 
 src/main/resources/db/migration/   Liquibase-миграции (master + 5 changeset-файлов)
-src/test/java/       201+ тестов (controller, service, repository, mapper, concurrency)
+src/test/java/       205+ тестов (controller, service, repository, mapper, concurrency)
 postman/             Postman-коллекция + окружения
 monitoring/          Telegram-мониторинг (скрипты, systemd-сервис, конфиг)
 ```

@@ -1189,6 +1189,19 @@
           "name": "Create User",
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Уникальное имя для избежания конфликтов",
+                  "var runId = pm.environment.get(\"runId\");",
+                  "if (!runId) { runId = Date.now().toString().slice(-6); pm.environment.set(\"runId\", runId); }",
+                  "pm.environment.set(\"thirdUserName\", \"third_\" + runId);",
+                  "pm.environment.set(\"thirdUserEmail\", \"third_\" + runId + \"@example.com\");"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "exec": [
@@ -1196,31 +1209,22 @@
                   "    pm.response.to.have.status(201);",
                   "});",
                   "",
-                  "pm.test(\"User created\", function () {",
+                  "pm.test(\"User created with tokens\", function () {",
                   "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.id).to.exist;",
-                  "    pm.expect(jsonData.name).to.exist;",
-                  "    pm.expect(jsonData.created_task_color).to.exist;",
-                  "    pm.expect(jsonData.completed_task_color).to.exist;",
-                  "    pm.environment.set(\"newUserId\", jsonData.id);",
+                  "    pm.expect(jsonData.access_token).to.exist;",
+                  "    pm.expect(jsonData.user).to.exist;",
+                  "    pm.expect(jsonData.user.id).to.exist;",
+                  "    pm.environment.set(\"newUserId\", jsonData.user.id);",
+                  "    pm.environment.set(\"newAccessToken\", jsonData.access_token);",
                   "});"
                 ],
-                "type": "text/javascript",
-                "packages": {},
-                "requests": {}
+                "type": "text/javascript"
               }
             }
           ],
           "request": {
             "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}",
-                  "type": "string"
-                }
-              ]
+              "type": "noauth"
             },
             "method": "POST",
             "header": [
@@ -1231,17 +1235,17 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"newuser@example.com\",\n  \"name\": \"newUser\",\n  \"password\": \"12345\"\n}"
+              "raw": "{\n  \"email\": \"{{thirdUserEmail}}\",\n  \"name\": \"{{thirdUserName}}\",\n  \"password\": \"12345\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/users/create",
+              "raw": "{{baseUrl}}/api/auth/register",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "users",
-                "create"
+                "auth",
+                "register"
               ]
             },
             "description": "Создание нового пользователя (через API, требует JWT).\n\n**Примечание:** Email и name должны быть уникальными."
@@ -1257,11 +1261,15 @@
                 "exec": [
                   "pm.test(\"Status code is 200\", function () {",
                   "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"User updated\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.id).to.exist;",
+                  "    pm.expect(jsonData.email).to.include(\"updated_\");",
                   "});"
                 ],
-                "type": "text/javascript",
-                "packages": {},
-                "requests": {}
+                "type": "text/javascript"
               }
             }
           ],
@@ -1271,7 +1279,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}",
+                  "value": "{{newAccessToken}}",
                   "type": "string"
                 }
               ]
@@ -1285,7 +1293,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"updated@example.com\",\n  \"name\": \"updatedUser\",\n  \"password\": \"newpassword\"\n}"
+              "raw": "{\n  \"email\": \"updated_{{thirdUserName}}@example.com\",\n  \"name\": \"{{thirdUserName}}\",\n  \"password\": \"newpassword\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/users/{{newUserId}}",
@@ -1331,7 +1339,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}",
+                  "value": "{{newAccessToken}}",
                   "type": "string"
                 }
               ]
@@ -1370,13 +1378,17 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 200\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});"
+                  "pm.test(\"Status code is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "",
+                  "// Очистка переменных третьего пользователя",
+                  "pm.environment.unset(\"newUserId\");",
+                  "pm.environment.unset(\"newAccessToken\");",
+                  "pm.environment.unset(\"thirdUserName\");",
+                  "pm.environment.unset(\"thirdUserEmail\");"
                 ],
-                "type": "text/javascript",
-                "packages": {},
-                "requests": {}
+                "type": "text/javascript"
               }
             }
           ],
@@ -1386,7 +1398,7 @@
               "bearer": [
                 {
                   "key": "token",
-                  "value": "{{accessToken}}",
+                  "value": "{{newAccessToken}}",
                   "type": "string"
                 }
               ]
@@ -1887,12 +1899,10 @@
               "script": {
                 "exec": [
                   "pm.test(\"Status code is 204\", function () {",
-                  "    pm.response.to.have.status(200);",
+                  "    pm.response.to.have.status(204);",
                   "});"
                 ],
-                "type": "text/javascript",
-                "packages": {},
-                "requests": {}
+                "type": "text/javascript"
               }
             }
           ],

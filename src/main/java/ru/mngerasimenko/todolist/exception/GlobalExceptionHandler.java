@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -110,6 +111,15 @@ public class GlobalExceptionHandler {
         log.warn("Конфликт оптимистичной блокировки: {}", ex.getMessage());
         return createErrorResponse(HttpStatus.CONFLICT, "Conflict",
                 "Данные были изменены другим пользователем. Пожалуйста, повторите запрос.");
+    }
+
+    /**
+     * Обрабатывает отказ в доступе — пользователь пытается изменить чужие данные (HTTP 403).
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException ex) {
+        log.warn("Access denied: {}", ex.getMessage());
+        return createErrorResponse(HttpStatus.FORBIDDEN, "Forbidden", ex.getMessage());
     }
 
     /**

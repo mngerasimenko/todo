@@ -213,10 +213,14 @@ class UserRestControllerTest {
         verify(userService, times(1)).getUserById(999L);
     }
 
+    // === Тесты updateUser с проверкой прав доступа ===
 
     @Test
-    @WithMockUser(username = "user", roles = {"USER"})
-    void updateUser_WithValidIdAndRequest_ReturnsUpdatedUser() throws Exception {
+    @WithMockUser(username = "testuser", roles = {"USER"})
+    void updateUser_OwnAccount_ReturnsUpdatedUser() throws Exception {
+        // testuser (id=1) обновляет свой аккаунт
+        when(userService.getUserByUserName("testuser")).thenReturn(testUserDto);
+
         UserDto updatedUserDto = new UserDto();
         updatedUserDto.setId(1L);
         updatedUserDto.setName("updateduser");
@@ -241,30 +245,43 @@ class UserRestControllerTest {
                 .andExpect(jsonPath("$.name").value("updateduser"))
                 .andExpect(jsonPath("$.email").value("updated@mail.ru"));
 
-        verify(userMapper, times(1)).toDto(any(UserRequest.class));
         verify(userService, times(1)).updateUser(eq(1L), any(UserDto.class));
-        verify(userMapper, times(1)).toResponse(any(UserDto.class));
     }
 
     @Test
-    @WithMockUser(username = "user", roles = {"USER"})
-    void updateUser_WithNonExistentId_ReturnsNotFound() throws Exception {
-        when(userMapper.toDto(any(UserRequest.class))).thenReturn(testUserDto);
-        when(userService.updateUser(eq(999L), any(UserDto.class)))
-                .thenThrow(new UserNotFoundException("User not found with id: 999"));
+    @WithMockUser(username = "testuser", roles = {"USER"})
+    void updateUser_OtherAccount_ReturnsForbidden() throws Exception {
+        // testuser (id=1) пытается обновить чужой аккаунт (id=2)
+        when(userService.getUserByUserName("testuser")).thenReturn(testUserDto);
 
-        mockMvc.perform(put("/api/users/999")
+        mockMvc.perform(put("/api/users/2")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(testUserRequest)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Доступ запрещён: можно изменять только свой аккаунт"));
+
+        verify(userService, never()).updateUser(anyLong(), any(UserDto.class));
+    }
+
+    @Test
+    @WithMockUser(username = "testuser", roles = {"USER"})
+    void updateUser_WithNonExistentId_ReturnsNotFound() throws Exception {
+        when(userService.getUserByUserName("testuser")).thenReturn(testUserDto);
+        when(userMapper.toDto(any(UserRequest.class))).thenReturn(testUserDto);
+        when(userService.updateUser(eq(1L), any(UserDto.class)))
+                .thenThrow(new UserNotFoundException("User not found with id: 1"));
+
+        mockMvc.perform(put("/api/users/1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(testUserRequest)))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.message").value("User not found with id: 999"));
-
-        verify(userService, times(1)).updateUser(eq(999L), any(UserDto.class));
+                .andExpect(jsonPath("$.message").value("User not found with id: 1"));
     }
 
     @Test
-    @WithMockUser(username = "user", roles = {"USER"})
-    void updateUser_WithDuplicateEmail_ReturnsConflict() throws Exception {
+    @WithMockUser(username = "testuser", roles = {"USER"})
+    void updateUser_WithDuplicateEmail_ReturnsBadRequest() throws Exception {
+        when(userService.getUserByUserName("testuser")).thenReturn(testUserDto);
         when(userMapper.toDto(any(UserRequest.class))).thenReturn(testUserDto);
         when(userService.updateUser(eq(1L), any(UserDto.class)))
                 .thenThrow(new IllegalArgumentException("Email test@mail.ru is already taken"));
@@ -274,33 +291,6 @@ class UserRestControllerTest {
                         .content(objectMapper.writeValueAsString(testUserRequest)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Email test@mail.ru is already taken"));
-
-        verify(userService, times(1)).updateUser(eq(1L), any(UserDto.class));
-    }
-
-    @Test
-    @WithMockUser(username = "admin", roles = {"ADMIN"})
-    void deleteUser_WithValidId_ReturnsSuccessMessage() throws Exception {
-        mockMvc.perform(delete("/api/users/1")
-                        .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isOk())
-                .andExpect(content().string("User with ID = 1 was deleted"));
-
-        verify(userService, times(1)).delete(1);
-    }
-
-    @Test
-    @WithMockUser(username = "admin", roles = {"ADMIN"})
-    void deleteUser_WithNonExistentId_ReturnsNotFound() throws Exception {
-        doThrow(new UserNotFoundException("User not found with id: 999"))
-                .when(userService).delete(999);
-
-        mockMvc.perform(delete("/api/users/999")
-                        .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.message").value("User not found with id: 999"));
-
-        verify(userService, times(1)).delete(999);
     }
 
     @Test
@@ -314,9 +304,60 @@ class UserRestControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
+    // === Тесты deleteUser с проверкой прав доступа ===
+
     @Test
-    @WithMockUser(username = "user", roles = {"USER"})
-    void updateColors_WithValidRequest_ReturnsUpdatedUser() throws Exception {
+    @WithMockUser(username = "testuser", roles = {"USER"})
+    void deleteUser_OwnAccount_ReturnsSuccessMessage() throws Exception {
+        // testuser (id=1) удаляет свой аккаунт
+        when(userService.getUserByUserName("testuser")).thenReturn(testUserDto);
+
+        mockMvc.perform(delete("/api/users/1")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+
+        verify(userService, times(1)).delete(1L);
+    }
+
+    @Test
+    @WithMockUser(username = "testuser", roles = {"USER"})
+    void deleteUser_OtherAccount_ReturnsForbidden() throws Exception {
+        // testuser (id=1) пытается удалить чужой аккаунт (id=2)
+        when(userService.getUserByUserName("testuser")).thenReturn(testUserDto);
+
+        mockMvc.perform(delete("/api/users/2")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Доступ запрещён: можно изменять только свой аккаунт"));
+
+        verify(userService, never()).delete(anyLong());
+    }
+
+    @Test
+    @WithMockUser(username = "testuser", roles = {"USER"})
+    void deleteUser_WithNonExistentId_ReturnsNotFound() throws Exception {
+        // testuser (id=1) удаляет свой аккаунт, но пользователь не найден в БД
+        when(userService.getUserByUserName("testuser")).thenReturn(testUserDto);
+        doThrow(new UserNotFoundException("User not found with id: 1"))
+                .when(userService).delete(1L);
+
+        mockMvc.perform(delete("/api/users/1")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("User not found with id: 1"));
+
+        verify(userService, times(1)).delete(1L);
+    }
+
+    // === Тесты updateColors с проверкой прав доступа ===
+
+    @Test
+    @WithMockUser(username = "testuser", roles = {"USER"})
+    void updateColors_OwnAccount_ReturnsUpdatedUser() throws Exception {
+        // testuser (id=1) обновляет свои цвета
+        when(userService.getUserByUserName("testuser")).thenReturn(testUserDto);
+
         UpdateColorsRequest colorsRequest = new UpdateColorsRequest("#FF0000", "#00FF00");
 
         UserDto updatedDto = new UserDto();
@@ -349,6 +390,25 @@ class UserRestControllerTest {
 
     @Test
     @WithMockUser(username = "testuser", roles = {"USER"})
+    void updateColors_OtherAccount_ReturnsForbidden() throws Exception {
+        // testuser (id=1) пытается обновить цвета чужого аккаунта (id=2)
+        when(userService.getUserByUserName("testuser")).thenReturn(testUserDto);
+
+        UpdateColorsRequest colorsRequest = new UpdateColorsRequest("#FF0000", "#00FF00");
+
+        mockMvc.perform(put("/api/users/2/colors")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(colorsRequest)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Доступ запрещён: можно изменять только свой аккаунт"));
+
+        verify(userService, never()).updateColors(anyLong(), anyString(), anyString());
+    }
+
+    // === Тест getCurrentUser ===
+
+    @Test
+    @WithMockUser(username = "testuser", roles = {"USER"})
     void getCurrentUser_ReturnsCurrentUser() throws Exception {
         when(userService.getUserByUserName("testuser")).thenReturn(testUserDto);
         when(userMapper.toResponse(testUserDto)).thenReturn(testUserResponse);
@@ -363,6 +423,8 @@ class UserRestControllerTest {
         verify(userService, times(1)).getUserByUserName("testuser");
         verify(userMapper, times(1)).toResponse(testUserDto);
     }
+
+    // === Тест create + get ===
 
     @Test
     @WithMockUser(username = "user", roles = {"USER"})
