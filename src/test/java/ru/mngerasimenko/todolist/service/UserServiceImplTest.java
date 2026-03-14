@@ -94,10 +94,25 @@ class UserServiceImplTest {
     }
 
     @Test
-    void delete_DeletesUserById() {
+    void delete_WithExistingId_DeletesUser() {
+        when(repository.existsById(1L)).thenReturn(true);
+
         userService.delete(1L);
 
+        verify(repository, times(1)).existsById(1L);
         verify(repository, times(1)).deleteById(1L);
+    }
+
+    @Test
+    void delete_WithNonExistentId_ThrowsUserNotFoundException() {
+        when(repository.existsById(999L)).thenReturn(false);
+
+        assertThatThrownBy(() -> userService.delete(999L))
+                .isInstanceOf(UserNotFoundException.class)
+                .hasMessage("User not found with id: 999");
+
+        verify(repository, times(1)).existsById(999L);
+        verify(repository, never()).deleteById(anyLong());
     }
 
     @Test
