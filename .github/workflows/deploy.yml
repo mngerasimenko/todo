@@ -119,6 +119,7 @@ jobs:
 
             # Перезапуск через compose (depends_on гарантирует здоровый postgres)
             APP_VERSION=${{ env.APP_VERSION_MAJOR }}.${{ env.APP_VERSION_MINOR }}.${{ env.APP_PATCH }} \
+              POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} \
               docker compose up -d todo-app
 
             # Очистка неиспользуемых образов

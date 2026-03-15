@@ -57,7 +57,7 @@ services:
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-db:5432/todo
       - SPRING_DATASOURCE_USERNAME=postgres
-      - SPRING_DATASOURCE_PASSWORD=postgres
+      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - SPRING_PROFILES_ACTIVE=production
       - JAVA_TOOL_OPTIONS=-Xmx160m -Xms160m
       - APP_VERSION=${APP_VERSION:-0.0.1}
@@ -101,7 +101,7 @@ services:
       - "5433:5432"
 
     environment:
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=todo
       - POSTGRES_USER=postgres
 
