@@ -6,6 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.exception.TodoNotFoundException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
@@ -220,6 +221,7 @@ public class TodoServiceImplTest {
         existingTodo.setDone(false);
         existingTodo.setCreatedAt(LocalDateTime.of(2026, 2, 11, 0, 0));
         existingTodo.setUser(testUser);
+        existingTodo.setTaskList(testTaskList);
 
         Todo updatedTodo = new Todo();
         updatedTodo.setId(1L);
@@ -236,11 +238,12 @@ public class TodoServiceImplTest {
         updatedTodoDto.setCreatedAt(updatedTodo.getCreatedAt());
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(existingTodo));
+        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
         doNothing().when(todoMapper).updateEntityFromDto(updateDto, existingTodo);
         when(todoRepository.save(any(Todo.class))).thenReturn(updatedTodo);
         when(todoMapper.toDto(updatedTodo)).thenReturn(updatedTodoDto);
 
-        TodoDto result = todoService.updateTodo(1L, updateDto);
+        TodoDto result = todoService.updateTodo(1L, updateDto, 1L);
 
         assertThat(result).isNotNull();
         assertThat(result.getName()).isEqualTo("Updated Todo");
@@ -257,7 +260,7 @@ public class TodoServiceImplTest {
 
         when(todoRepository.findById(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> todoService.updateTodo(999L, updateDto))
+        assertThatThrownBy(() -> todoService.updateTodo(999L, updateDto, 1L))
                 .isInstanceOf(TodoNotFoundException.class)
                 .hasMessage("Todo not found with id: 999");
 
@@ -274,11 +277,13 @@ public class TodoServiceImplTest {
         existingTodo.setId(1L);
         existingTodo.setName("Old Todo");
         existingTodo.setUser(testUser);
+        existingTodo.setTaskList(testTaskList);
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(existingTodo));
+        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
         when(userRepository.findById(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> todoService.updateTodo(1L, updateDto))
+        assertThatThrownBy(() -> todoService.updateTodo(1L, updateDto, 1L))
                 .isInstanceOf(UserNotFoundException.class)
                 .hasMessage("User not found with id: 999");
 
@@ -298,6 +303,7 @@ public class TodoServiceImplTest {
         Todo existingTodo = new Todo();
         existingTodo.setId(1L);
         existingTodo.setUser(testUser);
+        existingTodo.setTaskList(testTaskList);
 
         Todo updatedTodo = new Todo();
         updatedTodo.setId(1L);
@@ -308,12 +314,13 @@ public class TodoServiceImplTest {
         updatedTodoDto.setUserId(newUser.getId());
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(existingTodo));
+        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
         when(userRepository.findById(2L)).thenReturn(Optional.of(newUser));
         doNothing().when(todoMapper).updateEntityFromDto(updateDto, existingTodo);
         when(todoRepository.save(any(Todo.class))).thenReturn(updatedTodo);
         when(todoMapper.toDto(updatedTodo)).thenReturn(updatedTodoDto);
 
-        TodoDto result = todoService.updateTodo(1L, updateDto);
+        TodoDto result = todoService.updateTodo(1L, updateDto, 1L);
 
         assertThat(result.getUserId()).isEqualTo(2L);
         verify(userRepository, times(1)).findById(2L);
@@ -490,19 +497,20 @@ public class TodoServiceImplTest {
 
     @Test
     void deleteTodo_WithValidId_DeletesTodo() {
-        when(todoRepository.existsById(1L)).thenReturn(true);
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
+        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
 
-        todoService.deleteTodo(1L);
+        todoService.deleteTodo(1L, 1L);
 
-        verify(todoRepository, times(1)).existsById(1L);
+        verify(todoRepository, times(1)).findById(1L);
         verify(todoRepository, times(1)).deleteById(1L);
     }
 
     @Test
     void deleteTodo_WithNonExistentId_ThrowsTodoNotFoundException() {
-        when(todoRepository.existsById(999L)).thenReturn(false);
+        when(todoRepository.findById(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> todoService.deleteTodo(999L))
+        assertThatThrownBy(() -> todoService.deleteTodo(999L, 1L))
                 .isInstanceOf(TodoNotFoundException.class)
                 .hasMessage("Todo not found with id: 999");
 
@@ -522,6 +530,7 @@ public class TodoServiceImplTest {
         todoToMark.setId(1L);
         todoToMark.setName("Todo");
         todoToMark.setDone(false);
+        todoToMark.setTaskList(testTaskList);
 
         Todo markedTodo = new Todo();
         markedTodo.setId(1L);
@@ -536,24 +545,26 @@ public class TodoServiceImplTest {
         markedDto.setDone(true);
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(todoToMark));
+        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
         when(todoRepository.save(any(Todo.class))).thenReturn(markedTodo);
         when(todoMapper.toDto(markedTodo)).thenReturn(markedDto);
 
-        TodoDto result = todoService.markAsDone(1L);
+        TodoDto result = todoService.markAsDone(1L, 1L);
 
         assertThat(result).isNotNull();
         assertThat(result.getDone()).isTrue();
         verify(todoRepository, times(1)).findById(1L);
         verify(todoRepository, times(1)).save(todoToMark);
-        assertThat(todoToMark.isDone()).isTrue(); // Проверяем, что поле изменено
-        assertThat(todoToMark.getCompletedAt()).isNotNull(); // completedAt должен быть установлен
+        assertThat(todoToMark.isDone()).isTrue();
+        assertThat(todoToMark.getCompletedAt()).isNotNull();
     }
 
     @Test
     void markAsDone_WithNonExistentId_ThrowsTodoNotFoundException() {
         when(todoRepository.findById(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> todoService.markAsDone(999L))
+        assertThatThrownBy(() -> todoService.markAsDone(999L, 1L))
                 .isInstanceOf(TodoNotFoundException.class)
                 .hasMessage("Todo not found with id: 999");
 
@@ -570,6 +581,7 @@ public class TodoServiceImplTest {
         todoToMark.setId(1L);
         todoToMark.setName("Todo");
         todoToMark.setDone(false);
+        todoToMark.setTaskList(testTaskList);
 
         Todo markedTodo = new Todo();
         markedTodo.setId(1L);
@@ -585,6 +597,7 @@ public class TodoServiceImplTest {
         markedDto.setCompletorUserId(2L);
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(todoToMark));
+        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 2L)).thenReturn(true);
         when(userRepository.findById(2L)).thenReturn(Optional.of(completor));
         when(todoRepository.save(any(Todo.class))).thenReturn(markedTodo);
         when(todoMapper.toDto(markedTodo)).thenReturn(markedDto);
@@ -605,6 +618,7 @@ public class TodoServiceImplTest {
         todoToMark.setName("Todo");
         todoToMark.setDone(true);
         todoToMark.setCompletedAt(LocalDateTime.now());
+        todoToMark.setTaskList(testTaskList);
 
         Todo markedTodo = new Todo();
         markedTodo.setId(1L);
@@ -618,27 +632,96 @@ public class TodoServiceImplTest {
         markedDto.setDone(false);
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(todoToMark));
+        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
         when(todoRepository.save(any(Todo.class))).thenReturn(markedTodo);
         when(todoMapper.toDto(markedTodo)).thenReturn(markedDto);
 
-        TodoDto result = todoService.markAsUndone(1L);
+        TodoDto result = todoService.markAsUndone(1L, 1L);
 
         assertThat(result).isNotNull();
         assertThat(result.getDone()).isFalse();
         verify(todoRepository, times(1)).findById(1L);
         verify(todoRepository, times(1)).save(todoToMark);
-        assertThat(todoToMark.isDone()).isFalse(); // Проверяем, что поле изменено
-        assertThat(todoToMark.getCompletedAt()).isNull(); // completedAt должен быть очищен
-        assertThat(todoToMark.getCompletorUser()).isNull(); // completorUser должен быть очищен
+        assertThat(todoToMark.isDone()).isFalse();
+        assertThat(todoToMark.getCompletedAt()).isNull();
+        assertThat(todoToMark.getCompletorUser()).isNull();
     }
 
     @Test
     void markAsUndone_WithNonExistentId_ThrowsTodoNotFoundException() {
         when(todoRepository.findById(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> todoService.markAsUndone(999L))
+        assertThatThrownBy(() -> todoService.markAsUndone(999L, 1L))
                 .isInstanceOf(TodoNotFoundException.class)
                 .hasMessage("Todo not found with id: 999");
+
+        verify(todoRepository, never()).save(any(Todo.class));
+    }
+
+    // --- Тесты проверки принадлежности к списку ---
+
+    @Test
+    void updateTodo_WhenUserNotMember_ThrowsAccessDeniedException() {
+        Todo existingTodo = new Todo();
+        existingTodo.setId(1L);
+        existingTodo.setName("Todo");
+        existingTodo.setUser(testUser);
+        existingTodo.setTaskList(testTaskList);
+
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(existingTodo));
+        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 99L)).thenReturn(false);
+
+        assertThatThrownBy(() -> todoService.updateTodo(1L, testTodoDto, 99L))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("не является участником");
+
+        verify(todoRepository, never()).save(any(Todo.class));
+    }
+
+    @Test
+    void deleteTodo_WhenUserNotMember_ThrowsAccessDeniedException() {
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
+        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 99L)).thenReturn(false);
+
+        assertThatThrownBy(() -> todoService.deleteTodo(1L, 99L))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("не является участником");
+
+        verify(todoRepository, never()).deleteById(anyLong());
+    }
+
+    @Test
+    void markAsDone_WhenUserNotMember_ThrowsAccessDeniedException() {
+        Todo todoToMark = new Todo();
+        todoToMark.setId(1L);
+        todoToMark.setName("Todo");
+        todoToMark.setDone(false);
+        todoToMark.setTaskList(testTaskList);
+
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(todoToMark));
+        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 99L)).thenReturn(false);
+
+        assertThatThrownBy(() -> todoService.markAsDone(1L, 99L))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("не является участником");
+
+        verify(todoRepository, never()).save(any(Todo.class));
+    }
+
+    @Test
+    void markAsUndone_WhenUserNotMember_ThrowsAccessDeniedException() {
+        Todo todoToMark = new Todo();
+        todoToMark.setId(1L);
+        todoToMark.setName("Todo");
+        todoToMark.setDone(true);
+        todoToMark.setTaskList(testTaskList);
+
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(todoToMark));
+        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 99L)).thenReturn(false);
+
+        assertThatThrownBy(() -> todoService.markAsUndone(1L, 99L))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("не является участником");
 
         verify(todoRepository, never()).save(any(Todo.class));
     }

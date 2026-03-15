@@ -16,6 +16,8 @@ import ru.mngerasimenko.todolist.repository.TaskListUserRepository;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 
+import org.springframework.security.access.AccessDeniedException;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -60,9 +62,10 @@ public class TodoServiceImpl implements TodoService {
 
     @Override
     @Transactional
-    public TodoDto updateTodo(Long id, TodoDto todoDto) {
+    public TodoDto updateTodo(Long id, TodoDto todoDto, Long requestingUserId) {
         Todo existingTodo = todoRepository.findById(id)
                 .orElseThrow(() -> new TodoNotFoundException("Todo not found with id: " + id));
+        assertUserIsMember(existingTodo, requestingUserId);
 
         if (todoDto.getUserId() != null && !todoDto.getUserId().equals(existingTodo.getUserId())) {
             User newUser = userRepository.findById(todoDto.getUserId())
@@ -150,12 +153,12 @@ public class TodoServiceImpl implements TodoService {
 
     @Override
     @Transactional
-    public void deleteTodo(Long id) {
-        if (!todoRepository.existsById(id)) {
-            throw new TodoNotFoundException("Todo not found with id: " + id);
-        }
+    public void deleteTodo(Long id, Long requestingUserId) {
+        Todo todo = todoRepository.findById(id)
+                .orElseThrow(() -> new TodoNotFoundException("Todo not found with id: " + id));
+        assertUserIsMember(todo, requestingUserId);
         todoRepository.deleteById(id);
-        log.info("Удалена задача: id={}", id);
+        log.info("Удалена задача: id={}, userId={}", id, requestingUserId);
     }
 
     @Override
@@ -166,15 +169,10 @@ public class TodoServiceImpl implements TodoService {
 
     @Override
     @Transactional
-    public TodoDto markAsDone(Long id) {
-        return markAsDone(id, null);
-    }
-
-    @Override
-    @Transactional
     public TodoDto markAsDone(Long id, Long completorUserId) {
         Todo todo = todoRepository.findById(id)
                 .orElseThrow(() -> new TodoNotFoundException("Todo not found with id: " + id));
+        assertUserIsMember(todo, completorUserId);
         todo.setDone(true);
         todo.setCompletedAt(LocalDateTime.now());
         if (completorUserId != null) {
@@ -188,13 +186,25 @@ public class TodoServiceImpl implements TodoService {
 
     @Override
     @Transactional
-    public TodoDto markAsUndone(Long id) {
+    public TodoDto markAsUndone(Long id, Long requestingUserId) {
         Todo todo = todoRepository.findById(id)
                 .orElseThrow(() -> new TodoNotFoundException("Todo not found with id: " + id));
+        assertUserIsMember(todo, requestingUserId);
         todo.setDone(false);
         todo.setCompletedAt(null);
         todo.setCompletorUser(null);
         Todo updatedTodo = todoRepository.save(todo);
         return todoMapper.toDto(updatedTodo);
+    }
+
+    /**
+     * Проверяет, что пользователь является участником списка, к которому принадлежит задача.
+     */
+    private void assertUserIsMember(Todo todo, Long userId) {
+        Long listId = todo.getTaskList().getId();
+        if (!taskListUserRepository.existsByIdListIdAndIdUserId(listId, userId)) {
+            throw new AccessDeniedException(
+                    "Доступ запрещён: пользователь не является участником списка задачи");
+        }
     }
 }
