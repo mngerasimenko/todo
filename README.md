@@ -220,6 +220,10 @@ Telegram-бот для мониторинга состояния сервера.
 
 Конфигурация: `monitoring/monitor.conf` (Telegram Bot Token + Chat ID, не коммитится). Шаблон: `monitoring/monitor.conf.example`.
 
+**Автоматический backup PostgreSQL** (cron, ежедневно в 3:00):
+- `monitoring/backup.sh` — дамп БД в `/root/backups/`, хранение 7 дней
+- Восстановление: `docker exec -i postgres-db pg_restore -U postgres -d todo --clean --if-exists < backup.dump`
+
 ---
 
 ## Первоначальная настройка сервера
@@ -254,7 +258,7 @@ src/main/java/ru/mngerasimenko/todolist/
 src/main/resources/db/migration/   Liquibase-миграции (master + 5 changeset-файлов)
 src/test/java/       205+ тестов (controller, service, repository, mapper, concurrency)
 postman/             Postman-коллекция + окружения
-monitoring/          Telegram-мониторинг (скрипты, systemd-сервис, конфиг)
+monitoring/          Telegram-мониторинг (скрипты, systemd-сервис, конфиг) + backup PostgreSQL
 ```
 
 ---
