@@ -28,6 +28,7 @@ import java.util.List;
 public class ApiSecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final RateLimitFilter rateLimitFilter;
     private final AppProperties appProperties;
 
     /**
@@ -62,6 +63,8 @@ public class ApiSecurityConfig {
                 )
                 // Добавляем JWT фильтр перед UsernamePasswordAuthenticationFilter
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                // Добавляем rate limit фильтр перед JWT (т.е. rate limiting срабатывает первым)
+                .addFilterBefore(rateLimitFilter, JwtAuthenticationFilter.class)
                 // Возвращаем 401 вместо редиректа на /login для API эндпоинтов
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((request, response, authException) -> {

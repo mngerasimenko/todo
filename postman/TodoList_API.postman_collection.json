@@ -1889,6 +1889,175 @@
       "description": "Негативные тесты (проверка обработки ошибок)"
     },
     {
+      "name": "Rate Limiting",
+      "item": [
+        {
+          "name": "Login Rate Limit - 429",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Последовательно отправляем 5 запросов login, чтобы исчерпать лимит (5 запросов/мин)",
+                  "const baseUrl = pm.variables.get('baseUrl');",
+                  "const reqOpts = {",
+                  "    url: baseUrl + '/api/auth/login',",
+                  "    method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json' },",
+                  "    body: { mode: 'raw', raw: JSON.stringify({ username: 'fakeUser', password: 'fakePass' }) }",
+                  "};",
+                  "pm.sendRequest(reqOpts, () => {",
+                  "    pm.sendRequest(reqOpts, () => {",
+                  "        pm.sendRequest(reqOpts, () => {",
+                  "            pm.sendRequest(reqOpts, () => {",
+                  "                pm.sendRequest(reqOpts, () => {",
+                  "                    console.log('Pre-request: 5 login requests sent to exhaust rate limit');",
+                  "                });",
+                  "            });",
+                  "        });",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 429 Too Many Requests\", function () {",
+                  "    pm.response.to.have.status(429);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has Retry-After header\", function () {",
+                  "    pm.expect(pm.response.headers.get('Retry-After')).to.exist;",
+                  "});",
+                  "",
+                  "pm.test(\"Response has X-Rate-Limit-Remaining header\", function () {",
+                  "    pm.expect(pm.response.headers.get('X-Rate-Limit-Remaining')).to.eql('0');",
+                  "});",
+                  "",
+                  "pm.test(\"Response body contains error message\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.error).to.eql('Too Many Requests');",
+                  "    pm.expect(jsonData.retryAfter).to.be.a('number');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"fakeUser\",\n  \"password\": \"fakePass\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Тест rate limiting на эндпоинте login.\nПредварительно отправляются 5 запросов (лимит: 5/мин), затем 6-й должен получить 429.\n\n**Ожидается:** 429 Too Many Requests с заголовками Retry-After и X-Rate-Limit-Remaining."
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Rate Limit - 429",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Последовательно отправляем 10 запросов refresh, чтобы исчерпать лимит (10 запросов/мин)",
+                  "const baseUrl = pm.variables.get('baseUrl');",
+                  "const reqOpts = {",
+                  "    url: baseUrl + '/api/auth/refresh',",
+                  "    method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json' },",
+                  "    body: { mode: 'raw', raw: JSON.stringify({ refresh_token: 'invalid_token' }) }",
+                  "};",
+                  "pm.sendRequest(reqOpts, () => {",
+                  "pm.sendRequest(reqOpts, () => {",
+                  "pm.sendRequest(reqOpts, () => {",
+                  "pm.sendRequest(reqOpts, () => {",
+                  "pm.sendRequest(reqOpts, () => {",
+                  "pm.sendRequest(reqOpts, () => {",
+                  "pm.sendRequest(reqOpts, () => {",
+                  "pm.sendRequest(reqOpts, () => {",
+                  "pm.sendRequest(reqOpts, () => {",
+                  "pm.sendRequest(reqOpts, () => {",
+                  "    console.log('Pre-request: 10 refresh requests sent to exhaust rate limit');",
+                  "});});});});});});});});});});"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 429 Too Many Requests\", function () {",
+                  "    pm.response.to.have.status(429);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has Retry-After header\", function () {",
+                  "    pm.expect(pm.response.headers.get('Retry-After')).to.exist;",
+                  "});",
+                  "",
+                  "pm.test(\"Response body contains error message\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.error).to.eql('Too Many Requests');",
+                  "    pm.expect(jsonData.retryAfter).to.be.a('number');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"invalid_token\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Тест rate limiting на эндпоинте refresh.\nПредварительно отправляются 10 запросов (лимит: 10/мин), затем 11-й должен получить 429.\n\n**Ожидается:** 429 Too Many Requests с заголовками Retry-After и X-Rate-Limit-Remaining."
+          },
+          "response": []
+        }
+      ],
+      "description": "Тесты rate limiting — проверка ограничения частоты запросов"
+    },
+    {
       "name": "Clean",
       "item": [
         {

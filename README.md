@@ -39,13 +39,14 @@ REST API бэкенд для совместного управления спи�
 - CORS для поддержки React SPA и прямых API-запросов
 - Автоверсионирование (MAJOR.MINOR.PATCH) с проверкой совместимости Android-клиента
 - Оптимистичная блокировка (`@Version`) на всех Entity — защита от потерянных обновлений
+- Rate Limiting (Bucket4j) — защита от брутфорса и спам-регистраций (5/мин login, 3/час register, 100/мин API)
 - Защита от race conditions (TOCTOU) — атомарные операции через UNIQUE constraints
 - Миграции БД через Liquibase (безопасно для существующих данных)
 - Автоматический CI/CD через GitHub Actions
 - Мониторинг сервера через Telegram-бот (алерты + интерактивные команды)
 - Интерактивная документация API (Swagger UI / OpenAPI 3)
 - Контроль доступа: изменение и удаление аккаунта только владельцем
-- 205 unit-тестов с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
+- 228 unit-тестов с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
 
 ---
 
@@ -63,6 +64,7 @@ REST API бэкенд для совместного управления спи�
 | **Нагрузочные** | TestContainers (PostgreSQL)       | (BOM)   |
 | **Покрытие**    | JaCoCo                            | 0.8.14  |
 | **Контейнеры**  | Docker + Docker Compose           | 24+     |
+| **Rate Limiting**| Bucket4j (Token Bucket)          | 8.14.0  |
 | **Документация**| springdoc-openapi (Swagger UI)    | 2.8.6   |
 | **CI/CD**       | GitHub Actions                    | -       |
 
@@ -182,7 +184,7 @@ mvn test -Pintegration
 Проект использует пайплайн `.github/workflows/deploy.yml`:
 
 **Этап 1 — Тесты** (все PR и push в master):
-- 205 unit-тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
+- 228 unit-тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
 - Нагрузочные тесты (3 шт.) запускаются отдельно: `mvn test -Pintegration` (требуют Docker)
 
 **Этап 2 — Деплой** (только push в master):
@@ -244,7 +246,7 @@ src/main/java/ru/mngerasimenko/todolist/
 ├── dto/             DTO + list/ + auth/ подпакеты
 ├── mapper/          Ручные мапперы (Todo, User, TaskList)
 ├── config/          OpenApiConfig (Swagger UI / OpenAPI)
-├── security/        Spring Security + JWT (ApiSecurityConfig)
+├── security/        Spring Security + JWT + Rate Limiting (Bucket4j)
 ├── settings/        AppProperties (corsOrigins, версия, min_android_version)
 ├── exception/       GlobalExceptionHandler + кастомные исключения
 └── TodolistApplication.java

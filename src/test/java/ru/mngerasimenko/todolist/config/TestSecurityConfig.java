@@ -6,6 +6,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import ru.mngerasimenko.todolist.security.RateLimitFilter;
+import ru.mngerasimenko.todolist.security.RateLimitProperties;
 import ru.mngerasimenko.todolist.security.jwt.JwtAuthenticationFilter;
 import ru.mngerasimenko.todolist.security.jwt.JwtProperties;
 import ru.mngerasimenko.todolist.security.jwt.JwtTokenProvider;
@@ -54,5 +56,18 @@ public class TestSecurityConfig {
             UserDetailsService userDetailsService
     ) {
         return new JwtAuthenticationFilter(jwtTokenProvider, userDetailsService);
+    }
+
+    /**
+     * Создаёт RateLimitFilter с разрешительными лимитами для тестов.
+     */
+    @Bean
+    public RateLimitFilter rateLimitFilter() {
+        RateLimitProperties props = new RateLimitProperties();
+        props.setLogin(new RateLimitProperties.EndpointLimit(1000, 1));
+        props.setRegister(new RateLimitProperties.EndpointLimit(1000, 1));
+        props.setRefresh(new RateLimitProperties.EndpointLimit(1000, 1));
+        props.setGeneral(new RateLimitProperties.EndpointLimit(1000, 1));
+        return new RateLimitFilter(props);
     }
 }
