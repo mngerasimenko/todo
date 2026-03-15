@@ -40,8 +40,8 @@
             </encoder>
         </appender>
 
-        <logger name="ru.mngerasimenko.todolist" level="DEBUG"/>
-        <logger name="org.hibernate.SQL" level="DEBUG"/>
+        <logger name="ru.mngerasimenko.todolist" level="INFO"/>
+        <logger name="org.hibernate.SQL" level="WARN"/>
         <!-- Логирование пула соединений и PostgreSQL-драйвера -->
         <logger name="com.zaxxer.hikari" level="INFO"/>
         <logger name="org.postgresql" level="WARN"/>
