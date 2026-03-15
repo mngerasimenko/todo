@@ -42,9 +42,11 @@ public class TodoRestController {
     /** Обновление задачи по ID */
     @PutMapping("/{id}")
     public ResponseEntity<TodoResponse> update(@PathVariable Long id,
-                                               @Valid @RequestBody TodoRequest request) {
+                                               @Valid @RequestBody TodoRequest request,
+                                               @AuthenticationPrincipal UserDetails userDetails) {
+        UserDto currentUser = userService.getUserByUserName(userDetails.getUsername());
         TodoDto todoDto = todoMapper.toDto(request);
-        TodoDto updatedTodo = todoService.updateTodo(id, todoDto);
+        TodoDto updatedTodo = todoService.updateTodo(id, todoDto, currentUser.getId());
         TodoResponse response = todoMapper.toResponse(updatedTodo);
         return ResponseEntity.ok(response);
     }
@@ -89,16 +91,20 @@ public class TodoRestController {
 
     /** Снять отметку выполнения задачи */
     @PatchMapping("/{id}/undone")
-    public ResponseEntity<TodoResponse> markAsUndone(@PathVariable Long id) {
-        TodoDto todoDto = todoService.markAsUndone(id);
+    public ResponseEntity<TodoResponse> markAsUndone(@PathVariable Long id,
+                                                      @AuthenticationPrincipal UserDetails userDetails) {
+        UserDto currentUser = userService.getUserByUserName(userDetails.getUsername());
+        TodoDto todoDto = todoService.markAsUndone(id, currentUser.getId());
         TodoResponse response = todoMapper.toResponse(todoDto);
         return ResponseEntity.ok(response);
     }
 
     /** Удаление задачи по ID */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
-        todoService.deleteTodo(id);
+    public ResponseEntity<Void> delete(@PathVariable Long id,
+                                        @AuthenticationPrincipal UserDetails userDetails) {
+        UserDto currentUser = userService.getUserByUserName(userDetails.getUsername());
+        todoService.deleteTodo(id, currentUser.getId());
         return ResponseEntity.noContent().build();
     }
 
