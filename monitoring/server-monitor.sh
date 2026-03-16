@@ -98,7 +98,16 @@ if [ "$http_code" != "200" ]; then
     fi
 fi
 
-# === 6. Проверка PostgreSQL ===
+# === 6. Проверка SMTP (через /api/status -> smtp_healthy) ===
+smtp_healthy=$(curl -s -Lk --max-time 10 http://localhost/api/status 2>/dev/null | grep -o '"smtp_healthy":[a-z]*' | grep -c 'true')
+if [ "$smtp_healthy" -eq 0 ] && [ "$http_code" = "200" ]; then
+    if should_alert "smtp"; then
+        alerts="${alerts}
+🔴 <b>SMTP:</b> недоступен (mail.hosting.reg.ru)"
+    fi
+fi
+
+# === 7. Проверка PostgreSQL ===
 pg_ok=$(docker exec postgres-db pg_isready -U postgres 2>/dev/null | grep -c "accepting connections")
 if [ "$pg_ok" -eq 0 ]; then
     if should_alert "postgres"; then
