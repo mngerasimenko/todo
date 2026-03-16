@@ -44,4 +44,7 @@ public class UserDto {
 
     @JsonProperty("completed_task_color")
     private String completedTaskColor;
+
+    @JsonProperty("email_verified")
+    private Boolean emailVerified;
 }

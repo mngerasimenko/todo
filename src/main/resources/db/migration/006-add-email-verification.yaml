@@ -1,0 +1,32 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-add-email-verification
+      author: mngerasimenko
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: todo_users
+                columnName: email_verified
+      changes:
+        - addColumn:
+            tableName: todo_users
+            columns:
+              - column:
+                  name: email_verified
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: email_verification_token
+                  type: varchar(255)
+              - column:
+                  name: email_verification_expires_at
+                  type: timestamp
+              - column:
+                  name: password_reset_token
+                  type: varchar(255)
+              - column:
+                  name: password_reset_expires_at
+                  type: timestamp

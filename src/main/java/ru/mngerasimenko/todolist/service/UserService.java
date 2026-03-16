@@ -33,4 +33,16 @@ public interface UserService {
 
     /** Обновляет цвета задач пользователя (HEX-формат #RRGGBB) */
     UserDto updateColors(Long id, String createdTaskColor, String completedTaskColor);
+
+    /** Подтверждение email по токену из ссылки */
+    void verifyEmail(String token);
+
+    /** Повторная отправка письма верификации */
+    void resendVerificationEmail(Long userId);
+
+    /** Запрос сброса пароля (отправка письма) */
+    void initiatePasswordReset(String email);
+
+    /** Установка нового пароля по токену */
+    void resetPassword(String token, String newPassword);
 }

@@ -47,7 +47,12 @@ public class ApiSecurityConfig {
                         .requestMatchers(
                                 "/api/status",
                                 "/api/appName",
-                                "/api/auth/**",
+                                "/api/auth/login",
+                                "/api/auth/register",
+                                "/api/auth/refresh",
+                                "/api/auth/verify-email",
+                                "/api/auth/forgot-password",
+                                "/api/auth/reset-password",
                                 "/api/v3/api-docs/**",
                                 "/api/swagger-ui/**",
                                 "/api/swagger-ui.html"

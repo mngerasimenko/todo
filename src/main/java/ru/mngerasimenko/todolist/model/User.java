@@ -10,6 +10,7 @@ import jakarta.validation.constraints.Size;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -64,6 +65,36 @@ public class User {
 
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "user")
     private List<TaskListUser> taskListUsers = new ArrayList<>();
+
+    /**
+     * Подтверждён ли email пользователя.
+     */
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified = false;
+
+    /**
+     * SHA-256 хеш токена верификации email.
+     */
+    @Column(name = "email_verification_token")
+    private String emailVerificationToken;
+
+    /**
+     * Срок действия токена верификации.
+     */
+    @Column(name = "email_verification_expires_at")
+    private LocalDateTime emailVerificationExpiresAt;
+
+    /**
+     * SHA-256 хеш токена сброса пароля.
+     */
+    @Column(name = "password_reset_token")
+    private String passwordResetToken;
+
+    /**
+     * Срок действия токена сброса пароля.
+     */
+    @Column(name = "password_reset_expires_at")
+    private LocalDateTime passwordResetExpiresAt;
 
     /**
      * Версия записи для оптимистичной блокировки.
@@ -168,5 +199,45 @@ public class User {
 
     public void setVersion(Long version) {
         this.version = version;
+    }
+
+    public boolean isEmailVerified() {
+        return emailVerified;
+    }
+
+    public void setEmailVerified(boolean emailVerified) {
+        this.emailVerified = emailVerified;
+    }
+
+    public String getEmailVerificationToken() {
+        return emailVerificationToken;
+    }
+
+    public void setEmailVerificationToken(String emailVerificationToken) {
+        this.emailVerificationToken = emailVerificationToken;
+    }
+
+    public LocalDateTime getEmailVerificationExpiresAt() {
+        return emailVerificationExpiresAt;
+    }
+
+    public void setEmailVerificationExpiresAt(LocalDateTime emailVerificationExpiresAt) {
+        this.emailVerificationExpiresAt = emailVerificationExpiresAt;
+    }
+
+    public String getPasswordResetToken() {
+        return passwordResetToken;
+    }
+
+    public void setPasswordResetToken(String passwordResetToken) {
+        this.passwordResetToken = passwordResetToken;
+    }
+
+    public LocalDateTime getPasswordResetExpiresAt() {
+        return passwordResetExpiresAt;
+    }
+
+    public void setPasswordResetExpiresAt(LocalDateTime passwordResetExpiresAt) {
+        this.passwordResetExpiresAt = passwordResetExpiresAt;
     }
 }
