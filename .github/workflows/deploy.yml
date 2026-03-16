@@ -129,3 +129,9 @@ jobs:
 
             # Перезагрузка nginx-proxy для подхвата нового контейнера
             docker exec nginx-proxy nginx -s reload 2>/dev/null || true
+
+            # Обновление скриптов мониторинга из репозитория
+            git -C /root/todo pull origin master 2>/dev/null || true
+            cp /root/todo/monitoring/server-monitor.sh /root/monitoring/server-monitor.sh 2>/dev/null || true
+            cp /root/todo/monitoring/backup.sh /root/monitoring/backup.sh 2>/dev/null || true
+            chmod +x /root/monitoring/*.sh 2>/dev/null || true
