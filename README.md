@@ -266,3 +266,9 @@ monitoring/          Telegram-мониторинг (скрипты, systemd-се
 
 - **[todolist-web](https://github.com/mngerasimenko/todolist-web)** — React SPA (TypeScript + Vite + Tailwind CSS)
 - **[todolist-android](https://github.com/mngerasimenko/todolist-android)** — нативный Android-клиент (Kotlin + Jetpack Compose)
+
+---
+
+## Лицензия
+
+Проект распространяется под лицензией [MIT](LICENSE).
