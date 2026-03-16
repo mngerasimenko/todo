@@ -13,6 +13,7 @@ import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.UserMapper;
 import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.repository.UserRepository;
+import ru.mngerasimenko.todolist.settings.EmailProperties;
 
 import java.util.Arrays;
 import java.util.List;
@@ -38,6 +39,12 @@ class UserServiceImplTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
+    @Mock
+    private EmailService emailService;
+
+    @Mock
+    private EmailProperties emailProperties;
+
     @InjectMocks
     private UserServiceImpl userService;
 
@@ -60,6 +67,9 @@ class UserServiceImplTest {
         userDto.setName("user");
         userDto.setEmail("user@mail.ru");
         userDto.setPassword("password");
+
+        // Мок для создания токена верификации в createUser
+        lenient().when(emailProperties.getVerificationTokenTtlHours()).thenReturn(24);
     }
 
     @Test

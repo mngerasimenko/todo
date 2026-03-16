@@ -114,6 +114,15 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Обрабатывает истёкший или невалидный токен верификации/сброса пароля (HTTP 400).
+     */
+    @ExceptionHandler(TokenExpiredException.class)
+    public ResponseEntity<Map<String, Object>> handleTokenExpired(TokenExpiredException ex) {
+        log.warn("Token expired: {}", ex.getMessage());
+        return createErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
+    }
+
+    /**
      * Обрабатывает отказ в доступе — пользователь пытается изменить чужие данные (HTTP 403).
      */
     @ExceptionHandler(AccessDeniedException.class)

@@ -8,14 +8,15 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.dto.UserResponse;
-import ru.mngerasimenko.todolist.dto.auth.LoginRequest;
-import ru.mngerasimenko.todolist.dto.auth.LoginResponse;
-import ru.mngerasimenko.todolist.dto.auth.RefreshTokenRequest;
-import ru.mngerasimenko.todolist.dto.auth.RegisterRequest;
+import ru.mngerasimenko.todolist.dto.auth.*;
 import ru.mngerasimenko.todolist.mapper.UserMapper;
 import ru.mngerasimenko.todolist.security.jwt.JwtProperties;
 import ru.mngerasimenko.todolist.security.jwt.JwtTokenProvider;
@@ -152,5 +153,46 @@ public class AuthController {
 
         log.info("Успешное обновление токена для пользователя: {}", username);
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Подтверждение email по токену из ссылки
+     */
+    @PostMapping("/verify-email")
+    public ResponseEntity<Map<String, String>> verifyEmail(
+            @Valid @RequestBody VerifyEmailRequest request) {
+        userService.verifyEmail(request.getToken());
+        return ResponseEntity.ok(Map.of("message", "Email подтверждён"));
+    }
+
+    /**
+     * Повторная отправка письма верификации (требует JWT)
+     */
+    @PostMapping("/resend-verification")
+    public ResponseEntity<Map<String, String>> resendVerification(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = userService.getUserByUserName(userDetails.getUsername()).getId();
+        userService.resendVerificationEmail(userId);
+        return ResponseEntity.ok(Map.of("message", "Письмо отправлено"));
+    }
+
+    /**
+     * Запрос сброса пароля — отправка письма (всегда 200)
+     */
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Map<String, String>> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request) {
+        userService.initiatePasswordReset(request.getEmail());
+        return ResponseEntity.ok(Map.of("message", "Если аккаунт существует, письмо отправлено"));
+    }
+
+    /**
+     * Установка нового пароля по токену из ссылки
+     */
+    @PostMapping("/reset-password")
+    public ResponseEntity<Map<String, String>> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request) {
+        userService.resetPassword(request.getToken(), request.getPassword());
+        return ResponseEntity.ok(Map.of("message", "Пароль изменён"));
     }
 }

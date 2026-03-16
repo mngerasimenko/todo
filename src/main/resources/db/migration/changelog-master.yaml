@@ -9,3 +9,5 @@ databaseChangeLog:
       file: db/migration/004-create-todo.yaml
   - include:
       file: db/migration/005-insert-test-user.yaml
+  - include:
+      file: db/migration/006-add-email-verification.yaml
