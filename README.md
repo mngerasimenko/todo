@@ -46,7 +46,7 @@ REST API бэкенд для совместного управления спи�
 - Мониторинг сервера через Telegram-бот (алерты + интерактивные команды)
 - Интерактивная документация API (Swagger UI / OpenAPI 3)
 - Контроль доступа: изменение и удаление аккаунта только владельцем, операции с задачами только для участников списка
-- 232 unit-тестов с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
+- 260 unit-тестов с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
 
 ---
 
@@ -164,7 +164,7 @@ docker compose down
 ### Тесты
 
 ```bash
-# Unit-тесты (205 тестов, без Docker)
+# Unit-тесты (260 тестов, без Docker)
 mvn test
 
 # С отчётом покрытия
@@ -184,7 +184,7 @@ mvn test -Pintegration
 Проект использует пайплайн `.github/workflows/deploy.yml`:
 
 **Этап 1 — Тесты** (все PR и push в master):
-- 232 unit-тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
+- 260 unit-тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
 - Нагрузочные тесты (3 шт.) запускаются отдельно: `mvn test -Pintegration` (требуют Docker)
 
 **Этап 2 — Деплой** (только push в master):
@@ -256,7 +256,7 @@ src/main/java/ru/mngerasimenko/todolist/
 └── TodolistApplication.java
 
 src/main/resources/db/migration/   Liquibase-миграции (master + 5 changeset-файлов)
-src/test/java/       205+ тестов (controller, service, repository, mapper, concurrency)
+src/test/java/       260+ тестов (controller, service, repository, mapper, concurrency)
 postman/             Postman-коллекция + окружения
 monitoring/          Telegram-мониторинг (скрипты, systemd-сервис, конфиг) + backup PostgreSQL
 ```
