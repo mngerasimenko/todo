@@ -13,13 +13,13 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import ru.mngerasimenko.todolist.config.TestSecurityConfig;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.dto.UserResponse;
-import ru.mngerasimenko.todolist.dto.auth.LoginRequest;
-import ru.mngerasimenko.todolist.dto.auth.RefreshTokenRequest;
-import ru.mngerasimenko.todolist.dto.auth.RegisterRequest;
+import ru.mngerasimenko.todolist.dto.auth.*;
+import ru.mngerasimenko.todolist.exception.TokenExpiredException;
 import ru.mngerasimenko.todolist.mapper.UserMapper;
 import ru.mngerasimenko.todolist.security.ApiSecurityConfig;
 import ru.mngerasimenko.todolist.security.jwt.JwtProperties;
@@ -29,7 +29,7 @@ import ru.mngerasimenko.todolist.service.UserService;
 import java.util.Collections;
 
 import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -481,5 +481,215 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(refreshTokenRequest)))
                 .andExpect(header().string("Content-Type", MediaType.APPLICATION_JSON_VALUE));
+    }
+
+    // ==================== VERIFY EMAIL TESTS ====================
+
+    @Test
+    void verifyEmail_ValidToken_ReturnsOk() throws Exception {
+        // Arrange
+        VerifyEmailRequest request = new VerifyEmailRequest("valid-token-123");
+
+        doNothing().when(userService).verifyEmail("valid-token-123");
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/verify-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Email подтверждён"));
+    }
+
+    @Test
+    void verifyEmail_ExpiredToken_ReturnsBadRequest() throws Exception {
+        // Arrange
+        VerifyEmailRequest request = new VerifyEmailRequest("expired-token");
+
+        doThrow(new TokenExpiredException("Токен истёк"))
+                .when(userService).verifyEmail("expired-token");
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/verify-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Токен истёк"));
+    }
+
+    @Test
+    void verifyEmail_EmptyToken_ReturnsBadRequest() throws Exception {
+        // Arrange
+        VerifyEmailRequest request = new VerifyEmailRequest("");
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/verify-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.token").exists());
+    }
+
+    @Test
+    void verifyEmail_NullToken_ReturnsBadRequest() throws Exception {
+        // Arrange
+        String invalidJson = "{\"token\": null}";
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/verify-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidJson))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ==================== RESEND VERIFICATION TESTS ====================
+
+    @Test
+    @WithMockUser(username = "user")
+    void resendVerification_Authenticated_ReturnsOk() throws Exception {
+        // Arrange — мокируем получение пользователя по имени
+        UserDto userDto = UserDto.builder().id(1L).name("user").build();
+        when(userService.getUserByUserName("user")).thenReturn(userDto);
+        doNothing().when(userService).resendVerificationEmail(1L);
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/resend-verification"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Письмо отправлено"));
+    }
+
+    @Test
+    void resendVerification_NoAuth_ReturnsUnauthorized() throws Exception {
+        // Act & Assert — без JWT-токена ожидаем 401
+        mockMvc.perform(post("/api/auth/resend-verification"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    // ==================== FORGOT PASSWORD TESTS ====================
+
+    @Test
+    void forgotPassword_ValidEmail_ReturnsOk() throws Exception {
+        // Arrange
+        ForgotPasswordRequest request = new ForgotPasswordRequest("test@example.com");
+
+        doNothing().when(userService).initiatePasswordReset("test@example.com");
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Если аккаунт существует, письмо отправлено"));
+    }
+
+    @Test
+    void forgotPassword_EmptyEmail_ReturnsBadRequest() throws Exception {
+        // Arrange
+        ForgotPasswordRequest request = new ForgotPasswordRequest("");
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.email").exists());
+    }
+
+    @Test
+    void forgotPassword_InvalidEmail_ReturnsBadRequest() throws Exception {
+        // Arrange
+        ForgotPasswordRequest request = new ForgotPasswordRequest("not-an-email");
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.email").exists());
+    }
+
+    // ==================== RESET PASSWORD TESTS ====================
+
+    @Test
+    void resetPassword_ValidData_ReturnsOk() throws Exception {
+        // Arrange
+        ResetPasswordRequest request = new ResetPasswordRequest("valid-token", "newPassword123");
+
+        doNothing().when(userService).resetPassword("valid-token", "newPassword123");
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Пароль изменён"));
+    }
+
+    @Test
+    void resetPassword_ExpiredToken_ReturnsBadRequest() throws Exception {
+        // Arrange
+        ResetPasswordRequest request = new ResetPasswordRequest("expired-token", "newPassword123");
+
+        doThrow(new TokenExpiredException("Токен сброса пароля истёк"))
+                .when(userService).resetPassword("expired-token", "newPassword123");
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Токен сброса пароля истёк"));
+    }
+
+    @Test
+    void resetPassword_EmptyToken_ReturnsBadRequest() throws Exception {
+        // Arrange
+        ResetPasswordRequest request = new ResetPasswordRequest("", "newPassword123");
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.token").exists());
+    }
+
+    @Test
+    void resetPassword_EmptyPassword_ReturnsBadRequest() throws Exception {
+        // Arrange
+        ResetPasswordRequest request = new ResetPasswordRequest("valid-token", "");
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.password").exists());
+    }
+
+    @Test
+    void resetPassword_AllFieldsEmpty_ReturnsBadRequest() throws Exception {
+        // Arrange
+        ResetPasswordRequest request = new ResetPasswordRequest("", "");
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.token").exists())
+                .andExpect(jsonPath("$.password").exists());
+    }
+
+    @Test
+    void resetPassword_TooShortPassword_ReturnsBadRequest() throws Exception {
+        // Arrange — пароль короче 3 символов
+        ResetPasswordRequest request = new ResetPasswordRequest("valid-token", "ab");
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.password").exists());
     }
 }

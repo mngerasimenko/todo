@@ -19,7 +19,7 @@ class SmtpSendTest {
     void sendTestVerificationEmail() {
         EmailServiceImpl emailService = createEmailService();
         String token = UUID.randomUUID().toString();
-        emailService.sendVerificationEmail("mngeras@yandex.ru", token);
+        emailService.sendVerificationEmail("mngerasimenko@gmail.com", token);
     }
 
     @Test

@@ -114,6 +114,18 @@ public class RateLimitFilter extends OncePerRequestFilter {
             if (uri.equals("/api/auth/refresh")) {
                 return "refresh:" + clientIp;
             }
+            if (uri.equals("/api/auth/forgot-password")) {
+                return "forgotPassword:" + clientIp;
+            }
+            if (uri.equals("/api/auth/verify-email")) {
+                return "verifyEmail:" + clientIp;
+            }
+            if (uri.equals("/api/auth/reset-password")) {
+                return "resetPassword:" + clientIp;
+            }
+            if (uri.equals("/api/auth/resend-verification")) {
+                return "resendVerification:" + clientIp;
+            }
         }
 
         // Пропускаем статус, swagger, api-docs без лимитов
@@ -142,6 +154,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
             if (uri.equals("/api/auth/login")) return properties.getLogin();
             if (uri.equals("/api/auth/register")) return properties.getRegister();
             if (uri.equals("/api/auth/refresh")) return properties.getRefresh();
+            if (uri.equals("/api/auth/forgot-password")) return properties.getForgotPassword();
+            if (uri.equals("/api/auth/verify-email")) return properties.getVerifyEmail();
+            if (uri.equals("/api/auth/reset-password")) return properties.getResetPassword();
+            if (uri.equals("/api/auth/resend-verification")) return properties.getResendVerification();
         }
         return properties.getGeneral();
     }
