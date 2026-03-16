@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ru.mngerasimenko.todolist.dto.AppTodoResponse;
+import ru.mngerasimenko.todolist.service.EmailService;
 import ru.mngerasimenko.todolist.settings.AppProperties;
 import ru.mngerasimenko.todolist.settings.Constants;
 
@@ -19,14 +20,16 @@ import ru.mngerasimenko.todolist.settings.Constants;
 public class AppRestController {
 
     private final AppProperties appProperties;
+    private final EmailService emailService;
 
-    /** Статус приложения: версия сервера и минимальная версия Android-клиента */
+    /** Статус приложения: версия сервера, минимальная версия Android-клиента, здоровье SMTP */
     @GetMapping("/status")
     public ResponseEntity<AppTodoResponse> getStatus() {
         AppTodoResponse response = AppTodoResponse.builder()
                 .status(true)
                 .version(appProperties.getVersion())
                 .minAndroidVersion(appProperties.getMinAndroidVersion())
+                .smtpHealthy(emailService.isSmtpHealthy())
                 .build();
         return ResponseEntity.ok(response);
     }

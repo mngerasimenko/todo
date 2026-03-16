@@ -61,6 +61,12 @@ services:
       - SPRING_PROFILES_ACTIVE=production
       - JAVA_TOOL_OPTIONS=-Xmx160m -Xms160m
       - APP_VERSION=${APP_VERSION:-0.0.1}
+      - MAIL_HOST=${MAIL_HOST:-mail.hosting.reg.ru}
+      - MAIL_PORT=${MAIL_PORT:-465}
+      - MAIL_USERNAME=${MAIL_USERNAME:-}
+      - MAIL_PASSWORD=${MAIL_PASSWORD:-}
+      - MAIL_FROM=${MAIL_FROM:-todo-noreply@mngerasimenko.ru}
+      - APP_BASE_URL=${APP_BASE_URL:-https://todo.mngerasimenko.ru}
 
     volumes:
       - todo-logs:/todo/logs

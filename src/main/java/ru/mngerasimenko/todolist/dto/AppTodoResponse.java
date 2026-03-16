@@ -25,4 +25,7 @@ public class AppTodoResponse {
 
     @JsonProperty("min_android_version")
     private Integer minAndroidVersion;
+
+    @JsonProperty("smtp_healthy")
+    private Boolean smtpHealthy;
 }

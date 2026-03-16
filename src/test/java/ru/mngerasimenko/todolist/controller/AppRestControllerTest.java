@@ -4,14 +4,17 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import ru.mngerasimenko.todolist.config.TestSecurityConfig;
 import ru.mngerasimenko.todolist.security.ApiSecurityConfig;
+import ru.mngerasimenko.todolist.service.EmailService;
 import ru.mngerasimenko.todolist.settings.AppProperties;
 import ru.mngerasimenko.todolist.settings.Constants;
 
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -24,6 +27,9 @@ class AppRestControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @MockitoBean
+    private EmailService emailService;
+
     @Test
     void getStatus_ReturnsOkWithStatusAndVersion() throws Exception {
         mockMvc.perform(get("/api/status")
@@ -34,6 +40,24 @@ class AppRestControllerTest {
                 .andExpect(jsonPath("$.version").value("0.0.1"))
                 .andExpect(jsonPath("$.min_android_version").value(1))
                 .andExpect(jsonPath("$.appName").doesNotExist());
+    }
+
+    @Test
+    void getStatus_SmtpHealthyTrue_ReturnsTrue() throws Exception {
+        when(emailService.isSmtpHealthy()).thenReturn(true);
+
+        mockMvc.perform(get("/api/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.smtp_healthy").value(true));
+    }
+
+    @Test
+    void getStatus_SmtpHealthyFalse_ReturnsFalse() throws Exception {
+        when(emailService.isSmtpHealthy()).thenReturn(false);
+
+        mockMvc.perform(get("/api/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.smtp_healthy").value(false));
     }
 
     @Test
