@@ -195,4 +195,16 @@ public class AuthController {
         userService.resetPassword(request.getToken(), request.getPassword());
         return ResponseEntity.ok(Map.of("message", "Пароль изменён"));
     }
+
+    /**
+     * Смена email с повторной верификацией (требует JWT)
+     */
+    @PostMapping("/change-email")
+    public ResponseEntity<Map<String, String>> changeEmail(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @Valid @RequestBody ChangeEmailRequest request) {
+        Long userId = userService.getUserByUserName(userDetails.getUsername()).getId();
+        userService.changeEmail(userId, request.getEmail());
+        return ResponseEntity.ok(Map.of("message", "Письмо подтверждения отправлено на новый email"));
+    }
 }

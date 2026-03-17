@@ -19,6 +19,7 @@ public class RateLimitProperties {
     private EndpointLimit verifyEmail = new EndpointLimit(10, 60);
     private EndpointLimit resetPassword = new EndpointLimit(10, 60);
     private EndpointLimit resendVerification = new EndpointLimit(3, 3600);
+    private EndpointLimit changeEmail = new EndpointLimit(3, 3600);
     private EndpointLimit general = new EndpointLimit(100, 60);
 
     @Getter

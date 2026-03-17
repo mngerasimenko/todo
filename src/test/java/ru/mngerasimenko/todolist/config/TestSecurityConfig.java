@@ -68,6 +68,7 @@ public class TestSecurityConfig {
         props.setRegister(new RateLimitProperties.EndpointLimit(1000, 1));
         props.setRefresh(new RateLimitProperties.EndpointLimit(1000, 1));
         props.setGeneral(new RateLimitProperties.EndpointLimit(1000, 1));
+        props.setChangeEmail(new RateLimitProperties.EndpointLimit(1000, 1));
         return new RateLimitFilter(props);
     }
 }

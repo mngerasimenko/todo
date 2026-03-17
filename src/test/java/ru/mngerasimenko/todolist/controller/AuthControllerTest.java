@@ -692,4 +692,65 @@ class AuthControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.password").exists());
     }
+
+    // ==================== CHANGE EMAIL TESTS ====================
+
+    @Test
+    @WithMockUser(username = "user")
+    void changeEmail_Authenticated_ReturnsOk() throws Exception {
+        // Arrange — мокируем получение пользователя по имени
+        UserDto userDto = UserDto.builder().id(1L).name("user").build();
+        when(userService.getUserByUserName("user")).thenReturn(userDto);
+        doNothing().when(userService).changeEmail(1L, "new@example.com");
+
+        ChangeEmailRequest request = new ChangeEmailRequest("new@example.com");
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/change-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Письмо подтверждения отправлено на новый email"));
+
+        verify(userService, times(1)).changeEmail(1L, "new@example.com");
+    }
+
+    @Test
+    void changeEmail_NoAuth_ReturnsUnauthorized() throws Exception {
+        // Act & Assert — без JWT-токена ожидаем 401
+        ChangeEmailRequest request = new ChangeEmailRequest("new@example.com");
+
+        mockMvc.perform(post("/api/auth/change-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @WithMockUser(username = "user")
+    void changeEmail_EmptyEmail_ReturnsBadRequest() throws Exception {
+        // Arrange — пустой email
+        ChangeEmailRequest request = new ChangeEmailRequest("");
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/change-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.email").exists());
+    }
+
+    @Test
+    @WithMockUser(username = "user")
+    void changeEmail_InvalidEmail_ReturnsBadRequest() throws Exception {
+        // Arrange — некорректный формат email
+        ChangeEmailRequest request = new ChangeEmailRequest("not-an-email");
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/change-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.email").exists());
+    }
 }

@@ -214,6 +214,39 @@ public class UserServiceImpl implements UserService {
         log.info("Пароль сброшен: userId={}", user.getId());
     }
 
+    @Override
+    @Transactional(noRollbackFor = DataIntegrityViolationException.class)
+    public void changeEmail(Long userId, String newEmail) {
+        User user = repository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
+
+        // Проверяем, что новый email не занят другим пользователем
+        User existingUser = repository.getUserByEmail(newEmail);
+        if (existingUser != null && !existingUser.getId().equals(userId)) {
+            throw new IllegalArgumentException("Email " + newEmail + " уже используется");
+        }
+
+        // Обновляем email и сбрасываем верификацию
+        user.setEmail(newEmail);
+        user.setEmailVerified(false);
+
+        // Генерируем новый токен верификации
+        String rawToken = UUID.randomUUID().toString();
+        user.setEmailVerificationToken(sha256(rawToken));
+        user.setEmailVerificationExpiresAt(
+                LocalDateTime.now().plusHours(emailProperties.getVerificationTokenTtlHours()));
+
+        try {
+            repository.saveAndFlush(user);
+        } catch (DataIntegrityViolationException e) {
+            throw new IllegalArgumentException("Email " + newEmail + " уже используется");
+        }
+
+        // Отправляем письмо верификации на новый email
+        emailService.sendVerificationEmail(newEmail, rawToken);
+        log.info("Email изменён: userId={}, newEmail={}", userId, newEmail);
+    }
+
     @Transactional(readOnly = true)
     public boolean existsByEmail(String email) {
         return repository.getUserByEmail(email) != null;

@@ -695,4 +695,89 @@ class UserServiceImplTest {
         verify(repository, never()).save(any(User.class));
         verify(passwordEncoder, never()).encode(anyString());
     }
+
+    // ===== changeEmail =====
+
+    @Test
+    void changeEmail_Success_UpdatesEmailAndSendsVerification() {
+        // Пользователь найден, новый email свободен
+        User foundUser = new User();
+        foundUser.setId(1L);
+        foundUser.setEmail("old@mail.ru");
+        foundUser.setEmailVerified(true);
+
+        when(repository.findById(1L)).thenReturn(Optional.of(foundUser));
+        when(repository.getUserByEmail("new@mail.ru")).thenReturn(null);
+        when(emailProperties.getVerificationTokenTtlHours()).thenReturn(24);
+        when(repository.saveAndFlush(any(User.class))).thenReturn(foundUser);
+
+        userService.changeEmail(1L, "new@mail.ru");
+
+        // Проверяем обновление email и сброс верификации
+        assertThat(foundUser.getEmail()).isEqualTo("new@mail.ru");
+        assertThat(foundUser.isEmailVerified()).isFalse();
+        assertThat(foundUser.getEmailVerificationToken()).isNotNull();
+        assertThat(foundUser.getEmailVerificationExpiresAt()).isNotNull();
+        assertThat(foundUser.getEmailVerificationExpiresAt()).isAfter(LocalDateTime.now());
+        verify(repository, times(1)).findById(1L);
+        verify(repository, times(1)).saveAndFlush(foundUser);
+        verify(emailService, times(1)).sendVerificationEmail(eq("new@mail.ru"), anyString());
+    }
+
+    @Test
+    void changeEmail_EmailAlreadyTaken_ThrowsIllegalArgumentException() {
+        // Пользователь найден, но новый email занят другим пользователем
+        User foundUser = new User();
+        foundUser.setId(1L);
+        foundUser.setEmail("old@mail.ru");
+
+        User otherUser = new User();
+        otherUser.setId(2L);
+        otherUser.setEmail("taken@mail.ru");
+
+        when(repository.findById(1L)).thenReturn(Optional.of(foundUser));
+        when(repository.getUserByEmail("taken@mail.ru")).thenReturn(otherUser);
+
+        assertThatThrownBy(() -> userService.changeEmail(1L, "taken@mail.ru"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Email taken@mail.ru уже используется");
+
+        verify(repository, never()).saveAndFlush(any(User.class));
+        verify(emailService, never()).sendVerificationEmail(anyString(), anyString());
+    }
+
+    @Test
+    void changeEmail_SameEmailAllowed_DoesNotThrowException() {
+        // Пользователь меняет email на тот же самый — не должно быть исключения
+        User foundUser = new User();
+        foundUser.setId(1L);
+        foundUser.setEmail("same@mail.ru");
+        foundUser.setEmailVerified(true);
+
+        when(repository.findById(1L)).thenReturn(Optional.of(foundUser));
+        when(repository.getUserByEmail("same@mail.ru")).thenReturn(foundUser);
+        when(emailProperties.getVerificationTokenTtlHours()).thenReturn(24);
+        when(repository.saveAndFlush(any(User.class))).thenReturn(foundUser);
+
+        userService.changeEmail(1L, "same@mail.ru");
+
+        // Email остался тем же, но верификация сброшена
+        assertThat(foundUser.getEmail()).isEqualTo("same@mail.ru");
+        assertThat(foundUser.isEmailVerified()).isFalse();
+        verify(repository, times(1)).saveAndFlush(foundUser);
+        verify(emailService, times(1)).sendVerificationEmail(eq("same@mail.ru"), anyString());
+    }
+
+    @Test
+    void changeEmail_UserNotFound_ThrowsUserNotFoundException() {
+        // Пользователь не найден
+        when(repository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.changeEmail(999L, "new@mail.ru"))
+                .isInstanceOf(UserNotFoundException.class)
+                .hasMessage("User not found with id: 999");
+
+        verify(repository, never()).saveAndFlush(any(User.class));
+        verify(emailService, never()).sendVerificationEmail(anyString(), anyString());
+    }
 }
