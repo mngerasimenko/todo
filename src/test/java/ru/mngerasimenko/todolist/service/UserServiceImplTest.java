@@ -12,7 +12,14 @@ import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.exception.TokenExpiredException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.UserMapper;
+import ru.mngerasimenko.todolist.model.TaskList;
+import ru.mngerasimenko.todolist.model.TaskListRole;
+import ru.mngerasimenko.todolist.model.TaskListUser;
+import ru.mngerasimenko.todolist.model.TaskListUserId;
 import ru.mngerasimenko.todolist.model.User;
+import ru.mngerasimenko.todolist.repository.TaskListRepository;
+import ru.mngerasimenko.todolist.repository.TaskListUserRepository;
+import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 import ru.mngerasimenko.todolist.settings.EmailProperties;
 
@@ -45,6 +52,15 @@ class UserServiceImplTest {
 
     @Mock
     private EmailProperties emailProperties;
+
+    @Mock
+    private TaskListUserRepository taskListUserRepository;
+
+    @Mock
+    private TaskListRepository taskListRepository;
+
+    @Mock
+    private TodoRepository todoRepository;
 
     @InjectMocks
     private UserServiceImpl userService;
@@ -106,12 +122,144 @@ class UserServiceImplTest {
 
     @Test
     void delete_WithExistingId_DeletesUser() {
+        // Пользователь без списков
+        User deletedUser = new User();
+        deletedUser.setId(0L);
         when(repository.existsById(1L)).thenReturn(true);
+        when(taskListUserRepository.findByUserId(1L)).thenReturn(List.of());
+        when(repository.findById(0L)).thenReturn(Optional.of(deletedUser));
 
         userService.delete(1L);
 
         verify(repository, times(1)).existsById(1L);
+        verify(taskListUserRepository, times(1)).findByUserId(1L);
+        verify(todoRepository, times(1)).reassignUser(1L, 0L);
+        verify(todoRepository, times(1)).reassignCompletorUser(1L, 0L);
         verify(repository, times(1)).deleteById(1L);
+    }
+
+    @Test
+    void delete_SoleListMember_DeletesListEntirely() {
+        // Пользователь — единственный участник списка → удаляем список целиком
+        User deletedUser = new User();
+        deletedUser.setId(0L);
+
+        TaskList list = new TaskList();
+        list.setId(10L);
+
+        TaskListUser membership = new TaskListUser();
+        membership.setTaskList(list);
+        membership.setUser(user);
+        membership.setRole(TaskListRole.ADMIN);
+
+        when(repository.existsById(1L)).thenReturn(true);
+        when(taskListUserRepository.findByUserId(1L)).thenReturn(List.of(membership));
+        when(taskListUserRepository.findByIdListId(10L)).thenReturn(List.of(membership));
+        when(repository.findById(0L)).thenReturn(Optional.of(deletedUser));
+
+        userService.delete(1L);
+
+        // Список удалён целиком
+        verify(todoRepository).deleteByListId(10L);
+        verify(taskListUserRepository).deleteByListId(10L);
+        verify(taskListRepository).deleteByListId(10L);
+        // Приватные задачи отдельно не удалялись (весь список удалён)
+        verify(todoRepository, never()).deletePrivateTodosByListIdAndUserId(anyLong(), anyLong());
+        verify(repository).deleteById(1L);
+    }
+
+    @Test
+    void delete_AdminWithOtherMembers_TransfersAdminRole() {
+        // Пользователь — ADMIN списка с другими участниками → передаём ADMIN
+        User deletedUser = new User();
+        deletedUser.setId(0L);
+
+        User otherUser = new User();
+        otherUser.setId(2L);
+
+        TaskList list = new TaskList();
+        list.setId(10L);
+
+        TaskListUser adminMembership = new TaskListUser();
+        adminMembership.setTaskList(list);
+        adminMembership.setUser(user);
+        adminMembership.setRole(TaskListRole.ADMIN);
+
+        TaskListUser otherMembership = new TaskListUser();
+        otherMembership.setTaskList(list);
+        otherMembership.setUser(otherUser);
+        otherMembership.setRole(TaskListRole.USER);
+
+        when(repository.existsById(1L)).thenReturn(true);
+        when(taskListUserRepository.findByUserId(1L)).thenReturn(List.of(adminMembership));
+        when(taskListUserRepository.findByIdListId(10L)).thenReturn(List.of(adminMembership, otherMembership));
+        when(repository.findById(0L)).thenReturn(Optional.of(deletedUser));
+
+        userService.delete(1L);
+
+        // ADMIN передан другому участнику
+        assertThat(otherMembership.getRole()).isEqualTo(TaskListRole.ADMIN);
+        // Приватные задачи удалены, связь удалена
+        verify(todoRepository).deletePrivateTodosByListIdAndUserId(10L, 1L);
+        verify(taskListUserRepository).deleteByListIdAndUserId(10L, 1L);
+        // Список НЕ удалён
+        verify(taskListRepository, never()).deleteByListId(10L);
+        verify(repository).deleteById(1L);
+    }
+
+    @Test
+    void delete_UserInMultipleLists_HandlesEachList() {
+        // Пользователь в двух списках: один пустой, другой с участниками
+        User deletedUser = new User();
+        deletedUser.setId(0L);
+
+        User otherUser = new User();
+        otherUser.setId(2L);
+
+        TaskList list1 = new TaskList();
+        list1.setId(10L);
+        TaskList list2 = new TaskList();
+        list2.setId(20L);
+
+        // Список 1: единственный участник
+        TaskListUser membership1 = new TaskListUser();
+        membership1.setTaskList(list1);
+        membership1.setUser(user);
+        membership1.setRole(TaskListRole.ADMIN);
+
+        // Список 2: есть другой участник
+        TaskListUser membership2 = new TaskListUser();
+        membership2.setTaskList(list2);
+        membership2.setUser(user);
+        membership2.setRole(TaskListRole.USER);
+
+        TaskListUser otherMembership = new TaskListUser();
+        otherMembership.setTaskList(list2);
+        otherMembership.setUser(otherUser);
+        otherMembership.setRole(TaskListRole.ADMIN);
+
+        when(repository.existsById(1L)).thenReturn(true);
+        when(taskListUserRepository.findByUserId(1L)).thenReturn(List.of(membership1, membership2));
+        when(taskListUserRepository.findByIdListId(10L)).thenReturn(List.of(membership1));
+        when(taskListUserRepository.findByIdListId(20L)).thenReturn(List.of(membership2, otherMembership));
+        when(repository.findById(0L)).thenReturn(Optional.of(deletedUser));
+
+        userService.delete(1L);
+
+        // Список 1: удалён целиком
+        verify(todoRepository).deleteByListId(10L);
+        verify(taskListUserRepository).deleteByListId(10L);
+        verify(taskListRepository).deleteByListId(10L);
+
+        // Список 2: приватные удалены, связь удалена, список остался
+        verify(todoRepository).deletePrivateTodosByListIdAndUserId(20L, 1L);
+        verify(taskListUserRepository).deleteByListIdAndUserId(20L, 1L);
+        verify(taskListRepository, never()).deleteByListId(20L);
+
+        // Публичные задачи переназначены
+        verify(todoRepository).reassignUser(1L, 0L);
+        verify(todoRepository).reassignCompletorUser(1L, 0L);
+        verify(repository).deleteById(1L);
     }
 
     @Test

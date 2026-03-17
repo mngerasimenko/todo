@@ -13,3 +13,5 @@ databaseChangeLog:
       file: db/migration/006-add-email-verification.yaml
   - include:
       file: db/migration/007-add-user-created-at.yaml
+  - include:
+      file: db/migration/008-add-deleted-user.yaml

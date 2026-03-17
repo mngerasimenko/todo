@@ -62,4 +62,20 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
     @Modifying
     @Query("DELETE FROM Todo t WHERE t.taskList.id = :listId")
     void deleteByListId(@Param("listId") Long listId);
+
+    /**
+     * Перенести публичные задачи пользователя на системного «Удалённый пользователь».
+     * Используется при удалении аккаунта.
+     */
+    @Modifying
+    @Query("UPDATE Todo t SET t.user.id = :newUserId WHERE t.user.id = :oldUserId")
+    void reassignUser(@Param("oldUserId") Long oldUserId, @Param("newUserId") Long newUserId);
+
+    /**
+     * Перенести completor_user на системного «Удалённый пользователь».
+     * Используется при удалении аккаунта.
+     */
+    @Modifying
+    @Query("UPDATE Todo t SET t.completorUser.id = :newUserId WHERE t.completorUser.id = :oldUserId")
+    void reassignCompletorUser(@Param("oldUserId") Long oldUserId, @Param("newUserId") Long newUserId);
 }

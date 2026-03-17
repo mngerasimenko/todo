@@ -15,6 +15,12 @@ import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 import ru.mngerasimenko.todolist.settings.EmailProperties;
 
+import ru.mngerasimenko.todolist.model.TaskListRole;
+import ru.mngerasimenko.todolist.model.TaskListUser;
+import ru.mngerasimenko.todolist.repository.TaskListRepository;
+import ru.mngerasimenko.todolist.repository.TaskListUserRepository;
+import ru.mngerasimenko.todolist.repository.TodoRepository;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -27,11 +33,18 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
+
+    /** ID системного пользователя «Удалённый пользователь» */
+    static final Long DELETED_USER_ID = 0L;
+
     private final UserRepository repository;
     private final UserMapper mapper;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final EmailProperties emailProperties;
+    private final TaskListUserRepository taskListUserRepository;
+    private final TaskListRepository taskListRepository;
+    private final TodoRepository todoRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -47,6 +60,43 @@ public class UserServiceImpl implements UserService {
         if (!repository.existsById(id)) {
             throw new UserNotFoundException("User not found with id: " + id);
         }
+
+        // Обрабатываем каждый список, в котором состоит пользователь
+        List<TaskListUser> memberships = taskListUserRepository.findByUserId(id);
+        for (TaskListUser membership : memberships) {
+            Long listId = membership.getTaskList().getId();
+            List<TaskListUser> allMembers = taskListUserRepository.findByIdListId(listId);
+
+            if (allMembers.size() == 1) {
+                // Единственный участник — удаляем список целиком
+                todoRepository.deleteByListId(listId);
+                taskListUserRepository.deleteByListId(listId);
+                taskListRepository.deleteByListId(listId);
+            } else {
+                // Есть другие участники
+                if (membership.getRole() == TaskListRole.ADMIN) {
+                    // Передаём ADMIN первому другому участнику
+                    allMembers.stream()
+                            .filter(m -> !m.getUser().getId().equals(id))
+                            .findFirst()
+                            .ifPresent(m -> m.setRole(TaskListRole.ADMIN));
+                }
+                // Удаляем приватные задачи пользователя в этом списке
+                todoRepository.deletePrivateTodosByListIdAndUserId(listId, id);
+                // Удаляем связь пользователь-список
+                taskListUserRepository.deleteByListIdAndUserId(listId, id);
+            }
+        }
+
+        // Переносим публичные задачи пользователя на системного «Удалённый пользователь»
+        User deletedUser = repository.findById(DELETED_USER_ID)
+                .orElseThrow(() -> new IllegalStateException("Системный пользователь (id=0) не найден"));
+        todoRepository.reassignUser(id, deletedUser.getId());
+
+        // Переносим completor_user на системного пользователя
+        todoRepository.reassignCompletorUser(id, deletedUser.getId());
+
+        // Удаляем пользователя
         repository.deleteById(id);
         log.info("Удалён пользователь: id={}", id);
     }
