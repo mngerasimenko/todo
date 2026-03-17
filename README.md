@@ -37,6 +37,7 @@ REST API бэкенд для совместного управления спи�
 - Email-верификация при регистрации (SMTP через reg.ru)
 - Сброс пароля по email
 - Смена email с повторной верификацией
+- Политика конфиденциальности и пользовательское соглашение (`/privacy`, `/terms`)
 - REST API с JWT аутентификацией (React SPA, Android-клиент)
 - BCrypt хэширование паролей
 - CORS для поддержки React SPA и прямых API-запросов
@@ -264,7 +265,7 @@ src/main/java/ru/mngerasimenko/todolist/
 ├── exception/       GlobalExceptionHandler + кастомные исключения (включая TokenExpiredException)
 └── TodolistApplication.java
 
-src/main/resources/db/migration/   Liquibase-миграции (master + 6 changeset-файлов)
+src/main/resources/db/migration/   Liquibase-миграции (master + 7 changeset-файлов)
 src/main/resources/templates/      HTML-шаблоны email (верификация, сброс пароля)
 src/test/java/       302 теста (controller, service, repository, mapper, concurrency)
 postman/             Postman-коллекция + окружения
