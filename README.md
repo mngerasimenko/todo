@@ -51,7 +51,8 @@ REST API бэкенд для совместного управления спи�
 - Мониторинг сервера через Telegram-бот (алерты + интерактивные команды)
 - Интерактивная документация API (Swagger UI / OpenAPI 3)
 - Контроль доступа: изменение и удаление аккаунта только владельцем, операции с задачами только для участников списка
-- 302 unit-теста с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
+- Каскадное удаление аккаунта: передача ADMIN, удаление пустых списков, сохранение публичных задач через системного пользователя
+- 305 unit-тестов с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
 
 ---
 
@@ -265,9 +266,9 @@ src/main/java/ru/mngerasimenko/todolist/
 ├── exception/       GlobalExceptionHandler + кастомные исключения (включая TokenExpiredException)
 └── TodolistApplication.java
 
-src/main/resources/db/migration/   Liquibase-миграции (master + 7 changeset-файлов)
+src/main/resources/db/migration/   Liquibase-миграции (master + 8 changeset-файлов)
 src/main/resources/templates/      HTML-шаблоны email (верификация, сброс пароля)
-src/test/java/       302 теста (controller, service, repository, mapper, concurrency)
+src/test/java/       305 тестов (controller, service, repository, mapper, concurrency)
 postman/             Postman-коллекция + окружения
 monitoring/          Telegram-мониторинг (скрипты, systemd-сервис, конфиг) + backup PostgreSQL
 ```
