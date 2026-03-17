@@ -34,6 +34,9 @@ REST API бэкенд для совместного управления спи�
 - Приватные задачи, видимые только создателю
 - Цвета пользователей для визуальной идентификации задач
 - Отметка задач как выполненных с фиксацией даты и исполнителя
+- Email-верификация при регистрации (SMTP через reg.ru)
+- Сброс пароля по email
+- Смена email с повторной верификацией
 - REST API с JWT аутентификацией (React SPA, Android-клиент)
 - BCrypt хэширование паролей
 - CORS для поддержки React SPA и прямых API-запросов
@@ -43,10 +46,11 @@ REST API бэкенд для совместного управления спи�
 - Защита от race conditions (TOCTOU) — атомарные операции через UNIQUE constraints
 - Миграции БД через Liquibase (безопасно для существующих данных)
 - Автоматический CI/CD через GitHub Actions
+- SMTP health check в мониторинге сервера
 - Мониторинг сервера через Telegram-бот (алерты + интерактивные команды)
 - Интерактивная документация API (Swagger UI / OpenAPI 3)
 - Контроль доступа: изменение и удаление аккаунта только владельцем, операции с задачами только для участников списка
-- 260 unit-тестов с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
+- 302 unit-теста с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
 
 ---
 
@@ -79,6 +83,11 @@ REST API бэкенд для совместного управления спи�
 | POST | `/api/auth/register` | Регистрация (возвращает JWT) |
 | POST | `/api/auth/login` | Вход (возвращает JWT) |
 | POST | `/api/auth/refresh` | Обновление access токена |
+| POST | `/api/auth/verify-email` | Подтверждение email по токену |
+| POST | `/api/auth/resend-verification` | Повторная отправка верификации (JWT) |
+| POST | `/api/auth/forgot-password` | Запрос сброса пароля |
+| POST | `/api/auth/reset-password` | Установка нового пароля |
+| POST | `/api/auth/change-email` | Смена email (JWT) |
 
 ### Списки задач
 
@@ -164,7 +173,7 @@ docker compose down
 ### Тесты
 
 ```bash
-# Unit-тесты (260 тестов, без Docker)
+# Unit-тесты (302 теста, без Docker)
 mvn test
 
 # С отчётом покрытия
@@ -184,7 +193,7 @@ mvn test -Pintegration
 Проект использует пайплайн `.github/workflows/deploy.yml`:
 
 **Этап 1 — Тесты** (все PR и push в master):
-- 260 unit-тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
+- 302 unit-теста + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
 - Нагрузочные тесты (3 шт.) запускаются отдельно: `mvn test -Pintegration` (требуют Docker)
 
 **Этап 2 — Деплой** (только push в master):
@@ -244,19 +253,20 @@ chmod +x setup-server.sh
 ```
 src/main/java/ru/mngerasimenko/todolist/
 ├── controller/      REST-контроллеры (5: App, Todo, User, TaskList, Auth)
-├── service/         Бизнес-логика (3 интерфейса + 3 реализации)
+├── service/         Бизнес-логика (4 интерфейса + 4 реализации, включая EmailService)
 ├── repository/      Spring Data JPA (4 репозитория)
 ├── model/           JPA-сущности (User, Todo, TaskList, TaskListUser, TaskListRole) + @Version
-├── dto/             DTO + list/ + auth/ подпакеты
+├── dto/             DTO + list/ + auth/ подпакеты (включая email-верификацию и сброс пароля)
 ├── mapper/          Ручные мапперы (Todo, User, TaskList)
 ├── config/          OpenApiConfig (Swagger UI / OpenAPI)
 ├── security/        Spring Security + JWT + Rate Limiting (Bucket4j)
-├── settings/        AppProperties (corsOrigins, версия, min_android_version)
-├── exception/       GlobalExceptionHandler + кастомные исключения
+├── settings/        AppProperties, EmailProperties (corsOrigins, версия, SMTP)
+├── exception/       GlobalExceptionHandler + кастомные исключения (включая TokenExpiredException)
 └── TodolistApplication.java
 
-src/main/resources/db/migration/   Liquibase-миграции (master + 5 changeset-файлов)
-src/test/java/       260+ тестов (controller, service, repository, mapper, concurrency)
+src/main/resources/db/migration/   Liquibase-миграции (master + 6 changeset-файлов)
+src/main/resources/templates/      HTML-шаблоны email (верификация, сброс пароля)
+src/test/java/       302 теста (controller, service, repository, mapper, concurrency)
 postman/             Postman-коллекция + окружения
 monitoring/          Telegram-мониторинг (скрипты, systemd-сервис, конфиг) + backup PostgreSQL
 ```
