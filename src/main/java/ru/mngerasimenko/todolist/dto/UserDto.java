@@ -10,6 +10,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
+
 
 /**
  * Внутренний DTO пользователя для передачи между слоями.
@@ -47,4 +49,7 @@ public class UserDto {
 
     @JsonProperty("email_verified")
     private Boolean emailVerified;
+
+    @JsonProperty("created_at")
+    private LocalDateTime createdAt;
 }

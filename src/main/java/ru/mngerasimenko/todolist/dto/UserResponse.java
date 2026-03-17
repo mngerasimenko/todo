@@ -7,6 +7,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
+
 /**
  * DTO ответа пользователя для клиента.
  */
@@ -34,4 +36,7 @@ public class UserResponse {
 
     @JsonProperty("email_verified")
     private Boolean emailVerified;
+
+    @JsonProperty("created_at")
+    private LocalDateTime createdAt;
 }

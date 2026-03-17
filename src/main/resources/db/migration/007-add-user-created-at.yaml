@@ -1,0 +1,15 @@
+databaseChangeLog:
+  - changeSet:
+      id: 007-add-user-created-at
+      author: mngerasimenko
+      comment: "Add created_at timestamp to todo_users for audit and GDPR compliance"
+      changes:
+        - addColumn:
+            tableName: todo_users
+            columns:
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false

@@ -67,6 +67,12 @@ public class User {
     private List<TaskListUser> taskListUsers = new ArrayList<>();
 
     /**
+     * Дата регистрации пользователя.
+     */
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    /**
      * Подтверждён ли email пользователя.
      */
     @Column(name = "email_verified", nullable = false)
@@ -239,5 +245,13 @@ public class User {
 
     public void setPasswordResetExpiresAt(LocalDateTime passwordResetExpiresAt) {
         this.passwordResetExpiresAt = passwordResetExpiresAt;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 }

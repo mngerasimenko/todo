@@ -28,6 +28,7 @@ public class UserMapper {
                 .createdTaskColor(user.getCreatedTaskColor())
                 .completedTaskColor(user.getCompletedTaskColor())
                 .emailVerified(user.isEmailVerified())
+                .createdAt(user.getCreatedAt())
                 .build();
     }
 
@@ -77,6 +78,7 @@ public class UserMapper {
                 .createdTaskColor(dto.getCreatedTaskColor())
                 .completedTaskColor(dto.getCompletedTaskColor())
                 .emailVerified(dto.getEmailVerified())
+                .createdAt(dto.getCreatedAt())
                 .build();
     }
 }
