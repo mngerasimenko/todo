@@ -52,14 +52,14 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
      * Удалить приватные задачи пользователя в конкретном списке.
      * Используется при выходе пользователя из списка.
      */
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("DELETE FROM Todo t WHERE t.taskList.id = :listId AND t.user.id = :userId AND t.isPrivate = true")
     void deletePrivateTodosByListIdAndUserId(@Param("listId") Long listId, @Param("userId") Long userId);
 
     /**
      * Удалить все задачи списка. Используется при удалении списка администратором.
      */
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("DELETE FROM Todo t WHERE t.taskList.id = :listId")
     void deleteByListId(@Param("listId") Long listId);
 
@@ -67,7 +67,7 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
      * Перенести публичные задачи пользователя на системного «Удалённый пользователь».
      * Используется при удалении аккаунта.
      */
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE Todo t SET t.user.id = :newUserId WHERE t.user.id = :oldUserId")
     void reassignUser(@Param("oldUserId") Long oldUserId, @Param("newUserId") Long newUserId);
 
@@ -75,7 +75,7 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
      * Перенести completor_user на системного «Удалённый пользователь».
      * Используется при удалении аккаунта.
      */
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE Todo t SET t.completorUser.id = :newUserId WHERE t.completorUser.id = :oldUserId")
     void reassignCompletorUser(@Param("oldUserId") Long oldUserId, @Param("newUserId") Long newUserId);
 }

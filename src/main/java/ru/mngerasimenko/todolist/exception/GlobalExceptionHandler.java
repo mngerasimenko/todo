@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
@@ -100,6 +101,16 @@ public class GlobalExceptionHandler {
         log.warn("JSON parse error: {}", ex.getMessage());
 
         return createErrorResponse(HttpStatus.BAD_REQUEST, "Invalid JSON format in request body", ex.getMessage());
+    }
+
+    /**
+     * Нарушение целостности данных (FK constraint, unique и т.п.) при commit транзакции (HTTP 409).
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, Object>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        log.error("Data integrity violation: {}", ex.getMessage());
+        return createErrorResponse(HttpStatus.CONFLICT, "Conflict",
+                "Нарушение целостности данных. Операция отменена.");
     }
 
     /**
