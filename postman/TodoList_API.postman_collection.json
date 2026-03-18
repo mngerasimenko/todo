@@ -14,6 +14,17 @@
           "name": "Register",
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Уникальный ID для идемпотентности (последние 6 цифр timestamp)",
+                  "var runId = Date.now().toString().slice(-6);",
+                  "pm.environment.set('runId', runId);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "exec": [
@@ -60,7 +71,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"test1@example.com\",\n  \"name\": \"testUser1\",\n  \"password\": \"testUser1\"\n}"
+              "raw": "{\n  \"email\": \"runner_{{runId}}@example.com\",\n  \"name\": \"runner_{{runId}}\",\n  \"password\": \"runner_{{runId}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/register",
@@ -123,7 +134,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"testUser1\",\n  \"password\": \"testUser1\"\n}"
+              "raw": "{\n  \"username\": \"runner_{{runId}}\",\n  \"password\": \"runner_{{runId}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/auth/login",
@@ -2306,10 +2317,253 @@
       "description": "Тесты rate limiting — проверка ограничения частоты запросов"
     },
     {
+      "name": "Delete Account Cascade",
+      "item": [
+        {
+          "name": "1. Register user to delete",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "var ts = Date.now().toString().slice(-6);",
+                  "pm.environment.set('delRunId', ts);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', function () { pm.response.to.have.status(201); });",
+                  "var json = pm.response.json();",
+                  "pm.environment.set('delUserToken', json.access_token);",
+                  "pm.environment.set('delUserId', json.user.id);",
+                  "pm.environment.set('delRefreshToken', json.refresh_token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"email\": \"deltest_{{delRunId}}@example.com\",\n  \"name\": \"delUser_{{delRunId}}\",\n  \"password\": \"delTestUser\"\n}"},
+            "url": {"raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api","auth","register"]}
+          },
+          "response": []
+        },
+        {
+          "name": "2. Create list (as delTestUser)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', function () { pm.response.to.have.status(201); });",
+                  "var json = pm.response.json();",
+                  "pm.environment.set('delListId', json.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{delUserToken}}", "type": "string"}]},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"DelList_{{delRunId}}\",\n  \"password\": \"secret\"\n}"},
+            "url": {"raw": "{{baseUrl}}/api/lists", "host": ["{{baseUrl}}"], "path": ["api","lists"]}
+          },
+          "response": []
+        },
+        {
+          "name": "3. Create todo in list",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', function () { pm.response.to.have.status(201); });",
+                  "var json = pm.response.json();",
+                  "pm.environment.set('delTodoId', json.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{delUserToken}}", "type": "string"}]},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Task by deleted user\",\n  \"user_id\": {{delUserId}},\n  \"list_id\": {{delListId}}\n}"},
+            "url": {"raw": "{{baseUrl}}/api/todos/create", "host": ["{{baseUrl}}"], "path": ["api","todos","create"]}
+          },
+          "response": []
+        },
+        {
+          "name": "4. Main user joins list",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{accessToken}}", "type": "string"}]},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"DelList_{{delRunId}}\",\n  \"password\": \"secret\"\n}"},
+            "url": {"raw": "{{baseUrl}}/api/lists/join", "host": ["{{baseUrl}}"], "path": ["api","lists","join"]}
+          },
+          "response": []
+        },
+        {
+          "name": "5. Delete delTestUser account",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 204', function () { pm.response.to.have.status(204); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{delUserToken}}", "type": "string"}]},
+            "method": "DELETE",
+            "header": [],
+            "url": {"raw": "{{baseUrl}}/api/users/{{delUserId}}", "host": ["{{baseUrl}}"], "path": ["api","users","{{delUserId}}"]}
+          },
+          "response": []
+        },
+        {
+          "name": "6. Verify user deleted from users list",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "var delUserId = pm.environment.get('delUserId');",
+                  "var found = json.find(u => u.id == delUserId);",
+                  "pm.test('Deleted user not in list', function () {",
+                  "    pm.expect(found).to.be.undefined;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{accessToken}}", "type": "string"}]},
+            "method": "GET",
+            "header": [],
+            "url": {"raw": "{{baseUrl}}/api/users/all", "host": ["{{baseUrl}}"], "path": ["api","users","all"]}
+          },
+          "response": []
+        },
+        {
+          "name": "7. Verify task reassigned to Deleted User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "var delListId = pm.environment.get('delListId');",
+                  "pm.test('Task exists and reassigned to system user', function () {",
+                  "    var task = json.find(t => t.name === 'Task by deleted user');",
+                  "    pm.expect(task).to.not.be.undefined;",
+                  "    pm.expect(task.user_name).to.eql('Удалённый пользователь');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{accessToken}}", "type": "string"}]},
+            "method": "GET",
+            "header": [],
+            "url": {"raw": "{{baseUrl}}/api/lists/{{delListId}}/todos", "host": ["{{baseUrl}}"], "path": ["api","lists","{{delListId}}","todos"]}
+          },
+          "response": []
+        },
+        {
+          "name": "8. Verify main user is now ADMIN",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "var userId = pm.environment.get('userId');",
+                  "pm.test('Main user is ADMIN', function () {",
+                  "    var member = json.find(m => m.user_id == userId);",
+                  "    pm.expect(member).to.not.be.undefined;",
+                  "    pm.expect(member.role).to.eql('ADMIN');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{accessToken}}", "type": "string"}]},
+            "method": "GET",
+            "header": [],
+            "url": {"raw": "{{baseUrl}}/api/lists/{{delListId}}/members", "host": ["{{baseUrl}}"], "path": ["api","lists","{{delListId}}","members"]}
+          },
+          "response": []
+        },
+        {
+          "name": "9. Cleanup - delete test list",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 204', function () { pm.response.to.have.status(204); });",
+                  "// Очистка переменных",
+                  "pm.environment.unset('delUserToken');",
+                  "pm.environment.unset('delUserId');",
+                  "pm.environment.unset('delListId');",
+                  "pm.environment.unset('delTodoId');",
+                  "pm.environment.unset('delRefreshToken');",
+                  "pm.environment.unset('delRunId');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{accessToken}}", "type": "string"}]},
+            "method": "DELETE",
+            "header": [],
+            "url": {"raw": "{{baseUrl}}/api/lists/{{delListId}}", "host": ["{{baseUrl}}"], "path": ["api","lists","{{delListId}}"]}
+          },
+          "response": []
+        }
+      ],
+      "description": "Тест каскадного удаления аккаунта: создание пользователя с задачами в списке, удаление, проверка переназначения задач и передачи ADMIN"
+    },
+    {
       "name": "Clean",
       "item": [
         {
-          "name": "Delete user",
+          "name": "Delete main user",
           "event": [
             {
               "listen": "test",
@@ -2317,7 +2571,16 @@
                 "exec": [
                   "pm.test(\"Status code is 204\", function () {",
                   "    pm.response.to.have.status(204);",
-                  "});"
+                  "});",
+                  "",
+                  "// Очистка всех переменных",
+                  "pm.environment.unset('runId');",
+                  "pm.environment.unset('accessToken');",
+                  "pm.environment.unset('refreshToken');",
+                  "pm.environment.unset('userId');",
+                  "pm.environment.unset('todoId');",
+                  "pm.environment.unset('listId');",
+                  "pm.environment.unset('newUserId');"
                 ],
                 "type": "text/javascript"
               }
@@ -2347,7 +2610,7 @@
                 "{{userId}}"
               ]
             },
-            "description": "Удаление задачи по ID.\n\n⚠️ **Осторожно:** Операция необратима!\n\n**Ошибки:** `404` (задача не найдена)"
+            "description": "Удаление основного пользователя и очистка всех переменных."
           },
           "response": []
         }

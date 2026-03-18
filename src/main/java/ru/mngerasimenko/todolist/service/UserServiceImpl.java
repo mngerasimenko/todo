@@ -75,11 +75,14 @@ public class UserServiceImpl implements UserService {
             } else {
                 // Есть другие участники
                 if (membership.getRole() == TaskListRole.ADMIN) {
-                    // Передаём ADMIN первому другому участнику
+                    // Передаём ADMIN первому другому участнику и сохраняем до JPQL-запросов
                     allMembers.stream()
                             .filter(m -> !m.getUser().getId().equals(id))
                             .findFirst()
-                            .ifPresent(m -> m.setRole(TaskListRole.ADMIN));
+                            .ifPresent(m -> {
+                                m.setRole(TaskListRole.ADMIN);
+                                taskListUserRepository.saveAndFlush(m);
+                            });
                 }
                 // Удаляем приватные задачи пользователя в этом списке
                 todoRepository.deletePrivateTodosByListIdAndUserId(listId, id);
