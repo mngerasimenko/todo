@@ -32,4 +32,5 @@ build/
 
 ### Secrets ###
 .env
+.env.production-*
 monitoring/monitor.conf
