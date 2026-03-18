@@ -60,8 +60,12 @@ services:
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - SPRING_PROFILES_ACTIVE=production
-      - JAVA_TOOL_OPTIONS=-Xmx160m -Xms160m
+      - JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS:--Xmx768m -Xms768m}
       - APP_VERSION=${APP_VERSION:-0.0.1}
+      - HIKARI_POOL_SIZE=${HIKARI_POOL_SIZE:-30}
+      - TOMCAT_THREADS_MAX=${TOMCAT_THREADS_MAX:-100}
+      - TOMCAT_THREADS_MIN_SPARE=${TOMCAT_THREADS_MIN_SPARE:-10}
+      - TOMCAT_ACCEPT_COUNT=${TOMCAT_ACCEPT_COUNT:-100}
       - MAIL_HOST=${MAIL_HOST:-mail.hosting.reg.ru}
       - MAIL_PORT=${MAIL_PORT:-465}
       - MAIL_USERNAME=${MAIL_USERNAME:-}
@@ -112,16 +116,14 @@ services:
       - POSTGRES_DB=todo
       - POSTGRES_USER=postgres
 
-    # Оптимизация памяти для серверов с 1GB RAM
+    # PostgreSQL performance tuning (configured for 4GB RAM server)
     command: >
       postgres
-      -c shared_buffers=32MB
-      -c work_mem=1MB
-      -c maintenance_work_mem=16MB
-      -c effective_cache_size=128MB
-      -c max_connections=20
-
-    mem_limit: 256m
+      -c shared_buffers=${PG_SHARED_BUFFERS:-512MB}
+      -c work_mem=${PG_WORK_MEM:-8MB}
+      -c maintenance_work_mem=${PG_MAINTENANCE_WORK_MEM:-64MB}
+      -c effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-2GB}
+      -c max_connections=${PG_MAX_CONNECTIONS:-100}
 
     volumes:
       - postgres-data:/var/lib/postgresql/data
