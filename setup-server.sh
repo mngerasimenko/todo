@@ -95,12 +95,21 @@ if [ "$(docker ps -q -f name=postgres-db)" ]; then
   exit 0
 fi
 
-# Запускаем контейнер
+# Read password from .env if exists, otherwise use default
+PG_PASSWORD="postgres"
+if [ -f /root/todo/.env ]; then
+  ENV_PG_PASS=$(grep -E '^POSTGRES_PASSWORD=' /root/todo/.env | cut -d= -f2-)
+  if [ -n "$ENV_PG_PASS" ]; then
+    PG_PASSWORD="$ENV_PG_PASS"
+  fi
+fi
+
+# Start container
 docker run -d \
   --name postgres-db \
   -e POSTGRES_DB=todo \
   -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_PASSWORD="$PG_PASSWORD" \
   -v postgres-data:/var/lib/postgresql/data \
   --network todo-network \
   --restart unless-stopped \
