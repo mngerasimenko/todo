@@ -1,10 +1,13 @@
 package ru.mngerasimenko.todolist.dto.list;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
 
 /**
  * Ответ с информацией об участнике списка задач.
@@ -24,5 +27,6 @@ public class ListMemberResponse {
     private String role;
 
     @JsonProperty("joined_at")
-    private String joinedAt;
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime joinedAt;
 }

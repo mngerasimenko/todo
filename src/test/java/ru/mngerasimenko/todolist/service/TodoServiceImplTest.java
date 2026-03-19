@@ -330,9 +330,10 @@ public class TodoServiceImplTest {
     @Test
     void getTodoById_WithValidId_ReturnsTodoDto() {
         when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
+        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
         when(todoMapper.toDto(testTodo)).thenReturn(testTodoDto);
 
-        TodoDto result = todoService.getTodoById(1L);
+        TodoDto result = todoService.getTodoById(1L, 1L);
 
         assertThat(result).isEqualTo(testTodoDto);
         verify(todoRepository, times(1)).findById(1L);
@@ -343,11 +344,20 @@ public class TodoServiceImplTest {
     void getTodoById_WithNonExistentId_ThrowsTodoNotFoundException() {
         when(todoRepository.findById(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> todoService.getTodoById(999L))
+        assertThatThrownBy(() -> todoService.getTodoById(999L, 1L))
                 .isInstanceOf(TodoNotFoundException.class)
                 .hasMessage("Todo not found with id: 999");
 
         verify(todoMapper, never()).toDto(any(Todo.class));
+    }
+
+    @Test
+    void getTodoById_WithNonMember_ThrowsAccessDeniedException() {
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
+        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 99L)).thenReturn(false);
+
+        assertThatThrownBy(() -> todoService.getTodoById(1L, 99L))
+                .isInstanceOf(AccessDeniedException.class);
     }
 
     @Test
@@ -360,27 +370,25 @@ public class TodoServiceImplTest {
         dto2.setId(2L);
         dto2.setName("Todo 2");
 
-        when(todoRepository.findAll()).thenReturn(Arrays.asList(testTodo, todo2));
+        when(taskListUserRepository.findListIdsByUserId(1L)).thenReturn(List.of(1L));
+        when(todoRepository.findByListIdsVisibleToUser(List.of(1L), 1L))
+                .thenReturn(Arrays.asList(testTodo, todo2));
         when(todoMapper.toDto(testTodo)).thenReturn(testTodoDto);
         when(todoMapper.toDto(todo2)).thenReturn(dto2);
 
-        List<TodoDto> result = todoService.getAllTodos();
+        List<TodoDto> result = todoService.getAllTodos(1L);
 
         assertThat(result).hasSize(2);
         assertThat(result).containsExactlyInAnyOrder(testTodoDto, dto2);
-        verify(todoRepository, times(1)).findAll();
-        verify(todoMapper, times(1)).toDto(testTodo);
-        verify(todoMapper, times(1)).toDto(todo2);
     }
 
     @Test
-    void getAllTodos_WithEmptyRepository_ReturnsEmptyList() {
-        when(todoRepository.findAll()).thenReturn(Collections.emptyList());
+    void getAllTodos_WithNoLists_ReturnsEmptyList() {
+        when(taskListUserRepository.findListIdsByUserId(1L)).thenReturn(Collections.emptyList());
 
-        List<TodoDto> result = todoService.getAllTodos();
+        List<TodoDto> result = todoService.getAllTodos(1L);
 
         assertThat(result).isEmpty();
-        verify(todoRepository, times(1)).findAll();
     }
 
     @Test
@@ -418,7 +426,7 @@ public class TodoServiceImplTest {
     }
 
     @Test
-    void getTodosByUserId_WithValidUserId_ReturnsUserTodos() {
+    void getTodosByUserId_WithSameUser_ReturnsAllTodos() {
         Todo userTodo2 = new Todo();
         userTodo2.setId(2L);
         userTodo2.setName("User Todo 2");
@@ -431,7 +439,7 @@ public class TodoServiceImplTest {
         when(todoMapper.toDto(testTodo)).thenReturn(testTodoDto);
         when(todoMapper.toDto(userTodo2)).thenReturn(dto2);
 
-        List<TodoDto> result = todoService.getTodosByUserId(1L);
+        List<TodoDto> result = todoService.getTodosByUserId(1L, 1L);
 
         assertThat(result).hasSize(2);
         assertThat(result).containsExactlyInAnyOrder(testTodoDto, dto2);
@@ -439,10 +447,35 @@ public class TodoServiceImplTest {
     }
 
     @Test
+    void getTodosByUserId_WithDifferentUser_FiltersPrivateTodos() {
+        Todo privateTodo = new Todo();
+        privateTodo.setId(2L);
+        privateTodo.setName("Private Todo");
+        privateTodo.setIsPrivate(true);
+
+        Todo publicTodo = new Todo();
+        publicTodo.setId(3L);
+        publicTodo.setName("Public Todo");
+        publicTodo.setIsPrivate(false);
+
+        TodoDto publicDto = new TodoDto();
+        publicDto.setId(3L);
+        publicDto.setName("Public Todo");
+
+        when(todoRepository.findByUserId(1L)).thenReturn(Arrays.asList(privateTodo, publicTodo));
+        when(todoMapper.toDto(publicTodo)).thenReturn(publicDto);
+
+        List<TodoDto> result = todoService.getTodosByUserId(1L, 99L);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getName()).isEqualTo("Public Todo");
+    }
+
+    @Test
     void getTodosByUserId_WithNoTodos_ReturnsEmptyList() {
         when(todoRepository.findByUserId(1L)).thenReturn(Collections.emptyList());
 
-        List<TodoDto> result = todoService.getTodosByUserId(1L);
+        List<TodoDto> result = todoService.getTodosByUserId(1L, 1L);
 
         assertThat(result).isEmpty();
         verify(todoRepository, times(1)).findByUserId(1L);

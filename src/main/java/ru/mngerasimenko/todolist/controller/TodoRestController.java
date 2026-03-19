@@ -51,28 +51,34 @@ public class TodoRestController {
         return ResponseEntity.ok(response);
     }
 
-    /** Получение задачи по ID */
+    /** Получение задачи по ID (с проверкой принадлежности к списку) */
     @GetMapping("/{id}")
-    public ResponseEntity<TodoResponse> getTodoById(@PathVariable Long id) {
-        TodoDto todoDto = todoService.getTodoById(id);
+    public ResponseEntity<TodoResponse> getTodoById(@PathVariable Long id,
+                                                     @AuthenticationPrincipal UserDetails userDetails) {
+        UserDto currentUser = userService.getUserByUserName(userDetails.getUsername());
+        TodoDto todoDto = todoService.getTodoById(id, currentUser.getId());
         TodoResponse response = todoMapper.toResponse(todoDto);
         return ResponseEntity.ok(response);
     }
 
-    /** Получение всех задач */
+    /** Получение всех задач текущего пользователя */
     @GetMapping("/all")
-    public ResponseEntity<List<TodoResponse>> getAllTodos() {
-        List<TodoDto> todos = todoService.getAllTodos();
+    public ResponseEntity<List<TodoResponse>> getAllTodos(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        UserDto currentUser = userService.getUserByUserName(userDetails.getUsername());
+        List<TodoDto> todos = todoService.getAllTodos(currentUser.getId());
         List<TodoResponse> responses = todos.stream()
                 .map(todoMapper::toResponse)
                 .toList();
         return ResponseEntity.ok(responses);
     }
 
-    /** Получение задач пользователя по его ID */
+    /** Получение задач пользователя по его ID (с проверкой доступа) */
     @GetMapping("/user/{userId}")
-    public ResponseEntity<List<TodoResponse>> getTodosByUserId(@PathVariable Long userId) {
-        List<TodoDto> todos = todoService.getTodosByUserId(userId);
+    public ResponseEntity<List<TodoResponse>> getTodosByUserId(@PathVariable Long userId,
+                                                                @AuthenticationPrincipal UserDetails userDetails) {
+        UserDto currentUser = userService.getUserByUserName(userDetails.getUsername());
+        List<TodoDto> todos = todoService.getTodosByUserId(userId, currentUser.getId());
         List<TodoResponse> responses = todos.stream()
                 .map(todoMapper::toResponse)
                 .toList();

@@ -23,6 +23,12 @@ public interface TaskListUserRepository extends JpaRepository<TaskListUser, Task
 
     boolean existsByIdListIdAndIdUserId(Long listId, Long userId);
 
+    /**
+     * Возвращает ID всех списков, в которых состоит пользователь.
+     */
+    @Query("SELECT tlu.taskList.id FROM TaskListUser tlu WHERE tlu.user.id = :userId")
+    List<Long> findListIdsByUserId(@Param("userId") Long userId);
+
     boolean existsByIdListIdAndRole(Long listId, TaskListRole role);
 
     Optional<TaskListUser> findByIdListIdAndIdUserId(Long listId, Long userId);

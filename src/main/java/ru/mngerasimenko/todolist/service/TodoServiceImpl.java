@@ -103,16 +103,21 @@ public class TodoServiceImpl implements TodoService {
 
     @Override
     @Transactional(readOnly = true)
-    public TodoDto getTodoById(Long id) {
+    public TodoDto getTodoById(Long id, Long requestingUserId) {
         Todo todo = todoRepository.findById(id)
                 .orElseThrow(() -> new TodoNotFoundException("Todo not found with id: " + id));
+        assertUserIsMember(todo, requestingUserId);
         return todoMapper.toDto(todo);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<TodoDto> getAllTodos() {
-        return todoRepository.findAll().stream()
+    public List<TodoDto> getAllTodos(Long requestingUserId) {
+        List<Long> listIds = taskListUserRepository.findListIdsByUserId(requestingUserId);
+        if (listIds.isEmpty()) {
+            return List.of();
+        }
+        return todoRepository.findByListIdsVisibleToUser(listIds, requestingUserId).stream()
                 .map(todoMapper::toDto)
                 .toList();
     }
@@ -127,9 +132,16 @@ public class TodoServiceImpl implements TodoService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<TodoDto> getTodosByUserId(Long userId) {
+    public List<TodoDto> getTodosByUserId(Long userId, Long requestingUserId) {
         List<Todo> todos = todoRepository.findByUserId(userId);
-        log.debug("Загрузка задач для userId={}, найдено: {}", userId, todos.size());
+        log.debug("Загрузка задач для userId={}, requestingUserId={}, найдено: {}",
+                userId, requestingUserId, todos.size());
+        // Фильтрация: приватные задачи видны только их создателю
+        if (!userId.equals(requestingUserId)) {
+            todos = todos.stream()
+                    .filter(todo -> !Boolean.TRUE.equals(todo.getIsPrivate()))
+                    .toList();
+        }
         return todos.stream()
                 .map(todoMapper::toDto)
                 .toList();

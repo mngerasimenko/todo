@@ -204,7 +204,12 @@ class TodoRestControllerTest {
     @Test
     @WithMockUser(username = "user", roles = {"USER"})
     void getTodoById_ValidId_ReturnsTodo() throws Exception {
-        when(todoService.getTodoById(1L)).thenReturn(testTodoDto);
+        UserDto currentUser = new UserDto();
+        currentUser.setId(1L);
+        currentUser.setName("user");
+
+        when(userService.getUserByUserName("user")).thenReturn(currentUser);
+        when(todoService.getTodoById(1L, 1L)).thenReturn(testTodoDto);
         when(todoMapper.toResponse(testTodoDto)).thenReturn(testTodoResponse);
 
         mockMvc.perform(get("/api/todos/1")
@@ -216,14 +221,19 @@ class TodoRestControllerTest {
                 .andExpect(jsonPath("$.done").value(false))
                 .andExpect(jsonPath("$.user_id").value(1));
 
-        verify(todoService, times(1)).getTodoById(1L);
+        verify(todoService, times(1)).getTodoById(1L, 1L);
         verify(todoMapper, times(1)).toResponse(testTodoDto);
     }
 
     @Test
     @WithMockUser(username = "user", roles = {"USER"})
     void getTodoById_NonExistentId_ReturnsNotFound() throws Exception {
-        when(todoService.getTodoById(999L))
+        UserDto currentUser = new UserDto();
+        currentUser.setId(1L);
+        currentUser.setName("user");
+
+        when(userService.getUserByUserName("user")).thenReturn(currentUser);
+        when(todoService.getTodoById(999L, 1L))
                 .thenThrow(new TodoNotFoundException("Todo not found with id: 999"));
 
         mockMvc.perform(get("/api/todos/999")
@@ -235,6 +245,10 @@ class TodoRestControllerTest {
     @Test
     @WithMockUser(username = "user", roles = {"USER"})
     void getAllTodos_ReturnsListOfTodos() throws Exception {
+        UserDto currentUser = new UserDto();
+        currentUser.setId(1L);
+        currentUser.setName("user");
+
         TodoDto todo1 = new TodoDto();
         todo1.setId(1L);
         todo1.setName("Todo 1");
@@ -259,7 +273,8 @@ class TodoRestControllerTest {
         response2.setDone(true);
         response2.setUserId(1L);
 
-        when(todoService.getAllTodos()).thenReturn(Arrays.asList(todo1, todo2));
+        when(userService.getUserByUserName("user")).thenReturn(currentUser);
+        when(todoService.getAllTodos(1L)).thenReturn(Arrays.asList(todo1, todo2));
         when(todoMapper.toResponse(todo1)).thenReturn(response1);
         when(todoMapper.toResponse(todo2)).thenReturn(response2);
 
@@ -273,14 +288,19 @@ class TodoRestControllerTest {
                 .andExpect(jsonPath("$[1].id").value(2))
                 .andExpect(jsonPath("$[1].name").value("Todo 2"));
 
-        verify(todoService, times(1)).getAllTodos();
+        verify(todoService, times(1)).getAllTodos(1L);
         verify(todoMapper, times(2)).toResponse(any(TodoDto.class));
     }
 
     @Test
     @WithMockUser(username = "user", roles = {"USER"})
     void getAllTodos_EmptyList_ReturnsEmptyArray() throws Exception {
-        when(todoService.getAllTodos()).thenReturn(List.of());
+        UserDto currentUser = new UserDto();
+        currentUser.setId(1L);
+        currentUser.setName("user");
+
+        when(userService.getUserByUserName("user")).thenReturn(currentUser);
+        when(todoService.getAllTodos(1L)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/todos/all")
                         .contentType(MediaType.APPLICATION_JSON))
@@ -291,6 +311,10 @@ class TodoRestControllerTest {
     @Test
     @WithMockUser(username = "user", roles = {"USER"})
     void getTodosByUserId_ValidUserId_ReturnsUserTodos() throws Exception {
+        UserDto currentUser = new UserDto();
+        currentUser.setId(1L);
+        currentUser.setName("user");
+
         TodoDto todo1 = new TodoDto();
         todo1.setId(1L);
         todo1.setName("User Todo 1");
@@ -315,7 +339,8 @@ class TodoRestControllerTest {
         response2.setDone(true);
         response2.setUserId(1L);
 
-        when(todoService.getTodosByUserId(1L)).thenReturn(Arrays.asList(todo1, todo2));
+        when(userService.getUserByUserName("user")).thenReturn(currentUser);
+        when(todoService.getTodosByUserId(1L, 1L)).thenReturn(Arrays.asList(todo1, todo2));
         when(todoMapper.toResponse(todo1)).thenReturn(response1);
         when(todoMapper.toResponse(todo2)).thenReturn(response2);
 
@@ -329,14 +354,19 @@ class TodoRestControllerTest {
                 .andExpect(jsonPath("$[1].id").value(2))
                 .andExpect(jsonPath("$[1].name").value("User Todo 2"));
 
-        verify(todoService, times(1)).getTodosByUserId(1L);
+        verify(todoService, times(1)).getTodosByUserId(1L, 1L);
         verify(todoMapper, times(2)).toResponse(any(TodoDto.class));
     }
 
     @Test
     @WithMockUser(username = "user", roles = {"USER"})
     void getTodosByUserId_NoTodos_ReturnsEmptyArray() throws Exception {
-        when(todoService.getTodosByUserId(1L)).thenReturn(List.of());
+        UserDto currentUser = new UserDto();
+        currentUser.setId(1L);
+        currentUser.setName("user");
+
+        when(userService.getUserByUserName("user")).thenReturn(currentUser);
+        when(todoService.getTodosByUserId(1L, 1L)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/todos/user/1")
                         .contentType(MediaType.APPLICATION_JSON))

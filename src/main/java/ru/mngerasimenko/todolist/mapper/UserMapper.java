@@ -73,6 +73,7 @@ public class UserMapper {
         }
         return UserResponse.builder()
                 .id(dto.getId())
+                .authId(dto.getAuthId())
                 .email(dto.getEmail())
                 .name(dto.getName())
                 .createdTaskColor(dto.getCreatedTaskColor())

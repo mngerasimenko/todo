@@ -16,14 +16,14 @@ public interface TodoService {
     /** Обновляет существующую задачу по ID (с проверкой принадлежности к списку) */
     TodoDto updateTodo(Long id, TodoDto todoDto, Long requestingUserId);
 
-    /** Возвращает задачу по ID */
-    TodoDto getTodoById(Long id);
+    /** Возвращает задачу по ID (с проверкой принадлежности к списку) */
+    TodoDto getTodoById(Long id, Long requestingUserId);
 
-    /** Возвращает все задачи */
-    List<TodoDto> getAllTodos();
+    /** Возвращает все задачи, видимые текущему пользователю */
+    List<TodoDto> getAllTodos(Long requestingUserId);
 
-    /** Возвращает все задачи пользователя */
-    List<TodoDto> getTodosByUserId(Long userId);
+    /** Возвращает задачи пользователя (с проверкой доступа) */
+    List<TodoDto> getTodosByUserId(Long userId, Long requestingUserId);
 
     /** Возвращает активные (невыполненные) задачи пользователя */
     List<TodoDto> getActiveTodosByUserId(Long userId);

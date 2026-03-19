@@ -24,7 +24,7 @@ public class TaskListMapper {
                 .id(taskList.getId())
                 .name(taskList.getName())
                 .role(role != null ? role.name() : null)
-                .createdAt(taskList.getCreatedAt() != null ? taskList.getCreatedAt().toString() : null)
+                .createdAt(taskList.getCreatedAt())
                 .build();
     }
 
@@ -39,7 +39,7 @@ public class TaskListMapper {
                 .userId(taskListUser.getUser() != null ? taskListUser.getUser().getId() : null)
                 .userName(taskListUser.getUser() != null ? taskListUser.getUser().getName() : null)
                 .role(taskListUser.getRole() != null ? taskListUser.getRole().name() : null)
-                .joinedAt(taskListUser.getJoinedAt() != null ? taskListUser.getJoinedAt().toString() : null)
+                .joinedAt(taskListUser.getJoinedAt())
                 .build();
     }
 }

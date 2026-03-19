@@ -159,7 +159,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.username").exists());
+                .andExpect(jsonPath("$.message.username").exists());
     }
 
     @Test
@@ -175,7 +175,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.password").exists());
+                .andExpect(jsonPath("$.message.password").exists());
     }
 
     @Test
@@ -268,7 +268,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registerRequest)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.email").exists());
+                .andExpect(jsonPath("$.message.email").exists());
     }
 
     @Test
@@ -285,7 +285,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registerRequest)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.email").exists());
+                .andExpect(jsonPath("$.message.email").exists());
     }
 
     @Test
@@ -302,7 +302,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registerRequest)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.name").exists());
+                .andExpect(jsonPath("$.message.name").exists());
     }
 
     @Test
@@ -319,7 +319,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registerRequest)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.password").exists());
+                .andExpect(jsonPath("$.message.password").exists());
     }
 
     @Test
@@ -336,9 +336,9 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registerRequest)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.email").exists())
-                .andExpect(jsonPath("$.name").exists())
-                .andExpect(jsonPath("$.password").exists());
+                .andExpect(jsonPath("$.message.email").exists())
+                .andExpect(jsonPath("$.message.name").exists())
+                .andExpect(jsonPath("$.message.password").exists());
     }
 
     // ==================== REFRESH TOKEN TESTS ====================
@@ -399,7 +399,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(refreshTokenRequest)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.refreshToken").exists());
+                .andExpect(jsonPath("$.message.refreshToken").exists());
     }
 
     @Test
@@ -526,7 +526,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.token").exists());
+                .andExpect(jsonPath("$.message.token").exists());
     }
 
     @Test
@@ -591,7 +591,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.email").exists());
+                .andExpect(jsonPath("$.message.email").exists());
     }
 
     @Test
@@ -604,7 +604,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.email").exists());
+                .andExpect(jsonPath("$.message.email").exists());
     }
 
     // ==================== RESET PASSWORD TESTS ====================
@@ -650,7 +650,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.token").exists());
+                .andExpect(jsonPath("$.message.token").exists());
     }
 
     @Test
@@ -663,7 +663,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.password").exists());
+                .andExpect(jsonPath("$.message.password").exists());
     }
 
     @Test
@@ -676,8 +676,8 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.token").exists())
-                .andExpect(jsonPath("$.password").exists());
+                .andExpect(jsonPath("$.message.token").exists())
+                .andExpect(jsonPath("$.message.password").exists());
     }
 
     @Test
@@ -690,7 +690,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.password").exists());
+                .andExpect(jsonPath("$.message.password").exists());
     }
 
     // ==================== CHANGE EMAIL TESTS ====================
@@ -737,7 +737,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.email").exists());
+                .andExpect(jsonPath("$.message.email").exists());
     }
 
     @Test
@@ -751,6 +751,6 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.email").exists());
+                .andExpect(jsonPath("$.message.email").exists());
     }
 }
