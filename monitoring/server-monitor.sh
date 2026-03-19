@@ -89,8 +89,8 @@ for container in $containers; do
     fi
 done
 
-# === 5. Проверка доступности API (через nginx, порт 80) ===
-http_code=$(curl -s -o /dev/null -w "%{http_code}" -Lk --max-time 10 http://localhost/api/status 2>/dev/null)
+# === 5. Проверка доступности API (через HTTPS, минуя редирект) ===
+http_code=$(curl -s -o /dev/null -w "%{http_code}" -k --max-time 15 https://localhost/api/status 2>/dev/null)
 if [ "$http_code" != "200" ]; then
     if should_alert "api"; then
         alerts="${alerts}
@@ -99,7 +99,7 @@ if [ "$http_code" != "200" ]; then
 fi
 
 # === 6. Проверка SMTP (через /api/status -> smtp_healthy) ===
-smtp_healthy=$(curl -s -Lk --max-time 10 http://localhost/api/status 2>/dev/null | grep -o '"smtp_healthy":[a-z]*' | grep -c 'true')
+smtp_healthy=$(curl -s -k --max-time 15 https://localhost/api/status 2>/dev/null | grep -o '"smtp_healthy":[a-z]*' | grep -c 'true')
 if [ "$smtp_healthy" -eq 0 ] && [ "$http_code" = "200" ]; then
     if should_alert "smtp"; then
         alerts="${alerts}
