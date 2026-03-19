@@ -64,7 +64,7 @@ class TaskListControllerTest {
                 .id(1L)
                 .name("Тестовый список")
                 .role("ADMIN")
-                .createdAt("2026-01-01T00:00:00")
+                .createdAt(LocalDateTime.of(2026, 1, 1, 0, 0, 0))
                 .build();
 
         when(userService.getUserByUserName("user")).thenReturn(currentUser);
@@ -217,7 +217,7 @@ class TaskListControllerTest {
                 .id(2L)
                 .name("Список")
                 .role("USER")
-                .createdAt("2026-01-01T00:00:00")
+                .createdAt(LocalDateTime.of(2026, 1, 1, 0, 0, 0))
                 .build();
 
         when(taskListService.joinList("Список", "secret", 1L))
@@ -318,9 +318,9 @@ class TaskListControllerTest {
     @WithMockUser(username = "user")
     void getMembers_ValidList_ReturnsMembers() throws Exception {
         ListMemberResponse member1 = ListMemberResponse.builder()
-                .userId(1L).userName("user").role("ADMIN").joinedAt("2026-01-01T00:00:00").build();
+                .userId(1L).userName("user").role("ADMIN").joinedAt(LocalDateTime.of(2026, 1, 1, 0, 0, 0)).build();
         ListMemberResponse member2 = ListMemberResponse.builder()
-                .userId(2L).userName("user2").role("USER").joinedAt("2026-01-02T00:00:00").build();
+                .userId(2L).userName("user2").role("USER").joinedAt(LocalDateTime.of(2026, 1, 2, 0, 0, 0)).build();
 
         when(taskListService.getMembers(1L, 1L))
                 .thenReturn(List.of(member1, member2));

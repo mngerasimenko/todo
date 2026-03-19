@@ -47,14 +47,12 @@ public class TodoDto {
     @JsonProperty("is_private")
     private Boolean isPrivate;
 
-    @JsonProperty("is_private")
+    /**
+     * Возвращает значение isPrivate с null-safety (false при null).
+     */
+    @JsonIgnore
     public boolean isPrivate() {
         return isPrivate != null && isPrivate;
-    }
-
-    @JsonIgnore
-    public Boolean getIsPrivate() {
-        return isPrivate;
     }
 
     @JsonProperty("user_id")
@@ -87,13 +85,12 @@ public class TodoDto {
     @JsonProperty("completor_color")
     private String completorColor;
 
-    @JsonProperty("done")
+    /**
+     * Возвращает значение done с null-safety (false при null).
+     */
+    @JsonIgnore
     public boolean isDone() {
         return done != null && done;
     }
 
-    @JsonIgnore
-    public Boolean getDone() {
-        return done;
-    }
 }

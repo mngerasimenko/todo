@@ -27,6 +27,6 @@ public class LoginRequest {
      * Пароль
      */
     @NotBlank(message = "Пароль не может быть пустым")
-    @Size(min = 3, max = 128, message = "Пароль должен содержать от 3 до 128 символов")
+    @Size(min = 5, max = 128, message = "Пароль должен содержать от 5 до 128 символов")
     private String password;
 }

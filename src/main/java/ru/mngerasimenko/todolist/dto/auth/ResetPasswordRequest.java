@@ -18,6 +18,6 @@ public class ResetPasswordRequest {
     private String token;
 
     @NotBlank(message = "Пароль обязателен")
-    @Size(min = 3, max = 128, message = "Пароль должен быть от 3 до 128 символов")
+    @Size(min = 5, max = 128, message = "Пароль должен быть от 5 до 128 символов")
     private String password;
 }

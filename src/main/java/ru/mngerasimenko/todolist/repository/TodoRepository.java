@@ -49,6 +49,15 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
     List<Todo> findByListIdAndIsPrivateFalse(Long listId);
 
     /**
+     * Возвращает задачи из указанных списков, видимые пользователю:
+     * - публичные задачи (isPrivate = false)
+     * - приватные задачи текущего пользователя (isPrivate = true AND user_id = userId)
+     */
+    @Query("SELECT t FROM Todo t JOIN FETCH t.user LEFT JOIN FETCH t.completorUser " +
+            "WHERE t.taskList.id IN :listIds AND (t.isPrivate = false OR (t.isPrivate = true AND t.user.id = :userId))")
+    List<Todo> findByListIdsVisibleToUser(@Param("listIds") List<Long> listIds, @Param("userId") Long userId);
+
+    /**
      * Удалить приватные задачи пользователя в конкретном списке.
      * Используется при выходе пользователя из списка.
      */
