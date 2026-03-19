@@ -175,7 +175,7 @@ docker compose down
 ### Тесты
 
 ```bash
-# Unit-тесты (302 теста, без Docker)
+# Unit-тесты (305 тестов, без Docker)
 mvn test
 
 # С отчётом покрытия
@@ -195,7 +195,7 @@ mvn test -Pintegration
 Проект использует пайплайн `.github/workflows/deploy.yml`:
 
 **Этап 1 — Тесты** (все PR и push в master):
-- 302 unit-теста + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
+- 305 unit-тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
 - Нагрузочные тесты (3 шт.) запускаются отдельно: `mvn test -Pintegration` (требуют Docker)
 
 **Этап 2 — Деплой** (только push в master):
@@ -268,7 +268,7 @@ src/main/java/ru/mngerasimenko/todolist/
 
 src/main/resources/db/migration/   Liquibase-миграции (master + 8 changeset-файлов)
 src/main/resources/templates/      HTML-шаблоны email (верификация, сброс пароля)
-src/test/java/       305 тестов (controller, service, repository, mapper, concurrency)
+src/test/java/        305 тестов (controller, service, repository, mapper, concurrency)
 postman/             Postman-коллекция + окружения
 monitoring/          Telegram-мониторинг (скрипты, systemd-сервис, конфиг) + backup PostgreSQL
 ```

@@ -69,6 +69,16 @@ cmd_status() {
     local pg_connections=$(docker exec postgres-db psql -U postgres -t -c "SELECT count(*) FROM pg_stat_activity;" 2>/dev/null | tr -d ' ')
     local pg_max=$(docker exec postgres-db psql -U postgres -t -c "SHOW max_connections;" 2>/dev/null | tr -d ' ')
 
+    # Backup status
+    local backup_info="нет бэкапов"
+    local latest_backup=$(ls -t /root/backups/todo-*.dump 2>/dev/null | head -1)
+    if [ -n "$latest_backup" ]; then
+        local backup_date=$(stat -c '%y' "$latest_backup" 2>/dev/null | cut -d. -f1)
+        local backup_size=$(du -h "$latest_backup" 2>/dev/null | cut -f1)
+        local backup_count=$(ls /root/backups/todo-*.dump 2>/dev/null | wc -l)
+        backup_info="${backup_date} (${backup_size}, ${backup_count} шт.)"
+    fi
+
     send_message "$chat_id" "📊 <b>Статус: ${hostname}</b>
 📅 ${timestamp}
 ⏱ ${uptime_info}
@@ -84,7 +94,9 @@ cmd_status() {
 ${docker_mem}
 
 <b>API:</b> ${api_status}
-<b>PG connections:</b> ${pg_connections:-N/A}/${pg_max:-?}"
+<b>PG connections:</b> ${pg_connections:-N/A}/${pg_max:-?}
+
+💾 <b>Последний backup:</b> ${backup_info}"
 }
 
 # Перезапуск контейнера
