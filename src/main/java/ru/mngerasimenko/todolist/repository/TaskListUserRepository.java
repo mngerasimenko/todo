@@ -31,6 +31,11 @@ public interface TaskListUserRepository extends JpaRepository<TaskListUser, Task
 
     boolean existsByIdListIdAndRole(Long listId, TaskListRole role);
 
+    /**
+     * Возвращает первого администратора списка (для проверки лимитов подписки).
+     */
+    Optional<TaskListUser> findFirstByIdListIdAndRole(Long listId, TaskListRole role);
+
     Optional<TaskListUser> findByIdListIdAndIdUserId(Long listId, Long userId);
 
     /**

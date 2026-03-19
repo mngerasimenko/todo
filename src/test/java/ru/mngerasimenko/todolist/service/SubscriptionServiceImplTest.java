@@ -10,13 +10,18 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import ru.mngerasimenko.todolist.exception.SubscriptionLimitExceededException;
 import ru.mngerasimenko.todolist.exception.SubscriptionLimitExceededException.LimitType;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
+import ru.mngerasimenko.todolist.model.TaskListRole;
+import ru.mngerasimenko.todolist.model.TaskListUser;
 import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.repository.TaskListUserRepository;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 import ru.mngerasimenko.todolist.settings.AppProperties;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,6 +43,9 @@ class SubscriptionServiceImplTest {
     @Mock
     private AppProperties appProperties;
 
+    @Mock
+    private Clock clock;
+
     @InjectMocks
     private SubscriptionServiceImpl subscriptionService;
 
@@ -48,31 +56,39 @@ class SubscriptionServiceImplTest {
     private AppProperties.SubscriptionLimits freeLimits;
     private AppProperties.SubscriptionLimits proLimits;
 
+    private static final Instant FIXED_INSTANT = Instant.parse("2026-03-19T12:00:00Z");
+    private static final ZoneId ZONE = ZoneId.systemDefault();
+
     @BeforeEach
     void setUp() {
+        lenient().when(clock.instant()).thenReturn(FIXED_INSTANT);
+        lenient().when(clock.getZone()).thenReturn(ZONE);
+
         freeUser = new User();
         freeUser.setId(1L);
         freeUser.setName("freeuser");
         freeUser.setSubscriptionType("FREE");
 
+        LocalDateTime now = LocalDateTime.ofInstant(FIXED_INSTANT, ZONE);
+
         proUser = new User();
         proUser.setId(2L);
         proUser.setName("prouser");
         proUser.setSubscriptionType("PRO");
-        proUser.setSubscriptionExpiresAt(LocalDateTime.now().plusDays(30));
+        proUser.setSubscriptionExpiresAt(now.plusDays(30));
 
         betaUser = new User();
         betaUser.setId(3L);
         betaUser.setName("betauser");
         betaUser.setSubscriptionType("BETA");
-        betaUser.setSubscriptionExpiresAt(LocalDateTime.now().plusDays(30));
+        betaUser.setSubscriptionExpiresAt(now.plusDays(30));
         betaUser.setBetaTester(true);
 
         expiredProUser = new User();
         expiredProUser.setId(4L);
         expiredProUser.setName("expireduser");
         expiredProUser.setSubscriptionType("PRO");
-        expiredProUser.setSubscriptionExpiresAt(LocalDateTime.now().minusDays(1));
+        expiredProUser.setSubscriptionExpiresAt(now.minusDays(1));
 
         freeLimits = new AppProperties.SubscriptionLimits(2, 30, 3, false);
         proLimits = new AppProperties.SubscriptionLimits(-1, -1, -1, true);
@@ -246,44 +262,67 @@ class SubscriptionServiceImplTest {
 
     @Nested
     class AssertCanJoinList {
+
+        private TaskListUser makeAdmin(User user) {
+            TaskListUser tlu = new TaskListUser();
+            tlu.setUser(user);
+            tlu.setRole(TaskListRole.ADMIN);
+            return tlu;
+        }
+
         @Test
         void enforcementDisabled_DoesNothing() {
             when(appProperties.isSubscriptionEnforcementEnabled()).thenReturn(false);
             subscriptionService.assertCanJoinList(10L, 1L);
-            verify(userRepository, never()).findById(any());
+            verify(taskListUserRepository, never()).findFirstByIdListIdAndRole(any(), any());
         }
 
         @Test
-        void freeUser_BelowLimit_Passes() {
+        void freeOwner_BelowLimit_Passes() {
             when(appProperties.isSubscriptionEnforcementEnabled()).thenReturn(true);
-            when(userRepository.findById(1L)).thenReturn(Optional.of(freeUser));
+            when(taskListUserRepository.findFirstByIdListIdAndRole(10L, TaskListRole.ADMIN))
+                    .thenReturn(Optional.of(makeAdmin(freeUser)));
             when(appProperties.getFreeLimits()).thenReturn(freeLimits);
             when(taskListUserRepository.countByListId(10L)).thenReturn(2L);
 
-            subscriptionService.assertCanJoinList(10L, 1L);
+            subscriptionService.assertCanJoinList(10L, 5L);
         }
 
         @Test
-        void freeUser_AtLimit_ThrowsException() {
+        void freeOwner_AtLimit_ThrowsException() {
             when(appProperties.isSubscriptionEnforcementEnabled()).thenReturn(true);
-            when(userRepository.findById(1L)).thenReturn(Optional.of(freeUser));
+            when(taskListUserRepository.findFirstByIdListIdAndRole(10L, TaskListRole.ADMIN))
+                    .thenReturn(Optional.of(makeAdmin(freeUser)));
             when(appProperties.getFreeLimits()).thenReturn(freeLimits);
             when(taskListUserRepository.countByListId(10L)).thenReturn(3L);
 
-            assertThatThrownBy(() -> subscriptionService.assertCanJoinList(10L, 1L))
+            assertThatThrownBy(() -> subscriptionService.assertCanJoinList(10L, 5L))
                     .isInstanceOf(SubscriptionLimitExceededException.class)
                     .satisfies(ex -> assertThat(((SubscriptionLimitExceededException) ex).getLimitType())
                             .isEqualTo(LimitType.MEMBER_LIMIT));
         }
 
         @Test
-        void proUser_Unlimited_Passes() {
+        void proOwner_Unlimited_Passes() {
             when(appProperties.isSubscriptionEnforcementEnabled()).thenReturn(true);
-            when(userRepository.findById(2L)).thenReturn(Optional.of(proUser));
+            when(taskListUserRepository.findFirstByIdListIdAndRole(10L, TaskListRole.ADMIN))
+                    .thenReturn(Optional.of(makeAdmin(proUser)));
             when(appProperties.getProLimits()).thenReturn(proLimits);
 
-            subscriptionService.assertCanJoinList(10L, 2L);
+            subscriptionService.assertCanJoinList(10L, 5L);
             verify(taskListUserRepository, never()).countByListId(any());
+        }
+
+        @Test
+        void noAdmin_FallsBackToJoiningUser() {
+            when(appProperties.isSubscriptionEnforcementEnabled()).thenReturn(true);
+            when(taskListUserRepository.findFirstByIdListIdAndRole(10L, TaskListRole.ADMIN))
+                    .thenReturn(Optional.empty());
+            when(userRepository.findById(1L)).thenReturn(Optional.of(freeUser));
+            when(appProperties.getFreeLimits()).thenReturn(freeLimits);
+            when(taskListUserRepository.countByListId(10L)).thenReturn(1L);
+
+            subscriptionService.assertCanJoinList(10L, 1L);
         }
     }
 

@@ -15,11 +15,8 @@ import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.dto.UserRequest;
 import ru.mngerasimenko.todolist.dto.UserResponse;
 import ru.mngerasimenko.todolist.mapper.UserMapper;
-import ru.mngerasimenko.todolist.model.User;
-import ru.mngerasimenko.todolist.repository.UserRepository;
 import ru.mngerasimenko.todolist.service.SubscriptionService;
 import ru.mngerasimenko.todolist.service.UserService;
-import ru.mngerasimenko.todolist.settings.AppProperties;
 
 import java.util.List;
 
@@ -36,7 +33,6 @@ public class UserRestController {
     private final UserService userService;
     private final UserMapper userMapper;
     private final SubscriptionService subscriptionService;
-    private final UserRepository userRepository;
 
     /** Получение текущего пользователя по JWT-токену */
     @GetMapping("/me")
@@ -50,29 +46,7 @@ public class UserRestController {
     @GetMapping("/me/subscription")
     public ResponseEntity<SubscriptionStatusResponse> getSubscriptionStatus(
             @AuthenticationPrincipal UserDetails userDetails) {
-        User user = userRepository.getUserByName(userDetails.getUsername());
-        String effectiveType = subscriptionService.getEffectiveSubscriptionType(user);
-        AppProperties.SubscriptionLimits limits = subscriptionService.getLimitsForType(effectiveType);
-        long listsCount = subscriptionService.getListsCount(user.getId());
-
-        boolean canCreateList = limits.getMaxLists() == -1 || listsCount < limits.getMaxLists();
-
-        SubscriptionStatusResponse response = SubscriptionStatusResponse.builder()
-                .subscriptionType(effectiveType)
-                .subscriptionExpiresAt(user.getSubscriptionExpiresAt())
-                .betaTester(user.isBetaTester())
-                .limits(SubscriptionStatusResponse.Limits.builder()
-                        .maxLists(limits.getMaxLists())
-                        .maxTasksPerList(limits.getMaxTasksPerList())
-                        .maxMembersPerList(limits.getMaxMembersPerList())
-                        .privateTasksAllowed(limits.isPrivateTasksAllowed())
-                        .build())
-                .usage(SubscriptionStatusResponse.Usage.builder()
-                        .listsCount(listsCount)
-                        .canCreateList(canCreateList)
-                        .build())
-                .build();
-
+        SubscriptionStatusResponse response = subscriptionService.getSubscriptionStatus(userDetails.getUsername());
         return ResponseEntity.ok(response);
     }
 

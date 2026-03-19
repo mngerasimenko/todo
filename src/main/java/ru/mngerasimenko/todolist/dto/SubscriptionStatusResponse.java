@@ -26,7 +26,7 @@ public class SubscriptionStatusResponse {
     private LocalDateTime subscriptionExpiresAt;
 
     @JsonProperty("is_beta_tester")
-    private Boolean betaTester;
+    private boolean betaTester;
 
     private Limits limits;
 

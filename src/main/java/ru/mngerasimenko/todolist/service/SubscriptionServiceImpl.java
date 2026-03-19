@@ -4,15 +4,18 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.mngerasimenko.todolist.dto.SubscriptionStatusResponse;
 import ru.mngerasimenko.todolist.exception.SubscriptionLimitExceededException;
 import ru.mngerasimenko.todolist.exception.SubscriptionLimitExceededException.LimitType;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
+import ru.mngerasimenko.todolist.model.TaskListRole;
 import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.repository.TaskListUserRepository;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 import ru.mngerasimenko.todolist.settings.AppProperties;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 
 /**
@@ -27,9 +30,9 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     private final TaskListUserRepository taskListUserRepository;
     private final TodoRepository todoRepository;
     private final AppProperties appProperties;
+    private final Clock clock;
 
     @Override
-    @Transactional(readOnly = true)
     public void assertCanCreateList(Long userId) {
         if (!appProperties.isSubscriptionEnforcementEnabled()) {
             return;
@@ -52,7 +55,6 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     }
 
     @Override
-    @Transactional(readOnly = true)
     public void assertCanCreateTodo(Long listId, Long userId) {
         if (!appProperties.isSubscriptionEnforcementEnabled()) {
             return;
@@ -75,14 +77,17 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     }
 
     @Override
-    @Transactional(readOnly = true)
     public void assertCanJoinList(Long listId, Long userId) {
         if (!appProperties.isSubscriptionEnforcementEnabled()) {
             return;
         }
 
-        User user = findUser(userId);
-        AppProperties.SubscriptionLimits limits = getLimitsForUser(user);
+        // Лимит участников определяется подпиской администратора списка, а не вступающего
+        User listOwner = taskListUserRepository.findFirstByIdListIdAndRole(listId, TaskListRole.ADMIN)
+                .map(tlu -> tlu.getUser())
+                .orElseGet(() -> findUser(userId));
+
+        AppProperties.SubscriptionLimits limits = getLimitsForUser(listOwner);
 
         if (limits.getMaxMembersPerList() == -1) {
             return;
@@ -92,13 +97,12 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         if (currentCount >= limits.getMaxMembersPerList()) {
             throw new SubscriptionLimitExceededException(
                     "Превышен лимит участников в списке: максимум " + limits.getMaxMembersPerList() +
-                            " для подписки " + getEffectiveSubscriptionType(user),
+                            " для подписки " + getEffectiveSubscriptionType(listOwner),
                     LimitType.MEMBER_LIMIT);
         }
     }
 
     @Override
-    @Transactional(readOnly = true)
     public void assertCanCreatePrivateTodo(Long userId) {
         if (!appProperties.isSubscriptionEnforcementEnabled()) {
             return;
@@ -123,7 +127,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
         // PRO и BETA — проверяем срок действия
         if (user.getSubscriptionExpiresAt() != null
-                && user.getSubscriptionExpiresAt().isBefore(LocalDateTime.now())) {
+                && user.getSubscriptionExpiresAt().isBefore(LocalDateTime.now(clock))) {
             return "FREE";
         }
 
@@ -139,9 +143,38 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     }
 
     @Override
-    @Transactional(readOnly = true)
     public long getListsCount(Long userId) {
         return taskListUserRepository.countByUserId(userId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public SubscriptionStatusResponse getSubscriptionStatus(String username) {
+        User user = userRepository.getUserByName(username);
+        if (user == null) {
+            throw new UserNotFoundException("User not found: " + username);
+        }
+
+        String effectiveType = getEffectiveSubscriptionType(user);
+        AppProperties.SubscriptionLimits limits = getLimitsForType(effectiveType);
+        long listsCount = taskListUserRepository.countByUserId(user.getId());
+        boolean canCreateList = limits.getMaxLists() == -1 || listsCount < limits.getMaxLists();
+
+        return SubscriptionStatusResponse.builder()
+                .subscriptionType(effectiveType)
+                .subscriptionExpiresAt(user.getSubscriptionExpiresAt())
+                .betaTester(user.isBetaTester())
+                .limits(SubscriptionStatusResponse.Limits.builder()
+                        .maxLists(limits.getMaxLists())
+                        .maxTasksPerList(limits.getMaxTasksPerList())
+                        .maxMembersPerList(limits.getMaxMembersPerList())
+                        .privateTasksAllowed(limits.isPrivateTasksAllowed())
+                        .build())
+                .usage(SubscriptionStatusResponse.Usage.builder()
+                        .listsCount(listsCount)
+                        .canCreateList(canCreateList)
+                        .build())
+                .build();
     }
 
     private User findUser(Long userId) {

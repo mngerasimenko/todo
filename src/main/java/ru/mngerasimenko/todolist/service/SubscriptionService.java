@@ -1,5 +1,6 @@
 package ru.mngerasimenko.todolist.service;
 
+import ru.mngerasimenko.todolist.dto.SubscriptionStatusResponse;
 import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.settings.AppProperties;
 
@@ -48,4 +49,9 @@ public interface SubscriptionService {
      * Количество списков пользователя.
      */
     long getListsCount(Long userId);
+
+    /**
+     * Возвращает полный статус подписки пользователя по имени (username из JWT).
+     */
+    SubscriptionStatusResponse getSubscriptionStatus(String username);
 }

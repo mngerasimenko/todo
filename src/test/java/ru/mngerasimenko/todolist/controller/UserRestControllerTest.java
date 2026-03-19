@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+import ru.mngerasimenko.todolist.dto.SubscriptionStatusResponse;
 import ru.mngerasimenko.todolist.dto.UpdateColorsRequest;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.dto.UserRequest;
@@ -17,7 +18,6 @@ import ru.mngerasimenko.todolist.dto.UserResponse;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.UserMapper;
 import ru.mngerasimenko.todolist.config.TestSecurityConfig;
-import ru.mngerasimenko.todolist.repository.UserRepository;
 import ru.mngerasimenko.todolist.security.ApiSecurityConfig;
 import ru.mngerasimenko.todolist.service.SubscriptionService;
 import ru.mngerasimenko.todolist.service.UserService;
@@ -50,9 +50,6 @@ class UserRestControllerTest {
     @MockitoBean
     private SubscriptionService subscriptionService;
 
-    @MockitoBean
-    private UserRepository userRepository;
-
     private UserDto testUserDto;
     private UserResponse testUserResponse;
     private UserRequest testUserRequest;
@@ -75,6 +72,46 @@ class UserRestControllerTest {
         testUserRequest.setName("newuser");
         testUserRequest.setEmail("new@mail.ru");
         testUserRequest.setPassword("newpass");
+    }
+
+    @Test
+    @WithMockUser(username = "testuser")
+    void getSubscriptionStatus_ReturnsSubscriptionInfo() throws Exception {
+        SubscriptionStatusResponse subscriptionResponse = SubscriptionStatusResponse.builder()
+                .subscriptionType("FREE")
+                .betaTester(false)
+                .limits(SubscriptionStatusResponse.Limits.builder()
+                        .maxLists(2)
+                        .maxTasksPerList(30)
+                        .maxMembersPerList(3)
+                        .privateTasksAllowed(false)
+                        .build())
+                .usage(SubscriptionStatusResponse.Usage.builder()
+                        .listsCount(1)
+                        .canCreateList(true)
+                        .build())
+                .build();
+
+        when(subscriptionService.getSubscriptionStatus("testuser")).thenReturn(subscriptionResponse);
+
+        mockMvc.perform(get("/api/users/me/subscription"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.subscription_type").value("FREE"))
+                .andExpect(jsonPath("$.is_beta_tester").value(false))
+                .andExpect(jsonPath("$.limits.max_lists").value(2))
+                .andExpect(jsonPath("$.limits.max_tasks_per_list").value(30))
+                .andExpect(jsonPath("$.limits.max_members_per_list").value(3))
+                .andExpect(jsonPath("$.limits.private_tasks_allowed").value(false))
+                .andExpect(jsonPath("$.usage.lists_count").value(1))
+                .andExpect(jsonPath("$.usage.can_create_list").value(true));
+
+        verify(subscriptionService).getSubscriptionStatus("testuser");
+    }
+
+    @Test
+    void getSubscriptionStatus_WithoutAuth_Returns401() throws Exception {
+        mockMvc.perform(get("/api/users/me/subscription"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

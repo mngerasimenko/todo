@@ -22,6 +22,9 @@ import java.util.List;
 @JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"})
 public class User {
 
+    private static final java.util.Set<String> VALID_SUBSCRIPTION_TYPES =
+            java.util.Set.of("FREE", "PRO", "BETA");
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -278,6 +281,9 @@ public class User {
     }
 
     public void setSubscriptionType(String subscriptionType) {
+        if (subscriptionType != null && !VALID_SUBSCRIPTION_TYPES.contains(subscriptionType)) {
+            throw new IllegalArgumentException("Недопустимый тип подписки: " + subscriptionType);
+        }
         this.subscriptionType = subscriptionType;
     }
 
