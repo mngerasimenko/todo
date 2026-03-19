@@ -39,4 +39,13 @@ public class UserResponse {
 
     @JsonProperty("created_at")
     private LocalDateTime createdAt;
+
+    @JsonProperty("subscription_type")
+    private String subscriptionType;
+
+    @JsonProperty("subscription_expires_at")
+    private LocalDateTime subscriptionExpiresAt;
+
+    @JsonProperty("is_beta_tester")
+    private Boolean betaTester;
 }

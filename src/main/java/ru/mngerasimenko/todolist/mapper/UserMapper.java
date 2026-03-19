@@ -29,6 +29,9 @@ public class UserMapper {
                 .completedTaskColor(user.getCompletedTaskColor())
                 .emailVerified(user.isEmailVerified())
                 .createdAt(user.getCreatedAt())
+                .subscriptionType(user.getSubscriptionType())
+                .subscriptionExpiresAt(user.getSubscriptionExpiresAt())
+                .betaTester(user.isBetaTester())
                 .build();
     }
 
@@ -80,6 +83,9 @@ public class UserMapper {
                 .completedTaskColor(dto.getCompletedTaskColor())
                 .emailVerified(dto.getEmailVerified())
                 .createdAt(dto.getCreatedAt())
+                .subscriptionType(dto.getSubscriptionType())
+                .subscriptionExpiresAt(dto.getSubscriptionExpiresAt())
+                .betaTester(dto.getBetaTester())
                 .build();
     }
 }

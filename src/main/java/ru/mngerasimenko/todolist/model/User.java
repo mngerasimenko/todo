@@ -103,6 +103,24 @@ public class User {
     private LocalDateTime passwordResetExpiresAt;
 
     /**
+     * Тип подписки: FREE, PRO, BETA.
+     */
+    @Column(name = "subscription_type", nullable = false, length = 20)
+    private String subscriptionType = "FREE";
+
+    /**
+     * Дата окончания подписки. Null для FREE.
+     */
+    @Column(name = "subscription_expires_at")
+    private LocalDateTime subscriptionExpiresAt;
+
+    /**
+     * Флаг бета-тестера. Бета-тестеры получают бонусы при переходе на Freemium.
+     */
+    @Column(name = "is_beta_tester", nullable = false)
+    private boolean betaTester = false;
+
+    /**
      * Версия записи для оптимистичной блокировки.
      * Hibernate автоматически инкрементирует при каждом UPDATE.
      */
@@ -253,5 +271,29 @@ public class User {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getSubscriptionType() {
+        return subscriptionType;
+    }
+
+    public void setSubscriptionType(String subscriptionType) {
+        this.subscriptionType = subscriptionType;
+    }
+
+    public LocalDateTime getSubscriptionExpiresAt() {
+        return subscriptionExpiresAt;
+    }
+
+    public void setSubscriptionExpiresAt(LocalDateTime subscriptionExpiresAt) {
+        this.subscriptionExpiresAt = subscriptionExpiresAt;
+    }
+
+    public boolean isBetaTester() {
+        return betaTester;
+    }
+
+    public void setBetaTester(boolean betaTester) {
+        this.betaTester = betaTester;
     }
 }

@@ -35,10 +35,13 @@ public class TaskListServiceImpl implements TaskListService {
     private final TaskListMapper taskListMapper;
     private final TodoMapper todoMapper;
     private final PasswordEncoder passwordEncoder;
+    private final SubscriptionService subscriptionService;
 
     @Override
     @Transactional(noRollbackFor = DataIntegrityViolationException.class)
     public ListResponse createList(String name, String password, Long creatorUserId) {
+        subscriptionService.assertCanCreateList(creatorUserId);
+
         User creator = userRepository.findById(creatorUserId)
                 .orElseThrow(() -> new UserNotFoundException("User not found with id: " + creatorUserId));
 
@@ -73,6 +76,9 @@ public class TaskListServiceImpl implements TaskListService {
 
         java.util.Optional<TaskListUser> existing =
                 taskListUserRepository.findByIdListIdAndIdUserId(taskList.getId(), userId);
+        if (existing.isEmpty()) {
+            subscriptionService.assertCanJoinList(taskList.getId(), userId);
+        }
         if (existing.isPresent()) {
             log.info("Пользователь уже в списке: listId={}, userId={}", taskList.getId(), userId);
             return taskListMapper.toResponse(taskList, existing.get().getRole());

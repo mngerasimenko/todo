@@ -17,7 +17,9 @@ import ru.mngerasimenko.todolist.dto.UserResponse;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.UserMapper;
 import ru.mngerasimenko.todolist.config.TestSecurityConfig;
+import ru.mngerasimenko.todolist.repository.UserRepository;
 import ru.mngerasimenko.todolist.security.ApiSecurityConfig;
+import ru.mngerasimenko.todolist.service.SubscriptionService;
 import ru.mngerasimenko.todolist.service.UserService;
 
 import java.util.Arrays;
@@ -44,6 +46,12 @@ class UserRestControllerTest {
 
     @MockitoBean
     private UserMapper userMapper;
+
+    @MockitoBean
+    private SubscriptionService subscriptionService;
+
+    @MockitoBean
+    private UserRepository userRepository;
 
     private UserDto testUserDto;
     private UserResponse testUserResponse;

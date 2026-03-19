@@ -41,6 +41,18 @@ public interface TaskListUserRepository extends JpaRepository<TaskListUser, Task
     List<TaskListUser> findByIdListId(Long listId);
 
     /**
+     * Количество списков, в которых состоит пользователь.
+     */
+    @Query("SELECT COUNT(tlu) FROM TaskListUser tlu WHERE tlu.user.id = :userId")
+    long countByUserId(@Param("userId") Long userId);
+
+    /**
+     * Количество участников в списке.
+     */
+    @Query("SELECT COUNT(tlu) FROM TaskListUser tlu WHERE tlu.taskList.id = :listId")
+    long countByListId(@Param("listId") Long listId);
+
+    /**
      * Удалить запись участия пользователя в списке.
      */
     @Modifying
