@@ -140,6 +140,21 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Обрабатывает превышение лимита подписки (HTTP 403).
+     */
+    @ExceptionHandler(SubscriptionLimitExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleSubscriptionLimit(SubscriptionLimitExceededException ex) {
+        log.warn("Subscription limit exceeded: {} (type: {})", ex.getMessage(), ex.getLimitType());
+        Map<String, Object> response = new HashMap<>();
+        response.put("timestamp", LocalDateTime.now());
+        response.put("status", HttpStatus.FORBIDDEN.value());
+        response.put("error", "Subscription Limit Exceeded");
+        response.put("message", ex.getMessage());
+        response.put("limit_type", ex.getLimitType().name());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+    }
+
+    /**
      * Обрабатывает отказ в доступе — пользователь пытается изменить чужие данные (HTTP 403).
      */
     @ExceptionHandler(AccessDeniedException.class)

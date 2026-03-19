@@ -59,6 +59,9 @@ class TaskListServiceImplTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
+    @Mock
+    private SubscriptionService subscriptionService;
+
     @InjectMocks
     private TaskListServiceImpl taskListService;
 
