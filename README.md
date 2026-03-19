@@ -281,6 +281,12 @@ monitoring/          Telegram-мониторинг (скрипты, systemd-се
 
 ---
 
+## Changelog
+
+История изменений: [CHANGELOG.md](CHANGELOG.md)
+
+---
+
 ## Лицензия
 
 Проект распространяется под лицензией [MIT](LICENSE).
