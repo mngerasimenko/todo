@@ -270,7 +270,7 @@ src/main/resources/db/migration/   Liquibase-миграции (master + 8 change
 src/main/resources/templates/      HTML-шаблоны email (верификация, сброс пароля)
 src/test/java/        334 теста (controller, service, repository, mapper, concurrency)
 postman/             Postman-коллекция + окружения
-monitoring/          Telegram-мониторинг (скрипты, systemd-сервис, конфиг) + backup PostgreSQL
+monitoring/          VK-мониторинг (скрипты, systemd-сервис, конфиг) + backup PostgreSQL
 ```
 
 ---
