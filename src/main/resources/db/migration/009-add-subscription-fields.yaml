@@ -1,0 +1,29 @@
+databaseChangeLog:
+  - changeSet:
+      id: 009-add-subscription-fields
+      author: mngerasimenko
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: todo_users
+                columnName: subscription_type
+      changes:
+        - addColumn:
+            tableName: todo_users
+            columns:
+              - column:
+                  name: subscription_type
+                  type: varchar(20)
+                  defaultValue: FREE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: subscription_expires_at
+                  type: timestamp
+              - column:
+                  name: is_beta_tester
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false

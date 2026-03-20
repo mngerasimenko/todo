@@ -58,6 +58,12 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
     List<Todo> findByListIdsVisibleToUser(@Param("listIds") List<Long> listIds, @Param("userId") Long userId);
 
     /**
+     * Количество задач в списке.
+     */
+    @Query("SELECT COUNT(t) FROM Todo t WHERE t.taskList.id = :listId")
+    long countByListId(@Param("listId") Long listId);
+
+    /**
      * Удалить приватные задачи пользователя в конкретном списке.
      * Используется при выходе пользователя из списка.
      */

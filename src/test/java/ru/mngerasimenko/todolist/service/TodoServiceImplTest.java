@@ -49,6 +49,9 @@ public class TodoServiceImplTest {
     @Mock
     private TodoMapper todoMapper;
 
+    @Mock
+    private SubscriptionService subscriptionService;
+
     @InjectMocks
     private TodoServiceImpl todoService;
 

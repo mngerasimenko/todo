@@ -31,6 +31,7 @@ public class TodoServiceImpl implements TodoService {
     private final TaskListRepository taskListRepository;
     private final TaskListUserRepository taskListUserRepository;
     private final TodoMapper todoMapper;
+    private final SubscriptionService subscriptionService;
 
     @Override
     @Transactional
@@ -45,6 +46,11 @@ public class TodoServiceImpl implements TodoService {
 
         if (!taskListUserRepository.existsByIdListIdAndIdUserId(todoDto.getListId(), todoDto.getUserId())) {
             throw new IllegalArgumentException("Пользователь не является участником данного списка");
+        }
+
+        subscriptionService.assertCanCreateTodo(todoDto.getListId(), todoDto.getUserId());
+        if (todoDto.isPrivate()) {
+            subscriptionService.assertCanCreatePrivateTodo(todoDto.getUserId());
         }
 
         todoDto.setDone(false);

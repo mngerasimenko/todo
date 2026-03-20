@@ -9,11 +9,13 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import ru.mngerasimenko.todolist.dto.SubscriptionStatusResponse;
 import ru.mngerasimenko.todolist.dto.UpdateColorsRequest;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.dto.UserRequest;
 import ru.mngerasimenko.todolist.dto.UserResponse;
 import ru.mngerasimenko.todolist.mapper.UserMapper;
+import ru.mngerasimenko.todolist.service.SubscriptionService;
 import ru.mngerasimenko.todolist.service.UserService;
 
 import java.util.List;
@@ -30,12 +32,21 @@ import java.util.List;
 public class UserRestController {
     private final UserService userService;
     private final UserMapper userMapper;
+    private final SubscriptionService subscriptionService;
 
     /** Получение текущего пользователя по JWT-токену */
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getCurrentUser(@AuthenticationPrincipal UserDetails userDetails) {
         UserDto userDto = userService.getUserByUserName(userDetails.getUsername());
         UserResponse response = userMapper.toResponse(userDto);
+        return ResponseEntity.ok(response);
+    }
+
+    /** Получение статуса подписки текущего пользователя */
+    @GetMapping("/me/subscription")
+    public ResponseEntity<SubscriptionStatusResponse> getSubscriptionStatus(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        SubscriptionStatusResponse response = subscriptionService.getSubscriptionStatus(userDetails.getUsername());
         return ResponseEntity.ok(response);
     }
 

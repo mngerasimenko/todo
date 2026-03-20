@@ -31,6 +31,11 @@ public interface TaskListUserRepository extends JpaRepository<TaskListUser, Task
 
     boolean existsByIdListIdAndRole(Long listId, TaskListRole role);
 
+    /**
+     * Возвращает первого администратора списка (для проверки лимитов подписки).
+     */
+    Optional<TaskListUser> findFirstByIdListIdAndRole(Long listId, TaskListRole role);
+
     Optional<TaskListUser> findByIdListIdAndIdUserId(Long listId, Long userId);
 
     /**
@@ -39,6 +44,18 @@ public interface TaskListUserRepository extends JpaRepository<TaskListUser, Task
      */
     @EntityGraph(attributePaths = {"user"})
     List<TaskListUser> findByIdListId(Long listId);
+
+    /**
+     * Количество списков, в которых состоит пользователь.
+     */
+    @Query("SELECT COUNT(tlu) FROM TaskListUser tlu WHERE tlu.user.id = :userId")
+    long countByUserId(@Param("userId") Long userId);
+
+    /**
+     * Количество участников в списке.
+     */
+    @Query("SELECT COUNT(tlu) FROM TaskListUser tlu WHERE tlu.taskList.id = :listId")
+    long countByListId(@Param("listId") Long listId);
 
     /**
      * Удалить запись участия пользователя в списке.
