@@ -34,3 +34,5 @@ build/
 .env
 .env.production-*
 monitoring/monitor.conf
+/marketing/
+/design/
