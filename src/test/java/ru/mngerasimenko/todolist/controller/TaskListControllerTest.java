@@ -426,24 +426,36 @@ class TaskListControllerTest {
 
     @Test
     @WithMockUser(username = "user")
-    void leaveList_ValidRequest_ReturnsNoContent() throws Exception {
-        doNothing().when(taskListService).leaveList(1L, 1L);
+    void leaveList_Member_ReturnsOkWithMessage() throws Exception {
+        when(taskListService.leaveList(1L, 1L)).thenReturn("Вы покинули список");
 
         mockMvc.perform(delete("/api/lists/1/leave"))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Вы покинули список"));
 
         verify(taskListService).leaveList(1L, 1L);
     }
 
     @Test
     @WithMockUser(username = "user")
-    void leaveList_AdminCannotLeave_ReturnsBadRequest() throws Exception {
-        doThrow(new IllegalArgumentException("Администратор не может покинуть список. Используйте удаление списка"))
-                .when(taskListService).leaveList(1L, 1L);
+    void leaveList_AdminWithOthers_ReturnsOkWithTransferMessage() throws Exception {
+        when(taskListService.leaveList(1L, 1L))
+                .thenReturn("Вы покинули список. Права администратора переданы другому участнику");
 
         mockMvc.perform(delete("/api/lists/1/leave"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Администратор не может покинуть список. Используйте удаление списка"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Вы покинули список. Права администратора переданы другому участнику"));
+    }
+
+    @Test
+    @WithMockUser(username = "user")
+    void leaveList_AdminAlone_ReturnsOkWithDeleteMessage() throws Exception {
+        when(taskListService.leaveList(1L, 1L))
+                .thenReturn("Список удалён, так как вы были единственным участником");
+
+        mockMvc.perform(delete("/api/lists/1/leave"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Список удалён, так как вы были единственным участником"));
     }
 
     @Test

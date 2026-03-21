@@ -17,6 +17,7 @@ import ru.mngerasimenko.todolist.service.TaskListService;
 import ru.mngerasimenko.todolist.service.UserService;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * REST контроллер для управления списками задач.
@@ -92,15 +93,16 @@ public class TaskListController {
     }
 
     /**
-     * Выйти из списка. Приватные задачи пользователя в списке удаляются.
+     * Выйти из списка.
+     * MEMBER — удаляются приватные задачи. ADMIN — передаются права или удаляется список.
      */
     @DeleteMapping("/{id}/leave")
-    public ResponseEntity<Void> leaveList(
+    public ResponseEntity<Map<String, String>> leaveList(
             @PathVariable Long id,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = getUserId(userDetails);
-        taskListService.leaveList(id, userId);
-        return ResponseEntity.noContent().build();
+        String message = taskListService.leaveList(id, userId);
+        return ResponseEntity.ok(Map.of("message", message));
     }
 
     /**

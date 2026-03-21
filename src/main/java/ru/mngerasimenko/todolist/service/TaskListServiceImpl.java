@@ -131,18 +131,45 @@ public class TaskListServiceImpl implements TaskListService {
 
     @Override
     @Transactional
-    public void leaveList(Long listId, Long userId) {
+    public String leaveList(Long listId, Long userId) {
         TaskListUser membership = taskListUserRepository.findByIdListIdAndIdUserId(listId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Вы не являетесь участником данного списка"));
 
+        String message;
+
         if (membership.getRole() == TaskListRole.ADMIN) {
-            throw new IllegalArgumentException("Администратор не может покинуть список. Используйте удаление списка");
+            List<TaskListUser> allMembers = taskListUserRepository.findByIdListId(listId);
+
+            if (allMembers.size() == 1) {
+                // ADMIN единственный — удаляем список целиком
+                todoRepository.deleteByListId(listId);
+                taskListUserRepository.deleteByListId(listId);
+                taskListRepository.deleteByListId(listId);
+                log.info("Список удалён при выходе последнего участника: listId={}, userId={}", listId, userId);
+                message = "Список удалён, так как вы были единственным участником";
+            } else {
+                // ADMIN с другими участниками — передаём права первому
+                allMembers.stream()
+                        .filter(m -> !m.getUser().getId().equals(userId))
+                        .findFirst()
+                        .ifPresent(m -> {
+                            m.setRole(TaskListRole.ADMIN);
+                            taskListUserRepository.saveAndFlush(m);
+                        });
+                todoRepository.deletePrivateTodosByListIdAndUserId(listId, userId);
+                taskListUserRepository.deleteByListIdAndUserId(listId, userId);
+                log.info("Администратор вышел из списка, права переданы: listId={}, userId={}", listId, userId);
+                message = "Вы покинули список. Права администратора переданы другому участнику";
+            }
+        } else {
+            // Обычный участник
+            todoRepository.deletePrivateTodosByListIdAndUserId(listId, userId);
+            taskListUserRepository.deleteByListIdAndUserId(listId, userId);
+            log.info("Пользователь вышел из списка: listId={}, userId={}", listId, userId);
+            message = "Вы покинули список";
         }
 
-        todoRepository.deletePrivateTodosByListIdAndUserId(listId, userId);
-        taskListUserRepository.deleteByListIdAndUserId(listId, userId);
-
-        log.info("Пользователь вышел из списка: listId={}, userId={}", listId, userId);
+        return message;
     }
 
     @Override

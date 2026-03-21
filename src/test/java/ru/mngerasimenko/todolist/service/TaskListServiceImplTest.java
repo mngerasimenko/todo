@@ -312,27 +312,59 @@ class TaskListServiceImplTest {
         when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
                 .thenReturn(Optional.of(memberUser));
 
-        taskListService.leaveList(10L, 1L);
+        String message = taskListService.leaveList(10L, 1L);
 
+        assertThat(message).contains("покинули список");
         verify(todoRepository).deletePrivateTodosByListIdAndUserId(10L, 1L);
         verify(taskListUserRepository).deleteByListIdAndUserId(10L, 1L);
     }
 
     @Test
-    void leaveList_WhenUserIsAdmin_ThrowsIllegalArgumentException() {
+    void leaveList_WhenAdminAlone_DeletesEntireList() {
         TaskListUser adminUser = new TaskListUser();
         adminUser.setId(new TaskListUserId(10L, 1L));
         adminUser.setRole(TaskListRole.ADMIN);
 
         when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
                 .thenReturn(Optional.of(adminUser));
+        when(taskListUserRepository.findByIdListId(10L))
+                .thenReturn(List.of(adminUser));
 
-        assertThatThrownBy(() -> taskListService.leaveList(10L, 1L))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Администратор не может покинуть список");
+        String message = taskListService.leaveList(10L, 1L);
 
-        verify(todoRepository, never()).deletePrivateTodosByListIdAndUserId(anyLong(), anyLong());
-        verify(taskListUserRepository, never()).deleteByListIdAndUserId(anyLong(), anyLong());
+        assertThat(message).contains("удалён");
+        verify(todoRepository).deleteByListId(10L);
+        verify(taskListUserRepository).deleteByListId(10L);
+        verify(taskListRepository).deleteByListId(10L);
+    }
+
+    @Test
+    void leaveList_WhenAdminWithOthers_TransfersAdminAndLeaves() {
+        User user1 = new User(); user1.setId(1L);
+        User user2 = new User(); user2.setId(2L);
+
+        TaskListUser adminUser = new TaskListUser();
+        adminUser.setId(new TaskListUserId(10L, 1L));
+        adminUser.setRole(TaskListRole.ADMIN);
+        adminUser.setUser(user1);
+
+        TaskListUser otherUser = new TaskListUser();
+        otherUser.setId(new TaskListUserId(10L, 2L));
+        otherUser.setRole(TaskListRole.USER);
+        otherUser.setUser(user2);
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
+                .thenReturn(Optional.of(adminUser));
+        when(taskListUserRepository.findByIdListId(10L))
+                .thenReturn(List.of(adminUser, otherUser));
+
+        String message = taskListService.leaveList(10L, 1L);
+
+        assertThat(message).contains("переданы");
+        assertThat(otherUser.getRole()).isEqualTo(TaskListRole.ADMIN);
+        verify(taskListUserRepository).saveAndFlush(otherUser);
+        verify(todoRepository).deletePrivateTodosByListIdAndUserId(10L, 1L);
+        verify(taskListUserRepository).deleteByListIdAndUserId(10L, 1L);
     }
 
     @Test
