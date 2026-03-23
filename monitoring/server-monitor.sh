@@ -6,12 +6,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/monitor.conf"
 ALERT_STATE_FILE="/tmp/server-monitor-alert-state"
 
-send_telegram() {
+send_alert() {
     local message="$1"
-    curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-        -d chat_id="${TELEGRAM_CHAT_ID}" \
-        -d parse_mode="HTML" \
-        -d text="${message}" > /dev/null 2>&1
+    local random_id=$((RANDOM * RANDOM))
+    curl -s --max-time 15 -X POST "https://api.vk.com/method/messages.send" \
+        -d "access_token=${VK_TOKEN}" \
+        -d "peer_id=${VK_PEER_ID}" \
+        -d "random_id=${random_id}" \
+        --data-urlencode "message=${message}" \
+        -d "v=${VK_API_VERSION}" > /dev/null 2>&1
 }
 
 # Не спамить одинаковыми алертами — отправлять повторно не чаще чем раз в 30 минут
@@ -45,7 +48,7 @@ ram_total_mb=$((ram_total / 1024))
 if [ "$ram_percent" -ge "$RAM_WARN" ]; then
     if should_alert "ram"; then
         alerts="${alerts}
-⚠️ <b>RAM:</b> ${ram_percent}% (${ram_used_mb}/${ram_total_mb} MB)"
+⚠️ RAM: ${ram_percent}% (${ram_used_mb}/${ram_total_mb} MB)"
     fi
 fi
 
@@ -60,7 +63,7 @@ if [ "$swap_total" -gt 0 ]; then
     if [ "$swap_percent" -ge "$SWAP_WARN" ]; then
         if should_alert "swap"; then
             alerts="${alerts}
-⚠️ <b>Swap:</b> ${swap_percent}% (${swap_used_mb}/${swap_total_mb} MB)"
+⚠️ Swap: ${swap_percent}% (${swap_used_mb}/${swap_total_mb} MB)"
         fi
     fi
 fi
@@ -73,7 +76,7 @@ disk_total=$(df -h / | awk 'NR==2 {print $2}')
 if [ "$disk_percent" -ge "$DISK_WARN" ]; then
     if should_alert "disk"; then
         alerts="${alerts}
-⚠️ <b>Disk:</b> ${disk_percent}% (${disk_used}/${disk_total})"
+⚠️ Disk: ${disk_percent}% (${disk_used}/${disk_total})"
     fi
 fi
 
@@ -84,7 +87,7 @@ for container in $containers; do
     if [ "$status" != "running" ]; then
         if should_alert "container_${container}"; then
             alerts="${alerts}
-🔴 <b>${container}:</b> ${status:-not found}"
+🔴 ${container}: ${status:-not found}"
         fi
     fi
 done
@@ -94,7 +97,7 @@ http_code=$(curl -s -o /dev/null -w "%{http_code}" -k --max-time 15 https://loca
 if [ "$http_code" != "200" ]; then
     if should_alert "api"; then
         alerts="${alerts}
-🔴 <b>API:</b> HTTP ${http_code} (ожидался 200)"
+🔴 API: HTTP ${http_code} (ожидался 200)"
     fi
 fi
 
@@ -103,7 +106,7 @@ smtp_healthy=$(curl -s -k --max-time 15 https://localhost/api/status 2>/dev/null
 if [ "$smtp_healthy" -eq 0 ] && [ "$http_code" = "200" ]; then
     if should_alert "smtp"; then
         alerts="${alerts}
-🔴 <b>SMTP:</b> недоступен (mail.hosting.reg.ru)"
+🔴 SMTP: недоступен (mail.hosting.reg.ru)"
     fi
 fi
 
@@ -112,7 +115,7 @@ pg_ok=$(docker exec postgres-db pg_isready -U postgres 2>/dev/null | grep -c "ac
 if [ "$pg_ok" -eq 0 ]; then
     if should_alert "postgres"; then
         alerts="${alerts}
-🔴 <b>PostgreSQL:</b> не принимает соединения"
+🔴 PostgreSQL: не принимает соединения"
     fi
 fi
 
@@ -135,7 +138,7 @@ if [ -n "$jvm_heap_json" ] && [ -n "$jvm_heap_max_json" ]; then
         if [ "$heap_percent" -ge "${JVM_HEAP_WARN:-85}" ]; then
             if should_alert "jvm_heap"; then
                 alerts="${alerts}
-⚠️ <b>JVM Heap:</b> ${heap_percent}% (${heap_used_mb}/${heap_max_mb} MB)
+⚠️ JVM Heap: ${heap_percent}% (${heap_used_mb}/${heap_max_mb} MB)
    Non-Heap: ${nonheap_used_mb} MB"
             fi
         fi
@@ -144,8 +147,8 @@ fi
 
 # === Отправка алерта ===
 if [ -n "$alerts" ]; then
-    message="🚨 <b>Алерт: ${hostname}</b>
+    message="🚨 Алерт: ${hostname}
 📅 ${timestamp}
 ${alerts}"
-    send_telegram "$message"
+    send_alert "$message"
 fi

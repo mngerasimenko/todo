@@ -161,11 +161,54 @@ Cooldown: $((${ALERT_COOLDOWN:-1800} / 60)) мин
 Файл: /root/monitoring/monitor.conf"
 }
 
+cmd_jvm() {
+    local peer_id="$1"
+    local base="http://localhost:8091/actuator/metrics"
+
+    get_metric() {
+        docker exec todo-app wget -qO- "$1" 2>/dev/null | grep -o '"value":[0-9.]*' | head -1 | cut -d: -f2
+    }
+
+    local heap_used_raw=$(get_metric "${base}/jvm.memory.used?tag=area:heap")
+    local heap_max_raw=$(get_metric "${base}/jvm.memory.max?tag=area:heap")
+    local nonheap_used_raw=$(get_metric "${base}/jvm.memory.used?tag=area:nonheap")
+    local threads_live=$(get_metric "${base}/jvm.threads.live" | cut -d. -f1)
+    local threads_peak=$(get_metric "${base}/jvm.threads.peak" | cut -d. -f1)
+
+    if [ -z "$heap_used_raw" ]; then
+        send_message "$peer_id" "❌ Actuator недоступен (порт 8091). Нужен деплой с actuator."
+        return
+    fi
+
+    local heap_used_mb=$(echo "$heap_used_raw" | awk '{printf "%.0f", $1/1048576}')
+    local heap_max_mb=$(echo "$heap_max_raw" | awk '{printf "%.0f", $1/1048576}')
+    local heap_percent=$(echo "$heap_used_raw $heap_max_raw" | awk '{printf "%.0f", $1*100/$2}')
+    local nonheap_mb=$(echo "${nonheap_used_raw:-0}" | awk '{printf "%.0f", $1/1048576}')
+
+    local hikari_active=$(get_metric "${base}/hikaricp.connections.active" | cut -d. -f1)
+    local hikari_idle=$(get_metric "${base}/hikaricp.connections.idle" | cut -d. -f1)
+    local hikari_total=$(get_metric "${base}/hikaricp.connections" | cut -d. -f1)
+
+    local gc_count=$(docker exec todo-app wget -qO- "${base}/jvm.gc.pause" 2>/dev/null | grep -o '"count":[0-9]*' | head -1 | cut -d: -f2)
+
+    send_message "$peer_id" "☕ JVM-метрики
+
+Heap: ${heap_percent}% (${heap_used_mb}/${heap_max_mb} MB)
+Non-Heap: ${nonheap_mb} MB (metaspace + code cache)
+
+Потоки: ${threads_live:-?} live / ${threads_peak:-?} peak
+
+HikariCP: ${hikari_active:-?} active / ${hikari_idle:-?} idle / ${hikari_total:-?} total
+
+GC: ${gc_count:-?} collections"
+}
+
 cmd_help() {
     local peer_id="$1"
     send_message "$peer_id" "🤖 Команды бота:
 
 /status — полный отчёт о сервере
+/jvm — JVM-метрики (heap, threads, HikariCP, GC)
 /restart [контейнер] — перезапустить контейнер
 /logs [N] — последние N строк логов (по умолч. 20)
 /errors — последние ошибки из логов
@@ -190,6 +233,7 @@ process_message() {
 
     case "$cmd" in
         /status)   cmd_status "$peer_id" ;;
+        /jvm)      cmd_jvm "$peer_id" ;;
         /restart)  cmd_restart "$peer_id" "$arg" ;;
         /logs)     cmd_logs "$peer_id" "$arg" ;;
         /errors)   cmd_errors "$peer_id" ;;

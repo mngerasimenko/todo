@@ -7,11 +7,14 @@ source /root/monitoring/monitor.conf
 DOMAIN="todo.mngerasimenko.ru"
 ALERT_STATE_FILE="/tmp/external-monitor-alert-state"
 
-send_telegram() {
-    curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-        -d chat_id="${TELEGRAM_CHAT_ID}" \
-        -d parse_mode="HTML" \
-        -d text="$1" > /dev/null 2>&1
+send_alert() {
+    local random_id=$((RANDOM * RANDOM))
+    curl -s --max-time 15 -X POST "https://api.vk.com/method/messages.send" \
+        -d "access_token=${VK_TOKEN}" \
+        -d "peer_id=${VK_PEER_ID}" \
+        -d "random_id=${random_id}" \
+        --data-urlencode "message=$1" \
+        -d "v=${VK_API_VERSION}" > /dev/null 2>&1
 }
 
 should_alert() {
@@ -35,7 +38,7 @@ response_time=$(curl -s -o /dev/null -w "%{time_total}" --max-time 15 "https://$
 if [ "$http_code" != "200" ]; then
     if should_alert "external_api"; then
         alerts="${alerts}
-🔴 <b>API (external):</b> HTTP ${http_code} (expected 200)"
+🔴 API (external): HTTP ${http_code} (expected 200)"
     fi
 fi
 
@@ -44,7 +47,7 @@ response_ms=$(echo "$response_time * 1000" | bc 2>/dev/null | cut -d. -f1)
 if [ -n "$response_ms" ] && [ "$response_ms" -gt 3000 ] 2>/dev/null; then
     if should_alert "external_slow"; then
         alerts="${alerts}
-⚠️ <b>Response time:</b> ${response_time}s (> 3s)"
+⚠️ Response time: ${response_time}s (> 3s)"
     fi
 fi
 
@@ -57,14 +60,14 @@ if [ -n "$ssl_expiry" ]; then
     if [ "$days_left" -lt 7 ] 2>/dev/null; then
         if should_alert "external_ssl"; then
             alerts="${alerts}
-⚠️ <b>SSL:</b> expires in ${days_left} days"
+⚠️ SSL: expires in ${days_left} days"
         fi
     fi
 fi
 
 # Send alert
 if [ -n "$alerts" ]; then
-    send_telegram "🔍 <b>External monitor: ${DOMAIN}</b>
+    send_alert "🔍 External monitor: ${DOMAIN}
 📅 $(date '+%Y-%m-%d %H:%M:%S')
 ${alerts}"
 fi
