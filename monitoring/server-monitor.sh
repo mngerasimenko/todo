@@ -125,9 +125,9 @@ jvm_heap_max_json=$(docker exec todo-app wget -qO- "http://localhost:8091/actuat
 jvm_nonheap_json=$(docker exec todo-app wget -qO- "http://localhost:8091/actuator/metrics/jvm.memory.used?tag=area:nonheap" 2>/dev/null)
 
 if [ -n "$jvm_heap_json" ] && [ -n "$jvm_heap_max_json" ]; then
-    heap_used=$(echo "$jvm_heap_json" | grep -o '"value":[0-9.]*' | head -1 | cut -d: -f2 | cut -d. -f1)
-    heap_max=$(echo "$jvm_heap_max_json" | grep -o '"value":[0-9.]*' | head -1 | cut -d: -f2 | cut -d. -f1)
-    nonheap_used=$(echo "$jvm_nonheap_json" | grep -o '"value":[0-9.]*' | head -1 | cut -d: -f2 | cut -d. -f1)
+    heap_used=$(echo "$jvm_heap_json" | python3 -c "import sys,json; print(int(json.load(sys.stdin)['measurements'][0]['value']))" 2>/dev/null)
+    heap_max=$(echo "$jvm_heap_max_json" | python3 -c "import sys,json; print(int(json.load(sys.stdin)['measurements'][0]['value']))" 2>/dev/null)
+    nonheap_used=$(echo "$jvm_nonheap_json" | python3 -c "import sys,json; print(int(json.load(sys.stdin)['measurements'][0]['value']))" 2>/dev/null)
 
     if [ -n "$heap_used" ] && [ -n "$heap_max" ] && [ "$heap_max" -gt 0 ]; then
         heap_percent=$((heap_used * 100 / heap_max))

@@ -166,7 +166,7 @@ cmd_jvm() {
     local base="http://localhost:8091/actuator/metrics"
 
     get_metric() {
-        docker exec todo-app wget -qO- "$1" 2>/dev/null | grep -o '"value":[0-9.]*' | head -1 | cut -d: -f2
+        docker exec todo-app wget -qO- "$1" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['measurements'][0]['value'])" 2>/dev/null
     }
 
     local heap_used_raw=$(get_metric "${base}/jvm.memory.used?tag=area:heap")
@@ -189,7 +189,7 @@ cmd_jvm() {
     local hikari_idle=$(get_metric "${base}/hikaricp.connections.idle" | cut -d. -f1)
     local hikari_total=$(get_metric "${base}/hikaricp.connections" | cut -d. -f1)
 
-    local gc_count=$(docker exec todo-app wget -qO- "${base}/jvm.gc.pause" 2>/dev/null | grep -o '"count":[0-9]*' | head -1 | cut -d: -f2)
+    local gc_count=$(docker exec todo-app wget -qO- "${base}/jvm.gc.pause" 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(sum(m['value'] for m in d.get('measurements',[]) if m['statistic']=='COUNT'))" 2>/dev/null | cut -d. -f1)
 
     send_message "$peer_id" "☕ JVM-метрики
 
