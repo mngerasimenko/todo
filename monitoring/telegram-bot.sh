@@ -96,7 +96,23 @@ ${docker_mem}
 <b>API:</b> ${api_status}
 <b>PG connections:</b> ${pg_connections:-N/A}/${pg_max:-?}
 
-💾 <b>Последний backup:</b> ${backup_info}"
+💾 <b>Последний backup:</b> ${backup_info}
+
+💡 <i>/jvm — детальные JVM-метрики</i>"
+}
+
+# Краткая JVM-строка для /status (без отдельного вызова)
+get_jvm_summary() {
+    local heap_raw=$(docker exec todo-app wget -qO- "http://localhost:8091/actuator/metrics/jvm.memory.used?tag=area:heap" 2>/dev/null | grep -o '"value":[0-9.]*' | head -1 | cut -d: -f2)
+    local heap_max_raw=$(docker exec todo-app wget -qO- "http://localhost:8091/actuator/metrics/jvm.memory.max?tag=area:heap" 2>/dev/null | grep -o '"value":[0-9.]*' | head -1 | cut -d: -f2)
+    if [ -n "$heap_raw" ] && [ -n "$heap_max_raw" ]; then
+        local heap_mb=$(echo "$heap_raw" | awk '{printf "%.0f", $1/1048576}')
+        local max_mb=$(echo "$heap_max_raw" | awk '{printf "%.0f", $1/1048576}')
+        local pct=$(echo "$heap_raw $heap_max_raw" | awk '{printf "%.0f", $1*100/$2}')
+        echo "${heap_mb}/${max_mb} MB (${pct}%)"
+    else
+        echo "N/A"
+    fi
 }
 
 # Перезапуск контейнера
@@ -166,6 +182,59 @@ cmd_errors() {
 <pre>${errors}</pre>"
 }
 
+# JVM-метрики через Actuator
+cmd_jvm() {
+    local chat_id="$1"
+    local base="http://localhost:8091/actuator/metrics"
+
+    # Извлечь value из JSON actuator-ответа
+    get_metric() {
+        docker exec todo-app wget -qO- "$1" 2>/dev/null | grep -o '"value":[0-9.]*' | head -1 | cut -d: -f2
+    }
+
+    local heap_used_raw=$(get_metric "${base}/jvm.memory.used?tag=area:heap")
+    local heap_max_raw=$(get_metric "${base}/jvm.memory.max?tag=area:heap")
+    local nonheap_used_raw=$(get_metric "${base}/jvm.memory.used?tag=area:nonheap")
+    local threads_live=$(get_metric "${base}/jvm.threads.live" | cut -d. -f1)
+    local threads_peak=$(get_metric "${base}/jvm.threads.peak" | cut -d. -f1)
+
+    if [ -z "$heap_used_raw" ]; then
+        send_message "$chat_id" "❌ Actuator недоступен (порт 8091)"
+        return
+    fi
+
+    local heap_used_mb=$(echo "$heap_used_raw" | awk '{printf "%.0f", $1/1048576}')
+    local heap_max_mb=$(echo "$heap_max_raw" | awk '{printf "%.0f", $1/1048576}')
+    local heap_percent=$(echo "$heap_used_raw $heap_max_raw" | awk '{printf "%.0f", $1*100/$2}')
+    local nonheap_mb=$(echo "${nonheap_used_raw:-0}" | awk '{printf "%.0f", $1/1048576}')
+
+    # HikariCP
+    local hikari_active=$(get_metric "${base}/hikaricp.connections.active" | cut -d. -f1)
+    local hikari_idle=$(get_metric "${base}/hikaricp.connections.idle" | cut -d. -f1)
+    local hikari_total=$(get_metric "${base}/hikaricp.connections" | cut -d. -f1)
+
+    # GC
+    local gc_pause=$(get_metric "${base}/jvm.gc.pause")
+    local gc_count_raw=$(docker exec todo-app wget -qO- "${base}/jvm.gc.pause" 2>/dev/null | grep -o '"count":[0-9]*' | head -1 | cut -d: -f2)
+
+    # Прогресс-бар
+    local filled=$((heap_percent / 5))
+    local empty=$((20 - filled))
+    local bar=$(printf '█%.0s' $(seq 1 $filled 2>/dev/null))$(printf '░%.0s' $(seq 1 $empty 2>/dev/null))
+
+    send_message "$chat_id" "☕ <b>JVM-метрики</b>
+
+<b>Heap:</b> [${bar}] ${heap_percent}%
+  Used: ${heap_used_mb} MB / Max: ${heap_max_mb} MB
+<b>Non-Heap:</b> ${nonheap_mb} MB (metaspace + code cache)
+
+<b>Потоки:</b> ${threads_live:-?} live / ${threads_peak:-?} peak
+
+<b>HikariCP:</b> ${hikari_active:-?} active / ${hikari_idle:-?} idle / ${hikari_total:-?} total
+
+<b>GC:</b> ${gc_count_raw:-?} collections"
+}
+
 # Текущие настройки
 cmd_config() {
     local chat_id="$1"
@@ -186,6 +255,7 @@ cmd_help() {
     send_message "$chat_id" "🤖 <b>Команды бота:</b>
 
 /status — полный отчёт о сервере
+/jvm — JVM-метрики (heap, threads, HikariCP, GC)
 /restart [контейнер] — перезапустить контейнер
 /logs [N] — последние N строк логов (по умолч. 20)
 /errors — последние ошибки из логов
@@ -215,6 +285,7 @@ process_update() {
 
     case "$cmd" in
         /status)   cmd_status "$chat_id" ;;
+        /jvm)      cmd_jvm "$chat_id" ;;
         /restart)  cmd_restart "$chat_id" "$arg" ;;
         /logs)     cmd_logs "$chat_id" "$arg" ;;
         /errors)   cmd_errors "$chat_id" ;;
