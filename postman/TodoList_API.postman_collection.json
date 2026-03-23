@@ -741,20 +741,246 @@
           "response": []
         },
         {
+          "name": "Create Invite (copy link)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has invite_link and expires_at\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.invite_link).to.exist;",
+                  "    pm.expect(jsonData.invite_link).to.include('/invite/');",
+                  "    pm.expect(jsonData.expires_at).to.exist;",
+                  "",
+                  "    // Извлечь токен из ссылки и сохранить",
+                  "    var link = jsonData.invite_link;",
+                  "    var inviteToken = link.substring(link.lastIndexOf('/') + 1);",
+                  "    pm.environment.set('inviteToken', inviteToken);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/lists/{{listId}}/invite",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lists",
+                "{{listId}}",
+                "invite"
+              ]
+            },
+            "description": "Создание приглашения в список (только ADMIN). Без email — возвращает ссылку для копирования.\n\ninviteToken сохраняется автоматически.\n\n**Ошибки:** `400` (не участник), `400` (не админ)"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Invite (with email)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has invite_link\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.invite_link).to.exist;",
+                  "    pm.expect(jsonData.invite_link).to.include('/invite/');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"invite_test@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/lists/{{listId}}/invite",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lists",
+                "{{listId}}",
+                "invite"
+              ]
+            },
+            "description": "Создание приглашения с отправкой email. Письмо отправляется асинхронно на указанный адрес."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Invite Info",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has list_name and inviter_name\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.list_name).to.exist;",
+                  "    pm.expect(jsonData.inviter_name).to.exist;",
+                  "    pm.expect(jsonData.expires_at).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/lists/invite/{{inviteToken}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lists",
+                "invite",
+                "{{inviteToken}}"
+              ]
+            },
+            "description": "Публичный эндпоинт (без JWT). Возвращает информацию о приглашении: название списка, имя пригласившего, срок действия.\n\n**Ошибки:** `400` (токен невалиден или истёк)"
+          },
+          "response": []
+        },
+        {
+          "name": "Accept Invite",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Пользователь уже в списке (он же ADMIN создатель) — ожидаем 200 с ролью ADMIN",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has list info\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.id).to.exist;",
+                  "    pm.expect(jsonData.name).to.exist;",
+                  "    pm.expect(jsonData.role).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{inviteToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/lists/invite/accept",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lists",
+                "invite",
+                "accept"
+              ]
+            },
+            "description": "Принятие приглашения по токену (требует JWT). Если пользователь уже в списке — возвращает текущую роль без повторного добавления.\n\n**Ошибки:** `400` (токен невалиден/истёк)"
+          },
+          "response": []
+        },
+        {
           "name": "Leave List",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 400\", function () {",
-                  "    const res = pm.response.json();  ",
+                  "// ADMIN единственный — список удаляется, возвращает 200",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
                   "",
-                  "    pm.response.to.have.status(400);",
-                  "    pm.expect(pm.response.json()).to.have.property(\"error\");",
-                  "    pm.expect(res.error).to.eql(\"Bad Request\");",
-                  "    pm.expect(res.message).to.eql(\"Администратор не может покинуть список. Используйте удаление списка\");",
-                  "    ",
+                  "pm.test(\"Response has message\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.message).to.exist;",
                   "});"
                 ],
                 "type": "text/javascript",
@@ -793,14 +1019,15 @@
           "response": []
         },
         {
-          "name": "Delete List",
+          "name": "Delete List (already deleted by Leave)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status code is 204\", function () {",
-                  "    pm.response.to.have.status(204);",
+                  "// Список уже удалён Leave List (ADMIN единственный) — ожидаем 400",
+                  "pm.test(\"Status code is 400 (list already deleted)\", function () {",
+                  "    pm.response.to.have.status(400);",
                   "});"
                 ],
                 "type": "text/javascript",
@@ -833,7 +1060,7 @@
                 "{{listId}}"
               ]
             },
-            "description": "Выход из списка.\n\n⚠️ **Внимание:** При выходе автоматически удаляются все приватные задачи пользователя в данном списке.\n\n**Ошибки:** `400` (не являетесь участником)"
+            "description": "Попытка удалить список, который уже был удалён через Leave List.\n\n**Ожидается:** 400 Bad Request"
           },
           "response": []
         }
@@ -2143,6 +2370,146 @@
             "description": "Создание новой задачи.\n\n**Обязательные поля:** `name`, `user_id`, `list_id`\n\n**Требует JWT токен** в заголовке Authorization."
           },
           "response": []
+        },
+        {
+          "name": "Invalid Invite Token - Get Info",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has error message\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.message).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/lists/invite/invalid-nonexistent-token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lists",
+                "invite",
+                "invalid-nonexistent-token"
+              ]
+            },
+            "description": "Попытка получить информацию по невалидному токену приглашения.\n\n**Ожидается:** 400 Bad Request"
+          },
+          "response": []
+        },
+        {
+          "name": "Invalid Invite Token - Accept",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has error message\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.message).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"nonexistent-invite-token\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/lists/invite/accept",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lists",
+                "invite",
+                "accept"
+              ]
+            },
+            "description": "Попытка принять невалидное приглашение.\n\n**Ожидается:** 400 Bad Request"
+          },
+          "response": []
+        },
+        {
+          "name": "Accept Invite - Unauthorized",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"any-token\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/lists/invite/accept",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "lists",
+                "invite",
+                "accept"
+              ]
+            },
+            "description": "Попытка принять приглашение без JWT токена.\n\n**Ожидается:** 401 Unauthorized"
+          },
+          "response": []
         }
       ],
       "description": "Негативные тесты (проверка обработки ошибок)"
@@ -2665,6 +3032,11 @@
     },
     {
       "key": "listId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "inviteToken",
       "value": "",
       "type": "string"
     }

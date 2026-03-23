@@ -17,3 +17,5 @@ databaseChangeLog:
       file: db/migration/008-add-deleted-user.yaml
   - include:
       file: db/migration/009-add-subscription-fields.yaml
+  - include:
+      file: db/migration/010-create-invite-token.yaml

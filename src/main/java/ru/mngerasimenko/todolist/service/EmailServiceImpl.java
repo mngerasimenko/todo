@@ -11,6 +11,8 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import ru.mngerasimenko.todolist.settings.EmailProperties;
 
+import org.springframework.web.util.HtmlUtils;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -65,6 +67,20 @@ public class EmailServiceImpl implements EmailService {
         } catch (Exception e) {
             log.error("Ошибка отправки email на {}: {}", to, e.getMessage());
         }
+    }
+
+    @Override
+    @Async
+    public void sendInviteEmail(String email, String inviteLink, String listName, String inviterName) {
+        int ttlHours = emailProperties.getInviteTokenTtlHours();
+        String safeListName = HtmlUtils.htmlEscape(listName);
+        String safeInviterName = HtmlUtils.htmlEscape(inviterName);
+        String html = loadTemplate("templates/invite.html")
+                .replace("{{link}}", inviteLink)
+                .replace("{{listName}}", safeListName)
+                .replace("{{inviterName}}", safeInviterName)
+                .replace("{{ttlHours}}", String.valueOf(ttlHours));
+        sendHtmlEmail(email, "Приглашение в список «" + safeListName + "» — Список задач", html);
     }
 
     @Override

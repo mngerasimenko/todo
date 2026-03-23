@@ -1,6 +1,8 @@
 package ru.mngerasimenko.todolist.service;
 
 import ru.mngerasimenko.todolist.dto.TodoDto;
+import ru.mngerasimenko.todolist.dto.list.InviteInfoResponse;
+import ru.mngerasimenko.todolist.dto.list.InviteResponse;
 import ru.mngerasimenko.todolist.dto.list.ListMemberResponse;
 import ru.mngerasimenko.todolist.dto.list.ListResponse;
 
@@ -46,4 +48,20 @@ public interface TaskListService {
      * Удаляются все задачи, все участники и сам список.
      */
     void deleteList(Long listId, Long userId);
+
+    /**
+     * Создать приглашение в список. Только ADMIN списка.
+     * Генерирует токен, опционально отправляет email.
+     */
+    InviteResponse createInvite(Long listId, Long userId, String recipientEmail);
+
+    /**
+     * Получить информацию о приглашении по токену (без авторизации).
+     */
+    InviteInfoResponse getInviteInfo(String token);
+
+    /**
+     * Принять приглашение по токену. Требует авторизацию.
+     */
+    ListResponse acceptInvite(String token, Long userId);
 }

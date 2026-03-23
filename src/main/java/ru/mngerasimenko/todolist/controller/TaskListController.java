@@ -8,10 +8,14 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import ru.mngerasimenko.todolist.dto.TodoResponse;
+import ru.mngerasimenko.todolist.dto.list.AcceptInviteRequest;
+import ru.mngerasimenko.todolist.dto.list.CreateListRequest;
+import ru.mngerasimenko.todolist.dto.list.InviteInfoResponse;
+import ru.mngerasimenko.todolist.dto.list.InviteRequest;
+import ru.mngerasimenko.todolist.dto.list.InviteResponse;
+import ru.mngerasimenko.todolist.dto.list.JoinListRequest;
 import ru.mngerasimenko.todolist.dto.list.ListMemberResponse;
 import ru.mngerasimenko.todolist.dto.list.ListResponse;
-import ru.mngerasimenko.todolist.dto.list.CreateListRequest;
-import ru.mngerasimenko.todolist.dto.list.JoinListRequest;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
 import ru.mngerasimenko.todolist.service.TaskListService;
 import ru.mngerasimenko.todolist.service.UserService;
@@ -115,6 +119,42 @@ public class TaskListController {
         Long userId = getUserId(userDetails);
         taskListService.deleteList(id, userId);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Создать приглашение в список (только ADMIN).
+     * Если в теле указан email — отправляется письмо с приглашением.
+     */
+    @PostMapping("/{id}/invite")
+    public ResponseEntity<InviteResponse> createInvite(
+            @PathVariable Long id,
+            @Valid @RequestBody(required = false) InviteRequest request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = getUserId(userDetails);
+        String email = (request != null) ? request.getEmail() : null;
+        InviteResponse response = taskListService.createInvite(id, userId, email);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * Получить информацию о приглашении по токену (публичный, без JWT).
+     */
+    @GetMapping("/invite/{token}")
+    public ResponseEntity<InviteInfoResponse> getInviteInfo(@PathVariable String token) {
+        InviteInfoResponse response = taskListService.getInviteInfo(token);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Принять приглашение по токену (требует JWT).
+     */
+    @PostMapping("/invite/accept")
+    public ResponseEntity<ListResponse> acceptInvite(
+            @Valid @RequestBody AcceptInviteRequest request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = getUserId(userDetails);
+        ListResponse response = taskListService.acceptInvite(request.getToken(), userId);
+        return ResponseEntity.ok(response);
     }
 
     /**

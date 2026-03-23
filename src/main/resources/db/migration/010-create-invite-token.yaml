@@ -1,0 +1,74 @@
+databaseChangeLog:
+  - changeSet:
+      id: 010-create-invite-token
+      author: todolist
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: invite_token
+      changes:
+        - createTable:
+            tableName: invite_token
+            columns:
+              - column:
+                  name: id
+                  type: bigserial
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: token_hash
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+                    unique: true
+
+              - column:
+                  name: list_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_invite_token_list
+                    references: task_list(id)
+                    deleteCascade: true
+
+              - column:
+                  name: inviter_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_invite_token_inviter
+                    references: todo_users(id)
+                    deleteCascade: true
+
+              - column:
+                  name: created_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: expires_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: version
+                  type: bigint
+
+        - createIndex:
+            indexName: idx_invite_token_hash
+            tableName: invite_token
+            columns:
+              - column:
+                  name: token_hash
+
+        - createIndex:
+            indexName: idx_invite_token_list_id
+            tableName: invite_token
+            columns:
+              - column:
+                  name: list_id
