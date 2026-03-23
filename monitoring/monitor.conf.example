@@ -5,6 +5,7 @@ TELEGRAM_CHAT_ID="your-chat-id-here"
 RAM_WARN=80        # % RAM usage
 SWAP_WARN=50       # % Swap usage
 DISK_WARN=85       # % Disk usage
+JVM_HEAP_WARN=85   # % JVM Heap usage (via Actuator)
 
 # Alert cooldown (seconds) - don't repeat same alert within this period
 ALERT_COOLDOWN=1800
