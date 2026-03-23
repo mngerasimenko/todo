@@ -42,12 +42,12 @@ if [ "$http_code" != "200" ]; then
     fi
 fi
 
-# 2. Response time > 3 sec
+# 2. Response time > 10 sec
 response_ms=$(echo "$response_time * 1000" | bc 2>/dev/null | cut -d. -f1)
-if [ -n "$response_ms" ] && [ "$response_ms" -gt 3000 ] 2>/dev/null; then
+if [ -n "$response_ms" ] && [ "$response_ms" -gt 10000 ] 2>/dev/null; then
     if should_alert "external_slow"; then
         alerts="${alerts}
-⚠️ Response time: ${response_time}s (> 3s)"
+⚠️ Response time: ${response_time}s (> 10s)"
     fi
 fi
 
