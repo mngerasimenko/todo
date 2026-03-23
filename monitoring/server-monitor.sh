@@ -116,6 +116,32 @@ if [ "$pg_ok" -eq 0 ]; then
     fi
 fi
 
+# === 8. Проверка JVM-памяти через Actuator ===
+jvm_heap_json=$(docker exec todo-app wget -qO- "http://localhost:8091/actuator/metrics/jvm.memory.used?tag=area:heap" 2>/dev/null)
+jvm_heap_max_json=$(docker exec todo-app wget -qO- "http://localhost:8091/actuator/metrics/jvm.memory.max?tag=area:heap" 2>/dev/null)
+jvm_nonheap_json=$(docker exec todo-app wget -qO- "http://localhost:8091/actuator/metrics/jvm.memory.used?tag=area:nonheap" 2>/dev/null)
+
+if [ -n "$jvm_heap_json" ] && [ -n "$jvm_heap_max_json" ]; then
+    heap_used=$(echo "$jvm_heap_json" | grep -o '"value":[0-9.]*' | head -1 | cut -d: -f2 | cut -d. -f1)
+    heap_max=$(echo "$jvm_heap_max_json" | grep -o '"value":[0-9.]*' | head -1 | cut -d: -f2 | cut -d. -f1)
+    nonheap_used=$(echo "$jvm_nonheap_json" | grep -o '"value":[0-9.]*' | head -1 | cut -d: -f2 | cut -d. -f1)
+
+    if [ -n "$heap_used" ] && [ -n "$heap_max" ] && [ "$heap_max" -gt 0 ]; then
+        heap_percent=$((heap_used * 100 / heap_max))
+        heap_used_mb=$((heap_used / 1048576))
+        heap_max_mb=$((heap_max / 1048576))
+        nonheap_used_mb=$((${nonheap_used:-0} / 1048576))
+
+        if [ "$heap_percent" -ge "${JVM_HEAP_WARN:-85}" ]; then
+            if should_alert "jvm_heap"; then
+                alerts="${alerts}
+⚠️ <b>JVM Heap:</b> ${heap_percent}% (${heap_used_mb}/${heap_max_mb} MB)
+   Non-Heap: ${nonheap_used_mb} MB"
+            fi
+        fi
+    fi
+fi
+
 # === Отправка алерта ===
 if [ -n "$alerts" ]; then
     message="🚨 <b>Алерт: ${hostname}</b>
