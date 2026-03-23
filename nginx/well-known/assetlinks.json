@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "ru.mngerasimenko.todolist",
+      "sha256_cert_fingerprints": [
+        "EC:D0:84:C7:D8:91:0D:34:60:70:75:BB:D3:25:15:97:CF:C4:93:8E:B0:31:3E:EB:C0:66:C1:B4:F4:A0:5E:A3"
+      ]
+    }
+  }
+]
