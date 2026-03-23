@@ -72,6 +72,7 @@ REST API бэкенд для совместного управления спи�
 | **Контейнеры**  | Docker + Docker Compose           | 24+     |
 | **Rate Limiting**| Bucket4j (Token Bucket)          | 8.14.0  |
 | **Документация**| springdoc-openapi (Swagger UI)    | 2.8.6   |
+| **Мониторинг**  | Spring Boot Actuator (порт 8091)  | 3.5.6   |
 | **CI/CD**       | GitHub Actions                    | -       |
 
 ---
@@ -216,6 +217,7 @@ Telegram-бот для мониторинга состояния сервера.
 
 **Автоматические алерты** (cron, каждые 5 минут):
 - RAM > 80%, Swap > 50%, Disk > 85%
+- JVM Heap > 85% (через Actuator на порту 8091)
 - Контейнер упал или API недоступен
 - PostgreSQL не принимает соединения
 
@@ -223,10 +225,12 @@ Telegram-бот для мониторинга состояния сервера.
 
 | Команда | Описание |
 |---------|----------|
-| `/status` | Полный отчёт (RAM, Swap, Disk, контейнеры, API) |
+| `/status` | Полный отчёт (RAM, Swap, Disk, контейнеры, API, backup) |
+| `/jvm` | JVM-метрики (heap, non-heap, threads, HikariCP, GC) |
 | `/restart [контейнер]` | Перезапустить контейнер |
 | `/logs [N]` | Последние N строк логов |
 | `/errors` | Последние ошибки из логов |
+| `/config` | Настройки алертов |
 | `/help` | Справка |
 
 Конфигурация: `monitoring/monitor.conf` (Telegram Bot Token + Chat ID, не коммитится). Шаблон: `monitoring/monitor.conf.example`.
@@ -268,7 +272,7 @@ src/main/java/ru/mngerasimenko/todolist/
 
 src/main/resources/db/migration/   Liquibase-миграции (master + 8 changeset-файлов)
 src/main/resources/templates/      HTML-шаблоны email (верификация, сброс пароля)
-src/test/java/        334 теста (controller, service, repository, mapper, concurrency)
+src/test/java/        339 тестов (controller, service, repository, mapper, concurrency)
 postman/             Postman-коллекция + окружения
 monitoring/          VK-мониторинг (скрипты, systemd-сервис, конфиг) + backup PostgreSQL
 ```
