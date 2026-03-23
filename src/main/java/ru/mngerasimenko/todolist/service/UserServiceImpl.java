@@ -21,11 +21,7 @@ import ru.mngerasimenko.todolist.repository.TaskListRepository;
 import ru.mngerasimenko.todolist.repository.TaskListUserRepository;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
 
@@ -311,15 +307,9 @@ public class UserServiceImpl implements UserService {
     }
 
     /**
-     * SHA-256 хеш строки (для хранения токенов в БД).
+     * SHA-256 хеш строки (делегирует в TokenUtils для переиспользования).
      */
     static String sha256(String input) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(hash);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 not available", e);
-        }
+        return ru.mngerasimenko.todolist.util.TokenUtils.sha256(input);
     }
 }

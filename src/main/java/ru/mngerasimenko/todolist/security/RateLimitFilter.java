@@ -47,6 +47,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         String uri = request.getRequestURI();
 
+        // Rate limiting отключён — пропускаем все запросы
+        if (!properties.isEnabled()) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         // Rate limiting применяется только к /api/** запросам
         if (!uri.startsWith("/api/")) {
             filterChain.doFilter(request, response);

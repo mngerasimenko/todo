@@ -16,6 +16,11 @@ public interface EmailService {
     void sendPasswordResetEmail(String email, String token);
 
     /**
+     * Отправить письмо с приглашением в список задач.
+     */
+    void sendInviteEmail(String email, String inviteLink, String listName, String inviterName);
+
+    /**
      * Проверить доступность SMTP-сервера.
      * @return true если подключение и аутентификация успешны
      */

@@ -9,8 +9,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import ru.mngerasimenko.todolist.dto.TodoDto;
+import ru.mngerasimenko.todolist.dto.list.InviteInfoResponse;
+import ru.mngerasimenko.todolist.dto.list.InviteResponse;
 import ru.mngerasimenko.todolist.dto.list.ListMemberResponse;
 import ru.mngerasimenko.todolist.dto.list.ListResponse;
+import ru.mngerasimenko.todolist.exception.TokenExpiredException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.TaskListMapper;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
@@ -18,13 +21,18 @@ import ru.mngerasimenko.todolist.model.TaskList;
 import ru.mngerasimenko.todolist.model.TaskListRole;
 import ru.mngerasimenko.todolist.model.TaskListUser;
 import ru.mngerasimenko.todolist.model.TaskListUserId;
+import ru.mngerasimenko.todolist.model.InviteToken;
 import ru.mngerasimenko.todolist.model.Todo;
 import ru.mngerasimenko.todolist.model.User;
+import ru.mngerasimenko.todolist.util.TokenUtils;
+import ru.mngerasimenko.todolist.repository.InviteTokenRepository;
 import ru.mngerasimenko.todolist.repository.TaskListRepository;
+import ru.mngerasimenko.todolist.settings.EmailProperties;
 import ru.mngerasimenko.todolist.repository.TaskListUserRepository;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -61,6 +69,15 @@ class TaskListServiceImplTest {
 
     @Mock
     private SubscriptionService subscriptionService;
+
+    @Mock
+    private InviteTokenRepository inviteTokenRepository;
+
+    @Mock
+    private EmailService emailService;
+
+    @Mock
+    private EmailProperties emailProperties;
 
     @InjectMocks
     private TaskListServiceImpl taskListService;
@@ -388,6 +405,7 @@ class TaskListServiceImplTest {
 
         taskListService.deleteList(10L, 1L);
 
+        verify(inviteTokenRepository).deleteByListId(10L);
         verify(todoRepository).deleteByListId(10L);
         verify(taskListUserRepository).deleteByListId(10L);
         verify(taskListRepository).deleteByListId(10L);
@@ -423,4 +441,186 @@ class TaskListServiceImplTest {
         verify(todoRepository, never()).deleteByListId(anyLong());
         verify(taskListRepository, never()).deleteByListId(anyLong());
     }
+
+    // --- createInvite ---
+
+    @Test
+    void createInvite_WhenAdmin_ReturnsInviteResponse() {
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
+                .thenReturn(Optional.of(testTaskListUser));
+        when(emailProperties.getBaseUrl()).thenReturn("https://todo.mngerasimenko.ru");
+        when(emailProperties.getInviteTokenTtlHours()).thenReturn(24);
+        when(inviteTokenRepository.save(any(InviteToken.class))).thenAnswer(i -> i.getArgument(0));
+
+        InviteResponse result = taskListService.createInvite(10L, 1L, null);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getInviteLink()).startsWith("https://todo.mngerasimenko.ru/invite/");
+        assertThat(result.getExpiresAt()).isAfter(LocalDateTime.now().plusHours(23));
+        verify(inviteTokenRepository).save(any(InviteToken.class));
+        verify(emailService, never()).sendInviteEmail(anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void createInvite_WhenAdminWithEmail_SendsInviteEmail() {
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
+                .thenReturn(Optional.of(testTaskListUser));
+        when(emailProperties.getBaseUrl()).thenReturn("https://todo.mngerasimenko.ru");
+        when(emailProperties.getInviteTokenTtlHours()).thenReturn(24);
+        when(inviteTokenRepository.save(any(InviteToken.class))).thenAnswer(i -> i.getArgument(0));
+
+        InviteResponse result = taskListService.createInvite(10L, 1L, "friend@mail.ru");
+
+        assertThat(result).isNotNull();
+        verify(emailService).sendInviteEmail(eq("friend@mail.ru"), anyString(), eq("TestList"), eq("testuser"));
+    }
+
+    @Test
+    void createInvite_WhenNotAdmin_ThrowsIllegalArgumentException() {
+        TaskListUser memberUser = new TaskListUser();
+        memberUser.setId(new TaskListUserId(10L, 2L));
+        memberUser.setRole(TaskListRole.USER);
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 2L))
+                .thenReturn(Optional.of(memberUser));
+
+        assertThatThrownBy(() -> taskListService.createInvite(10L, 2L, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("администратор");
+
+        verify(inviteTokenRepository, never()).save(any());
+    }
+
+    @Test
+    void createInvite_WhenNotMember_ThrowsIllegalArgumentException() {
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 99L))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> taskListService.createInvite(10L, 99L, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("участником");
+    }
+
+    // --- getInviteInfo ---
+
+    @Test
+    void getInviteInfo_WithValidToken_ReturnsInviteInfo() {
+        String rawToken = "test-token-uuid";
+        String tokenHash = TokenUtils.sha256(rawToken);
+        InviteToken inviteToken = new InviteToken(tokenHash, testTaskList, testUser,
+                LocalDateTime.now().plusHours(12));
+
+        when(inviteTokenRepository.findByTokenHash(tokenHash)).thenReturn(Optional.of(inviteToken));
+
+        InviteInfoResponse result = taskListService.getInviteInfo(rawToken);
+
+        assertThat(result.getListName()).isEqualTo("TestList");
+        assertThat(result.getInviterName()).isEqualTo("testuser");
+        assertThat(result.getExpiresAt()).isNotNull();
+    }
+
+    @Test
+    void getInviteInfo_WithInvalidToken_ThrowsTokenExpiredException() {
+        String rawToken = "invalid-token";
+        String tokenHash = TokenUtils.sha256(rawToken);
+
+        when(inviteTokenRepository.findByTokenHash(tokenHash)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> taskListService.getInviteInfo(rawToken))
+                .isInstanceOf(TokenExpiredException.class)
+                .hasMessageContaining("не найдено");
+    }
+
+    @Test
+    void getInviteInfo_WithExpiredToken_ThrowsTokenExpiredException() {
+        String rawToken = "expired-token";
+        String tokenHash = TokenUtils.sha256(rawToken);
+        InviteToken inviteToken = new InviteToken(tokenHash, testTaskList, testUser,
+                LocalDateTime.now().minusHours(1));
+
+        when(inviteTokenRepository.findByTokenHash(tokenHash)).thenReturn(Optional.of(inviteToken));
+
+        assertThatThrownBy(() -> taskListService.getInviteInfo(rawToken))
+                .isInstanceOf(TokenExpiredException.class)
+                .hasMessageContaining("истёк");
+    }
+
+    // --- acceptInvite ---
+
+    @Test
+    void acceptInvite_WithValidToken_JoinsListAndReturnsResponse() {
+        String rawToken = "accept-token";
+        String tokenHash = TokenUtils.sha256(rawToken);
+        InviteToken inviteToken = new InviteToken(tokenHash, testTaskList, testUser,
+                LocalDateTime.now().plusHours(12));
+
+        User newUser = new User();
+        newUser.setId(2L);
+        newUser.setName("newuser");
+
+        ListResponse expectedResponse = ListResponse.builder()
+                .id(10L).name("TestList").role("USER").build();
+
+        when(inviteTokenRepository.findByTokenHash(tokenHash)).thenReturn(Optional.of(inviteToken));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(newUser));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 2L)).thenReturn(Optional.empty());
+        when(taskListUserRepository.existsByIdListIdAndRole(10L, TaskListRole.ADMIN)).thenReturn(true);
+        when(taskListUserRepository.save(any(TaskListUser.class))).thenAnswer(i -> i.getArgument(0));
+        when(taskListMapper.toResponse(testTaskList, TaskListRole.USER)).thenReturn(expectedResponse);
+
+        ListResponse result = taskListService.acceptInvite(rawToken, 2L);
+
+        assertThat(result.getId()).isEqualTo(10L);
+        assertThat(result.getRole()).isEqualTo("USER");
+        verify(taskListUserRepository).save(any(TaskListUser.class));
+    }
+
+    @Test
+    void acceptInvite_WhenAlreadyMember_ReturnsExistingRole() {
+        String rawToken = "already-member-token";
+        String tokenHash = TokenUtils.sha256(rawToken);
+        InviteToken inviteToken = new InviteToken(tokenHash, testTaskList, testUser,
+                LocalDateTime.now().plusHours(12));
+
+        ListResponse expectedResponse = ListResponse.builder()
+                .id(10L).name("TestList").role("ADMIN").build();
+
+        when(inviteTokenRepository.findByTokenHash(tokenHash)).thenReturn(Optional.of(inviteToken));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
+                .thenReturn(Optional.of(testTaskListUser));
+        when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN)).thenReturn(expectedResponse);
+
+        ListResponse result = taskListService.acceptInvite(rawToken, 1L);
+
+        assertThat(result.getRole()).isEqualTo("ADMIN");
+        verify(taskListUserRepository, never()).save(any(TaskListUser.class));
+    }
+
+    @Test
+    void acceptInvite_WithExpiredToken_ThrowsTokenExpiredException() {
+        String rawToken = "expired-accept-token";
+        String tokenHash = TokenUtils.sha256(rawToken);
+        InviteToken inviteToken = new InviteToken(tokenHash, testTaskList, testUser,
+                LocalDateTime.now().minusHours(1));
+
+        when(inviteTokenRepository.findByTokenHash(tokenHash)).thenReturn(Optional.of(inviteToken));
+
+        assertThatThrownBy(() -> taskListService.acceptInvite(rawToken, 2L))
+                .isInstanceOf(TokenExpiredException.class);
+
+        verify(taskListUserRepository, never()).save(any());
+    }
+
+    @Test
+    void acceptInvite_WithInvalidToken_ThrowsTokenExpiredException() {
+        String rawToken = "nonexistent-token";
+        String tokenHash = TokenUtils.sha256(rawToken);
+
+        when(inviteTokenRepository.findByTokenHash(tokenHash)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> taskListService.acceptInvite(rawToken, 1L))
+                .isInstanceOf(TokenExpiredException.class);
+    }
+
 }

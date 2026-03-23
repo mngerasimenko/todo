@@ -15,4 +15,5 @@ public class EmailProperties {
     private String baseUrl = "https://todo.mngerasimenko.ru";
     private int verificationTokenTtlHours = 24;
     private int resetTokenTtlHours = 1;
+    private int inviteTokenTtlHours = 24;
 }

@@ -7,21 +7,31 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.mngerasimenko.todolist.dto.TodoDto;
+import ru.mngerasimenko.todolist.dto.list.InviteInfoResponse;
+import ru.mngerasimenko.todolist.dto.list.InviteResponse;
 import ru.mngerasimenko.todolist.dto.list.ListMemberResponse;
 import ru.mngerasimenko.todolist.dto.list.ListResponse;
+import ru.mngerasimenko.todolist.exception.TokenExpiredException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.TaskListMapper;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
+import ru.mngerasimenko.todolist.model.InviteToken;
 import ru.mngerasimenko.todolist.model.TaskList;
 import ru.mngerasimenko.todolist.model.TaskListRole;
 import ru.mngerasimenko.todolist.model.TaskListUser;
 import ru.mngerasimenko.todolist.model.User;
+import ru.mngerasimenko.todolist.repository.InviteTokenRepository;
 import ru.mngerasimenko.todolist.repository.TaskListRepository;
 import ru.mngerasimenko.todolist.repository.TaskListUserRepository;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
+import ru.mngerasimenko.todolist.settings.EmailProperties;
+import ru.mngerasimenko.todolist.util.TokenUtils;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -36,6 +46,9 @@ public class TaskListServiceImpl implements TaskListService {
     private final TodoMapper todoMapper;
     private final PasswordEncoder passwordEncoder;
     private final SubscriptionService subscriptionService;
+    private final InviteTokenRepository inviteTokenRepository;
+    private final EmailService emailService;
+    private final EmailProperties emailProperties;
 
     @Override
     @Transactional(noRollbackFor = DataIntegrityViolationException.class)
@@ -74,7 +87,7 @@ public class TaskListServiceImpl implements TaskListService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
 
-        java.util.Optional<TaskListUser> existing =
+        Optional<TaskListUser> existing =
                 taskListUserRepository.findByIdListIdAndIdUserId(taskList.getId(), userId);
         if (existing.isEmpty()) {
             subscriptionService.assertCanJoinList(taskList.getId(), userId);
@@ -142,6 +155,7 @@ public class TaskListServiceImpl implements TaskListService {
 
             if (allMembers.size() == 1) {
                 // ADMIN единственный — удаляем список целиком
+                inviteTokenRepository.deleteByListId(listId);
                 todoRepository.deleteByListId(listId);
                 taskListUserRepository.deleteByListId(listId);
                 taskListRepository.deleteByListId(listId);
@@ -182,10 +196,100 @@ public class TaskListServiceImpl implements TaskListService {
             throw new IllegalArgumentException("Только администратор может удалить список");
         }
 
+        inviteTokenRepository.deleteByListId(listId);
         todoRepository.deleteByListId(listId);
         taskListUserRepository.deleteByListId(listId);
         taskListRepository.deleteByListId(listId);
 
         log.info("Список удалён: listId={}, userId={}", listId, userId);
+    }
+
+    @Override
+    @Transactional
+    public InviteResponse createInvite(Long listId, Long userId, String recipientEmail) {
+        TaskListUser membership = taskListUserRepository.findByIdListIdAndIdUserId(listId, userId)
+                .orElseThrow(() -> new IllegalArgumentException("Вы не являетесь участником данного списка"));
+
+        if (membership.getRole() != TaskListRole.ADMIN) {
+            throw new IllegalArgumentException("Только администратор может создавать приглашения");
+        }
+
+        TaskList taskList = membership.getTaskList();
+        User inviter = membership.getUser();
+
+        // Генерация токена: сырой UUID → SHA-256 хеш в БД
+        String rawToken = UUID.randomUUID().toString();
+        String tokenHash = TokenUtils.sha256(rawToken);
+        LocalDateTime expiresAt = LocalDateTime.now().plusHours(emailProperties.getInviteTokenTtlHours());
+
+        InviteToken inviteToken = new InviteToken(tokenHash, taskList, inviter, expiresAt);
+        inviteTokenRepository.save(inviteToken);
+
+        String inviteLink = emailProperties.getBaseUrl() + "/invite/" + rawToken;
+
+        // Отправка email, если указан получатель
+        if (recipientEmail != null && !recipientEmail.isBlank()) {
+            emailService.sendInviteEmail(recipientEmail, inviteLink, taskList.getName(), inviter.getName());
+        }
+
+        log.info("Создано приглашение: listId={}, inviterId={}, email={}", listId, userId, recipientEmail);
+        return InviteResponse.builder()
+                .inviteLink(inviteLink)
+                .expiresAt(expiresAt)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public InviteInfoResponse getInviteInfo(String token) {
+        String tokenHash = TokenUtils.sha256(token);
+        InviteToken inviteToken = inviteTokenRepository.findByTokenHash(tokenHash)
+                .orElseThrow(() -> new TokenExpiredException("Приглашение не найдено или недействительно"));
+
+        if (inviteToken.getExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new TokenExpiredException("Срок действия приглашения истёк");
+        }
+
+        return InviteInfoResponse.builder()
+                .listName(inviteToken.getTaskList().getName())
+                .inviterName(inviteToken.getInviter().getName())
+                .expiresAt(inviteToken.getExpiresAt())
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public ListResponse acceptInvite(String token, Long userId) {
+        String tokenHash = TokenUtils.sha256(token);
+        InviteToken inviteToken = inviteTokenRepository.findByTokenHash(tokenHash)
+                .orElseThrow(() -> new TokenExpiredException("Приглашение не найдено или недействительно"));
+
+        if (inviteToken.getExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new TokenExpiredException("Срок действия приглашения истёк");
+        }
+
+        TaskList taskList = inviteToken.getTaskList();
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
+
+        // Проверка: уже в списке?
+        Optional<TaskListUser> existing =
+                taskListUserRepository.findByIdListIdAndIdUserId(taskList.getId(), userId);
+        if (existing.isPresent()) {
+            log.info("Пользователь уже в списке (invite): listId={}, userId={}", taskList.getId(), userId);
+            return taskListMapper.toResponse(taskList, existing.get().getRole());
+        }
+
+        subscriptionService.assertCanJoinList(taskList.getId(), userId);
+
+        TaskListRole role = taskListUserRepository.existsByIdListIdAndRole(taskList.getId(), TaskListRole.ADMIN)
+                ? TaskListRole.USER
+                : TaskListRole.ADMIN;
+
+        TaskListUser taskListUser = new TaskListUser(taskList, user, role);
+        taskListUserRepository.save(taskListUser);
+
+        log.info("Пользователь вступил в список по приглашению: listId={}, userId={}, role={}", taskList.getId(), userId, role);
+        return taskListMapper.toResponse(taskList, role);
     }
 }
