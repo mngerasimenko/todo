@@ -127,8 +127,9 @@ jobs:
             # Очистка неиспользуемых образов
             docker image prune -f 2>/dev/null || true
 
-            # Перезагрузка nginx-proxy для подхвата нового контейнера
-            docker exec nginx-proxy nginx -s reload 2>/dev/null || true
+            # Пересоздание nginx-proxy (для подхвата новых volumes и конфига)
+            docker compose up -d --force-recreate nginx-proxy 2>/dev/null || \
+              docker exec nginx-proxy nginx -s reload 2>/dev/null || true
 
             # Обновление скриптов мониторинга из репозитория
             git -C /root/todo pull origin master 2>/dev/null || true
