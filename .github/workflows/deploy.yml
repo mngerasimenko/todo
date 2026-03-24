@@ -134,7 +134,13 @@ jobs:
             # Очистка неиспользуемых образов
             docker image prune -f 2>/dev/null || true
 
-            # Обновление скриптов мониторинга
-            cp /root/todo/monitoring/server-monitor.sh /root/monitoring/server-monitor.sh 2>/dev/null || true
-            cp /root/todo/monitoring/backup.sh /root/monitoring/backup.sh 2>/dev/null || true
+            # Обновление всех скриптов мониторинга из репозитория
+            for f in /root/todo/monitoring/*.sh; do
+              [ -f "$f" ] && cp "$f" /root/monitoring/ 2>/dev/null || true
+            done
+            # Исправление Windows line endings (CRLF → LF)
+            sed -i 's/\r$//' /root/monitoring/*.sh 2>/dev/null || true
             chmod +x /root/monitoring/*.sh 2>/dev/null || true
+
+            # Перезапуск VK-бота (подхват новых команд)
+            systemctl restart server-monitor-bot 2>/dev/null || true
