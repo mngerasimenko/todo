@@ -67,12 +67,12 @@ services:
       - TOMCAT_THREADS_MAX=${TOMCAT_THREADS_MAX:-100}
       - TOMCAT_THREADS_MIN_SPARE=${TOMCAT_THREADS_MIN_SPARE:-10}
       - TOMCAT_ACCEPT_COUNT=${TOMCAT_ACCEPT_COUNT:-100}
-      - MAIL_HOST=${MAIL_HOST:-mail.hosting.reg.ru}
+      - MAIL_HOST=${MAIL_HOST:-smtp.jino.ru}
       - MAIL_PORT=${MAIL_PORT:-465}
       - MAIL_USERNAME=${MAIL_USERNAME:-}
       - MAIL_PASSWORD=${MAIL_PASSWORD:-}
-      - MAIL_FROM=${MAIL_FROM:-todo-noreply@mngerasimenko.ru}
-      - APP_BASE_URL=${APP_BASE_URL:-https://todo.mngerasimenko.ru}
+      - MAIL_FROM=${MAIL_FROM:-todo-noreply@keepware.ru}
+      - APP_BASE_URL=${APP_BASE_URL:-https://todo.keepware.ru}
 
     volumes:
       - todo-logs:/todo/logs

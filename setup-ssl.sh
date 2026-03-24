@@ -3,14 +3,14 @@
 # Запускать ОДИН РАЗ на сервере от root
 #
 # Предварительные условия:
-# 1. DNS A-запись todo.mngerasimenko.ru -> 185.244.172.45 уже настроена
+# 1. DNS A-запись todo.keepware.ru -> 185.244.172.45 уже настроена
 # 2. Порты 80 и 443 свободны
 # 3. Docker и Docker Compose установлены
 # 4. Контейнеры todo-app, todo-web, postgres-db запущены в сети todo-network
 
 set -e
 
-DOMAIN="todo.mngerasimenko.ru"
+DOMAIN="todo.keepware.ru"
 EMAIL="mngerasimenko@gmail.com"
 
 echo "=== Получение SSL-сертификата для $DOMAIN ==="
@@ -24,7 +24,7 @@ mkdir -p /tmp/nginx-ssl-init
 cat > /tmp/nginx-ssl-init/default.conf << 'NGINX_CONF'
 server {
     listen 80;
-    server_name todo.mngerasimenko.ru;
+    server_name todo.keepware.ru;
 
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;

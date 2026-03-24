@@ -448,14 +448,14 @@ class TaskListServiceImplTest {
     void createInvite_WhenAdmin_ReturnsInviteResponse() {
         when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
                 .thenReturn(Optional.of(testTaskListUser));
-        when(emailProperties.getBaseUrl()).thenReturn("https://todo.mngerasimenko.ru");
+        when(emailProperties.getBaseUrl()).thenReturn("https://todo.keepware.ru");
         when(emailProperties.getInviteTokenTtlHours()).thenReturn(24);
         when(inviteTokenRepository.save(any(InviteToken.class))).thenAnswer(i -> i.getArgument(0));
 
         InviteResponse result = taskListService.createInvite(10L, 1L, null);
 
         assertThat(result).isNotNull();
-        assertThat(result.getInviteLink()).startsWith("https://todo.mngerasimenko.ru/invite/");
+        assertThat(result.getInviteLink()).startsWith("https://todo.keepware.ru/invite/");
         assertThat(result.getExpiresAt()).isAfter(LocalDateTime.now().plusHours(23));
         verify(inviteTokenRepository).save(any(InviteToken.class));
         verify(emailService, never()).sendInviteEmail(anyString(), anyString(), anyString(), anyString());
@@ -465,7 +465,7 @@ class TaskListServiceImplTest {
     void createInvite_WhenAdminWithEmail_SendsInviteEmail() {
         when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
                 .thenReturn(Optional.of(testTaskListUser));
-        when(emailProperties.getBaseUrl()).thenReturn("https://todo.mngerasimenko.ru");
+        when(emailProperties.getBaseUrl()).thenReturn("https://todo.keepware.ru");
         when(emailProperties.getInviteTokenTtlHours()).thenReturn(24);
         when(inviteTokenRepository.save(any(InviteToken.class))).thenAnswer(i -> i.getArgument(0));
 

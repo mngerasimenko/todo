@@ -11,8 +11,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @Getter
 @Setter
 public class EmailProperties {
-    private String from = "todo-noreply@mngerasimenko.ru";
-    private String baseUrl = "https://todo.mngerasimenko.ru";
+    private String from = "todo-noreply@keepware.ru";
+    private String baseUrl = "https://todo.keepware.ru";
     private int verificationTokenTtlHours = 24;
     private int resetTokenTtlHours = 1;
     private int inviteTokenTtlHours = 24;

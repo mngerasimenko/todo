@@ -21,9 +21,9 @@ REST API бэкенд для совместного управления спи�
 
 | Клиент | URL | Логин |
 |--------|-----|-------|
-| React UI | **[https://todo.mngerasimenko.ru](https://todo.mngerasimenko.ru)** | `testUser` / `testUser` |
-| REST API | `https://todo.mngerasimenko.ru/api/` | JWT |
-| Swagger UI | **[https://todo.mngerasimenko.ru/api/swagger-ui.html](https://todo.mngerasimenko.ru/api/swagger-ui.html)** | — |
+| React UI | **[https://todo.keepware.ru](https://todo.keepware.ru)** | `testUser` / `testUser` |
+| REST API | `https://todo.keepware.ru/api/` | JWT |
+| Swagger UI | **[https://todo.keepware.ru/api/swagger-ui.html](https://todo.keepware.ru/api/swagger-ui.html)** | — |
 | Android | **[todolist-android](https://github.com/mngerasimenko/todolist-android)** | `testUser` / `testUser` |
 
 ---
@@ -142,7 +142,7 @@ REST API бэкенд для совместного управления спи�
 
 Все эндпоинты (кроме auth, status, appName) требуют заголовок `Authorization: Bearer <token>`.
 
-Интерактивная документация: **[Swagger UI](https://todo.mngerasimenko.ru/api/swagger-ui.html)** (локально: `http://localhost:8090/api/swagger-ui.html`)
+Интерактивная документация: **[Swagger UI](https://todo.keepware.ru/api/swagger-ui.html)** (локально: `http://localhost:8090/api/swagger-ui.html`)
 
 Postman-коллекция: `postman/TodoList_API.postman_collection.json`
 

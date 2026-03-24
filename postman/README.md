@@ -23,7 +23,7 @@
 
 В правом верхнем углу Postman выберите окружение:
 - **TodoList - Local** — для локальной разработки (localhost:8090)
-- **TodoList - Production** — для production сервера (todo.mngerasimenko.ru (HTTPS))
+- **TodoList - Production** — для production сервера (todo.keepware.ru (HTTPS))
 
 ### 3. Порядок выполнения запросов
 
@@ -161,7 +161,7 @@ newman run TodoList_API.postman_collection.json \
 
 | Переменная | Local | Production |
 |------------|-------|------------|
-| `baseUrl` | http://localhost:8090 | http://todo.mngerasimenko.ru (HTTPS) |
+| `baseUrl` | http://localhost:8090 | http://todo.keepware.ru (HTTPS) |
 
 ## ⚙️ Настройка для своего сервера
 
