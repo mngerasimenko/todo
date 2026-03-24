@@ -37,6 +37,15 @@ databaseChangeLog:
                 ORDER BY tlu.joined_at ASC LIMIT 1
               ) WHERE tl.creator_id IS NULL
 
+  # Delete orphan lists (no members at all — backfill could not find creator)
+  - changeSet:
+      id: 011-3b-delete-orphan-lists
+      author: mngerasimenko
+      changes:
+        - sql:
+            sql: >
+              DELETE FROM task_list WHERE creator_id IS NULL
+
   # Make creator_id NOT NULL
   - changeSet:
       id: 011-4-creator-id-not-null
