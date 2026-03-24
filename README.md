@@ -31,6 +31,7 @@ REST API бэкенд для совместного управления спи�
 ## Возможности
 
 - Совместная работа через списки задач (создание, вступление по паролю, роли ADMIN/USER)
+- Приглашение в список по ссылке (ADMIN генерирует ссылку, 24 часа, многоразовая, email-отправка)
 - Приватные задачи, видимые только создателю
 - Цвета пользователей для визуальной идентификации задач
 - Отметка задач как выполненных с фиксацией даты и исполнителя
@@ -52,7 +53,7 @@ REST API бэкенд для совместного управления спи�
 - Интерактивная документация API (Swagger UI / OpenAPI 3)
 - Контроль доступа: изменение и удаление аккаунта только владельцем, операции с задачами только для участников списка
 - Каскадное удаление аккаунта: передача ADMIN, удаление пустых списков, сохранение публичных задач через системного пользователя
-- 334 unit-теста с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
+- 350 unit-тестов с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
 
 ---
 
@@ -101,6 +102,9 @@ REST API бэкенд для совместного управления спи�
 | GET | `/api/lists` | Мои списки |
 | GET | `/api/lists/{id}/members` | Участники списка |
 | GET | `/api/lists/{id}/todos` | Задачи списка (с учётом приватности) |
+| POST | `/api/lists/{id}/invite` | Создать приглашение (только ADMIN) |
+| GET | `/api/lists/invite/{token}` | Информация о приглашении (публичный) |
+| POST | `/api/lists/invite/accept` | Принять приглашение |
 | DELETE | `/api/lists/{id}` | Удалить список (только ADMIN) |
 | DELETE | `/api/lists/{id}/leave` | Покинуть список |
 
@@ -176,7 +180,7 @@ docker compose down
 ### Тесты
 
 ```bash
-# Unit-тесты (334 теста, без Docker)
+# Unit-тесты (350 тестов, без Docker)
 mvn test
 
 # С отчётом покрытия
@@ -196,7 +200,7 @@ mvn test -Pintegration
 Проект использует пайплайн `.github/workflows/deploy.yml`:
 
 **Этап 1 — Тесты** (все PR и push в master):
-- 334 unit-теста + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
+- 350 unit-тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
 - Нагрузочные тесты (3 шт.) запускаются отдельно: `mvn test -Pintegration` (требуют Docker)
 
 **Этап 2 — Деплой** (только push в master):
@@ -259,10 +263,10 @@ chmod +x setup-server.sh
 ```
 src/main/java/ru/mngerasimenko/todolist/
 ├── controller/      REST-контроллеры (5: App, Todo, User, TaskList, Auth)
-├── service/         Бизнес-логика (4 интерфейса + 4 реализации, включая EmailService)
-├── repository/      Spring Data JPA (4 репозитория)
-├── model/           JPA-сущности (User, Todo, TaskList, TaskListUser, TaskListRole) + @Version
-├── dto/             DTO + list/ + auth/ подпакеты (включая email-верификацию и сброс пароля)
+├── service/         Бизнес-логика (5 интерфейсов + 5 реализаций, включая EmailService, SubscriptionService)
+├── repository/      Spring Data JPA (5 репозиториев, включая InviteTokenRepository)
+├── model/           JPA-сущности (User, Todo, TaskList, TaskListUser, TaskListRole, InviteToken) + @Version
+├── dto/             DTO + list/ + auth/ подпакеты (email-верификация, сброс пароля, приглашения)
 ├── mapper/          Ручные мапперы (Todo, User, TaskList)
 ├── config/          OpenApiConfig (Swagger UI / OpenAPI)
 ├── security/        Spring Security + JWT + Rate Limiting (Bucket4j)
@@ -270,9 +274,9 @@ src/main/java/ru/mngerasimenko/todolist/
 ├── exception/       GlobalExceptionHandler + кастомные исключения (включая TokenExpiredException)
 └── TodolistApplication.java
 
-src/main/resources/db/migration/   Liquibase-миграции (master + 8 changeset-файлов)
-src/main/resources/templates/      HTML-шаблоны email (верификация, сброс пароля)
-src/test/java/        339 тестов (controller, service, repository, mapper, concurrency)
+src/main/resources/db/migration/   Liquibase-миграции (master + 10 changeset-файлов)
+src/main/resources/templates/      HTML-шаблоны email (верификация, сброс пароля, приглашение)
+src/test/java/        350 тестов (controller, service, repository, mapper, concurrency)
 postman/             Postman-коллекция + окружения
 monitoring/          VK-мониторинг (скрипты, systemd-сервис, конфиг) + backup PostgreSQL
 ```
