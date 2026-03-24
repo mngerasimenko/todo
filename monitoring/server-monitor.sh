@@ -95,27 +95,39 @@ done
 # === 5. Проверка доступности API (через HTTPS, минуя редирект) ===
 http_code=$(curl -s -o /dev/null -w "%{http_code}" -k --max-time 15 https://localhost/api/status 2>/dev/null)
 if [ "$http_code" != "200" ]; then
-    if should_alert "api"; then
-        alerts="${alerts}
+    sleep 10
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" -k --max-time 15 https://localhost/api/status 2>/dev/null)
+    if [ "$http_code" != "200" ]; then
+        if should_alert "api"; then
+            alerts="${alerts}
 🔴 API: HTTP ${http_code} (ожидался 200)"
+        fi
     fi
 fi
 
 # === 6. Проверка SMTP (через /api/status -> smtp_healthy) ===
 smtp_healthy=$(curl -s -k --max-time 15 https://localhost/api/status 2>/dev/null | grep -o '"smtp_healthy":[a-z]*' | grep -c 'true')
 if [ "$smtp_healthy" -eq 0 ] && [ "$http_code" = "200" ]; then
-    if should_alert "smtp"; then
-        alerts="${alerts}
-🔴 SMTP: недоступен (mail.hosting.reg.ru)"
+    sleep 10
+    smtp_healthy=$(curl -s -k --max-time 15 https://localhost/api/status 2>/dev/null | grep -o '"smtp_healthy":[a-z]*' | grep -c 'true')
+    if [ "$smtp_healthy" -eq 0 ]; then
+        if should_alert "smtp"; then
+            alerts="${alerts}
+🔴 SMTP: недоступен"
+        fi
     fi
 fi
 
 # === 7. Проверка PostgreSQL ===
 pg_ok=$(docker exec postgres-db pg_isready -U postgres 2>/dev/null | grep -c "accepting connections")
 if [ "$pg_ok" -eq 0 ]; then
-    if should_alert "postgres"; then
-        alerts="${alerts}
+    sleep 10
+    pg_ok=$(docker exec postgres-db pg_isready -U postgres 2>/dev/null | grep -c "accepting connections")
+    if [ "$pg_ok" -eq 0 ]; then
+        if should_alert "postgres"; then
+            alerts="${alerts}
 🔴 PostgreSQL: не принимает соединения"
+        fi
     fi
 fi
 
