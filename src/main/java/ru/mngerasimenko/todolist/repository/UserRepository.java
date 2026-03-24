@@ -4,6 +4,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 import ru.mngerasimenko.todolist.model.User;
 
+import java.time.LocalDateTime;
+import java.util.List;
+
 /**
  * Репозиторий для работы с пользователями (таблица todo_users).
  */
@@ -21,4 +24,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
     User findByEmailVerificationToken(String tokenHash);
 
     User findByPasswordResetToken(String tokenHash);
+
+    long countByCreatedAtAfter(LocalDateTime since);
+
+    List<User> findByCreatedAtAfterOrderByCreatedAtDesc(LocalDateTime since);
+
+    long countByEmailVerifiedTrue();
 }

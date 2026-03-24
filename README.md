@@ -49,11 +49,11 @@ REST API бэкенд для совместного управления спи�
 - Миграции БД через Liquibase (безопасно для существующих данных)
 - Автоматический CI/CD через GitHub Actions
 - SMTP health check в мониторинге сервера
-- Мониторинг сервера через VK-бот (алерты + интерактивные команды: /status, /restart, /logs, /errors)
+- Мониторинг сервера через VK-бот (алерты + интерактивные команды: /status, /jvm, /stats, /restart, /logs, /errors)
 - Интерактивная документация API (Swagger UI / OpenAPI 3)
 - Контроль доступа: изменение и удаление аккаунта только владельцем, операции с задачами только для участников списка
 - Каскадное удаление аккаунта: передача ADMIN, удаление пустых списков, сохранение публичных задач через системного пользователя
-- 350 unit-тестов с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
+- 359 unit-тестов с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
 
 ---
 
@@ -200,7 +200,7 @@ mvn test -Pintegration
 Проект использует пайплайн `.github/workflows/deploy.yml`:
 
 **Этап 1 — Тесты** (все PR и push в master):
-- 350 unit-тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
+- 359 unit-тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
 - Нагрузочные тесты (3 шт.) запускаются отдельно: `mvn test -Pintegration` (требуют Docker)
 
 **Этап 2 — Деплой** (только push в master):
@@ -231,6 +231,7 @@ Telegram-бот для мониторинга состояния сервера.
 |---------|----------|
 | `/status` | Полный отчёт (RAM, Swap, Disk, контейнеры, API, backup) |
 | `/jvm` | JVM-метрики (heap, non-heap, threads, HikariCP, GC) |
+| `/stats` | Статистика использования (пользователи, списки, задачи, активность) |
 | `/restart [контейнер]` | Перезапустить контейнер |
 | `/logs [N]` | Последние N строк логов |
 | `/errors` | Последние ошибки из логов |
@@ -263,12 +264,12 @@ chmod +x setup-server.sh
 ```
 src/main/java/ru/mngerasimenko/todolist/
 ├── controller/      REST-контроллеры (5: App, Todo, User, TaskList, Auth)
-├── service/         Бизнес-логика (5 интерфейсов + 5 реализаций, включая EmailService, SubscriptionService)
+├── service/         Бизнес-логика (6 интерфейсов + 6 реализаций, включая EmailService, SubscriptionService, StatisticsService)
 ├── repository/      Spring Data JPA (5 репозиториев, включая InviteTokenRepository)
 ├── model/           JPA-сущности (User, Todo, TaskList, TaskListUser, TaskListRole, InviteToken) + @Version
 ├── dto/             DTO + list/ + auth/ подпакеты (email-верификация, сброс пароля, приглашения)
 ├── mapper/          Ручные мапперы (Todo, User, TaskList)
-├── config/          OpenApiConfig (Swagger UI / OpenAPI)
+├── config/          OpenApiConfig (Swagger UI), UsageStatsEndpoint (Actuator)
 ├── security/        Spring Security + JWT + Rate Limiting (Bucket4j)
 ├── settings/        AppProperties, EmailProperties (corsOrigins, версия, SMTP)
 ├── exception/       GlobalExceptionHandler + кастомные исключения (включая TokenExpiredException)

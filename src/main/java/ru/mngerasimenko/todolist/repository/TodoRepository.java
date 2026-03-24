@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import ru.mngerasimenko.todolist.model.Todo;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -93,4 +94,16 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE Todo t SET t.completorUser.id = :newUserId WHERE t.completorUser.id = :oldUserId")
     void reassignCompletorUser(@Param("oldUserId") Long oldUserId, @Param("newUserId") Long newUserId);
+
+    long countByCreatedAtAfter(LocalDateTime since);
+
+    long countByDoneTrue();
+
+    long countByCompletedAtAfter(LocalDateTime since);
+
+    /**
+     * Количество уникальных пользователей, создавших задачи после указанной даты.
+     */
+    @Query("SELECT COUNT(DISTINCT t.user.id) FROM Todo t WHERE t.createdAt > :since")
+    long countDistinctActiveUsersSince(@Param("since") LocalDateTime since);
 }

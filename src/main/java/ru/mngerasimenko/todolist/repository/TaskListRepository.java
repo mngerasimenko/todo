@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import ru.mngerasimenko.todolist.model.TaskList;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 /**
@@ -23,4 +24,6 @@ public interface TaskListRepository extends JpaRepository<TaskList, Long> {
     @Modifying
     @Query("DELETE FROM TaskList t WHERE t.id = :listId")
     void deleteByListId(@Param("listId") Long listId);
+
+    long countByCreatedAtAfter(LocalDateTime since);
 }

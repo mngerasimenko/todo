@@ -203,12 +203,65 @@ HikariCP: ${hikari_active:-?} active / ${hikari_idle:-?} idle / ${hikari_total:-
 GC: ${gc_count:-?} collections"
 }
 
+cmd_stats() {
+    local peer_id="$1"
+    local period="${2:-2}"
+
+    local url="http://localhost:8091/actuator/usagestats"
+    if [ "$period" != "2" ]; then
+        url="${url}/${period}"
+    fi
+    local stats_json=$(docker exec todo-app wget -qO- "$url" 2>/dev/null)
+
+    if [ -z "$stats_json" ]; then
+        send_message "$peer_id" "❌ Actuator usagestats недоступен"
+        return
+    fi
+
+    local msg=$(echo "$stats_json" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+u = d.get('users', {})
+l = d.get('lists', {})
+t = d.get('tasks', {})
+a = d.get('activity', {})
+
+period = d.get('period_hours', '?')
+names = ', '.join(u.get('new_user_names', [])) or 'нет'
+
+print(f'''📈 Статистика (за {period}ч)
+
+👥 Пользователи: {u.get('total', '?')} (новых: {u.get('new_in_period', '?')} — {names})
+   Email подтверждён: {u.get('email_verified', '?')} ({u.get('email_verification_rate', 0):.0f}%)
+
+📋 Списки: {l.get('total', '?')} (новых: {l.get('new_in_period', '?')})
+   Среднее на пользователя: {l.get('avg_lists_per_user', 0):.1f}
+
+✅ Задачи: {t.get('total', '?')} (новых: {t.get('new_in_period', '?')})
+   Выполнено: {t.get('completed_total', '?')} ({t.get('completion_rate', 0):.0f}%), за период: {t.get('completed_in_period', '?')}
+   В ожидании: {t.get('pending_total', '?')}
+   Среднее на пользователя: {t.get('avg_tasks_per_user', 0):.1f}
+   Среднее на список: {t.get('avg_tasks_per_list', 0):.1f}
+
+🔥 Активность: {a.get('active_users_last_24h', '?')} за 24ч, {a.get('active_users_last_7d', '?')} за 7д
+🔗 Приглашения: {a.get('active_invite_tokens', '?')} активных''')
+" 2>/dev/null)
+
+    if [ -z "$msg" ]; then
+        send_message "$peer_id" "❌ Ошибка парсинга статистики"
+        return
+    fi
+
+    send_message "$peer_id" "$msg"
+}
+
 cmd_help() {
     local peer_id="$1"
     send_message "$peer_id" "🤖 Команды бота:
 
 /status — полный отчёт о сервере
 /jvm — JVM-метрики (heap, threads, HikariCP, GC)
+/stats — статистика использования приложения
 /restart [контейнер] — перезапустить контейнер
 /logs [N] — последние N строк логов (по умолч. 20)
 /errors — последние ошибки из логов
@@ -237,6 +290,7 @@ process_message() {
         /restart)  cmd_restart "$peer_id" "$arg" ;;
         /logs)     cmd_logs "$peer_id" "$arg" ;;
         /errors)   cmd_errors "$peer_id" ;;
+        /stats)    cmd_stats "$peer_id" "$arg" ;;
         /config)   cmd_config "$peer_id" ;;
         /help|/start|привет|Привет) cmd_help "$peer_id" ;;
     esac

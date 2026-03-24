@@ -31,4 +31,6 @@ public interface InviteTokenRepository extends JpaRepository<InviteToken, Long> 
     @Modifying
     @Query("DELETE FROM InviteToken t WHERE t.taskList.id = :listId")
     void deleteByListId(@Param("listId") Long listId);
+
+    long countByExpiresAtAfter(LocalDateTime now);
 }
