@@ -1,5 +1,6 @@
 package ru.mngerasimenko.todolist.repository;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -16,6 +17,11 @@ import java.util.Optional;
 @Repository
 public interface InviteTokenRepository extends JpaRepository<InviteToken, Long> {
 
+    /**
+     * Загружает invite-токен вместе со списком, создателем списка и инвайтером (JOIN FETCH).
+     * Избегает N+1 при обращении к taskList.creator.name и inviter.name.
+     */
+    @EntityGraph(attributePaths = {"taskList", "taskList.creator", "inviter"})
     Optional<InviteToken> findByTokenHash(String tokenHash);
 
     /**

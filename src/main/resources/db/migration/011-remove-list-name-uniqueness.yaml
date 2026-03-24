@@ -1,0 +1,89 @@
+databaseChangeLog:
+  # Add creator_id column to task_list (nullable for backfill)
+  - changeSet:
+      id: 011-1-add-creator-id
+      author: mngerasimenko
+      changes:
+        - addColumn:
+            tableName: task_list
+            columns:
+              - column:
+                  name: creator_id
+                  type: bigint
+
+  # Backfill creator_id from task_list_user (first ADMIN)
+  - changeSet:
+      id: 011-2-backfill-creator-admin
+      author: mngerasimenko
+      changes:
+        - sql:
+            sql: >
+              UPDATE task_list tl SET creator_id = (
+                SELECT tlu.user_id FROM task_list_user tlu
+                WHERE tlu.list_id = tl.id AND tlu.role = 'ADMIN'
+                ORDER BY tlu.joined_at ASC LIMIT 1
+              ) WHERE tl.creator_id IS NULL
+
+  # Fallback: if no ADMIN found, use first member
+  - changeSet:
+      id: 011-3-backfill-creator-fallback
+      author: mngerasimenko
+      changes:
+        - sql:
+            sql: >
+              UPDATE task_list tl SET creator_id = (
+                SELECT tlu.user_id FROM task_list_user tlu
+                WHERE tlu.list_id = tl.id
+                ORDER BY tlu.joined_at ASC LIMIT 1
+              ) WHERE tl.creator_id IS NULL
+
+  # Make creator_id NOT NULL
+  - changeSet:
+      id: 011-4-creator-id-not-null
+      author: mngerasimenko
+      changes:
+        - addNotNullConstraint:
+            tableName: task_list
+            columnName: creator_id
+            columnDataType: bigint
+
+  # Add FK constraint creator_id -> todo_users(id)
+  - changeSet:
+      id: 011-5-creator-id-fk
+      author: mngerasimenko
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: task_list
+            baseColumnNames: creator_id
+            referencedTableName: todo_users
+            referencedColumnNames: id
+            constraintName: fk_task_list_creator
+
+  # Drop global UNIQUE constraint on name
+  - changeSet:
+      id: 011-6-drop-name-unique
+      author: mngerasimenko
+      changes:
+        - dropUniqueConstraint:
+            tableName: task_list
+            constraintName: task_list_name_key
+
+  # Add per-creator UNIQUE constraint (name, creator_id)
+  - changeSet:
+      id: 011-7-add-name-creator-unique
+      author: mngerasimenko
+      changes:
+        - addUniqueConstraint:
+            tableName: task_list
+            columnNames: name, creator_id
+            constraintName: uk_task_list_name_creator
+
+  # Make password_hash nullable (no longer required for invite-only lists)
+  - changeSet:
+      id: 011-8-password-hash-nullable
+      author: mngerasimenko
+      changes:
+        - dropNotNullConstraint:
+            tableName: task_list
+            columnName: password_hash
+            columnDataType: varchar(128)

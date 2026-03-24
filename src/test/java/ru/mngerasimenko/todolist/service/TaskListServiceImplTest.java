@@ -7,7 +7,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.dto.list.InviteInfoResponse;
 import ru.mngerasimenko.todolist.dto.list.InviteResponse;
@@ -65,9 +64,6 @@ class TaskListServiceImplTest {
     private TodoMapper todoMapper;
 
     @Mock
-    private PasswordEncoder passwordEncoder;
-
-    @Mock
     private SubscriptionService subscriptionService;
 
     @Mock
@@ -94,7 +90,7 @@ class TaskListServiceImplTest {
         testUser.setEmail("test@mail.ru");
         testUser.setPassword("$2a$10$hash");
 
-        testTaskList = new TaskList("TestList", "$2a$10$hashedListPass");
+        testTaskList = new TaskList("TestList", testUser);
         testTaskList.setId(10L);
 
         testTaskListUser = new TaskListUser();
@@ -109,15 +105,14 @@ class TaskListServiceImplTest {
     @Test
     void createList_WithValidData_ReturnsListResponse() {
         ListResponse expectedResponse = ListResponse.builder()
-                .id(10L).name("TestList").role("ADMIN").build();
+                .id(10L).name("TestList").creatorName("testuser").role("ADMIN").build();
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(passwordEncoder.encode("pass123")).thenReturn("$2a$10$encodedPass");
         when(taskListRepository.saveAndFlush(any(TaskList.class))).thenReturn(testTaskList);
         when(taskListUserRepository.save(any(TaskListUser.class))).thenReturn(testTaskListUser);
         when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN)).thenReturn(expectedResponse);
 
-        ListResponse result = taskListService.createList("TestList", "pass123", 1L);
+        ListResponse result = taskListService.createList("TestList", 1L);
 
         assertThat(result).isNotNull();
         assertThat(result.getId()).isEqualTo(10L);
@@ -127,113 +122,25 @@ class TaskListServiceImplTest {
     }
 
     @Test
-    void createList_WithDuplicateName_ThrowsIllegalArgumentException() {
-        // Уникальность гарантирует БД — saveAndFlush бросает DataIntegrityViolationException
+    void createList_WithDuplicateNameSameCreator_ThrowsIllegalArgumentException() {
         when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(passwordEncoder.encode("pass")).thenReturn("$2a$10$encodedPass");
         when(taskListRepository.saveAndFlush(any(TaskList.class)))
-                .thenThrow(new DataIntegrityViolationException("duplicate key: name"));
+                .thenThrow(new DataIntegrityViolationException("duplicate key: name, creator_id"));
 
-        assertThatThrownBy(() -> taskListService.createList("TestList", "pass", 1L))
+        assertThatThrownBy(() -> taskListService.createList("TestList", 1L))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("TestList");
+                .hasMessageContaining("У вас уже есть список");
     }
 
     @Test
     void createList_WithNonExistentUser_ThrowsUserNotFoundException() {
         when(userRepository.findById(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> taskListService.createList("NewList", "pass", 999L))
+        assertThatThrownBy(() -> taskListService.createList("NewList", 999L))
                 .isInstanceOf(UserNotFoundException.class)
                 .hasMessage("User not found with id: 999");
 
         verify(taskListRepository, never()).saveAndFlush(any());
-    }
-
-    // --- joinList ---
-
-    @Test
-    void joinList_WithValidCredentials_ReturnsListResponse() {
-        ListResponse expectedResponse = ListResponse.builder()
-                .id(10L).name("TestList").role("USER").build();
-
-        when(taskListRepository.findByName("TestList")).thenReturn(Optional.of(testTaskList));
-        when(passwordEncoder.matches("pass123", "$2a$10$hashedListPass")).thenReturn(true);
-        when(userRepository.findById(2L)).thenReturn(Optional.of(testUser));
-        // findBy возвращает пустой Optional — пользователь не в списке
-        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 2L)).thenReturn(Optional.empty());
-        // В списке уже есть ADMIN — вступающий получает роль USER
-        when(taskListUserRepository.existsByIdListIdAndRole(10L, TaskListRole.ADMIN)).thenReturn(true);
-        when(taskListUserRepository.save(any(TaskListUser.class))).thenReturn(testTaskListUser);
-        when(taskListMapper.toResponse(testTaskList, TaskListRole.USER)).thenReturn(expectedResponse);
-
-        ListResponse result = taskListService.joinList("TestList", "pass123", 2L);
-
-        assertThat(result).isNotNull();
-        assertThat(result.getRole()).isEqualTo("USER");
-        verify(taskListUserRepository).save(any(TaskListUser.class));
-    }
-
-    @Test
-    void joinList_WhenNoAdmin_AssignsAdminRole() {
-        ListResponse expectedResponse = ListResponse.builder()
-                .id(10L).name("TestList").role("ADMIN").build();
-
-        when(taskListRepository.findByName("TestList")).thenReturn(Optional.of(testTaskList));
-        when(passwordEncoder.matches("pass123", "$2a$10$hashedListPass")).thenReturn(true);
-        when(userRepository.findById(2L)).thenReturn(Optional.of(testUser));
-        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 2L)).thenReturn(Optional.empty());
-        // В списке нет ADMIN — вступающий автоматически получает роль ADMIN
-        when(taskListUserRepository.existsByIdListIdAndRole(10L, TaskListRole.ADMIN)).thenReturn(false);
-        when(taskListUserRepository.save(any(TaskListUser.class))).thenReturn(testTaskListUser);
-        when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN)).thenReturn(expectedResponse);
-
-        ListResponse result = taskListService.joinList("TestList", "pass123", 2L);
-
-        assertThat(result).isNotNull();
-        assertThat(result.getRole()).isEqualTo("ADMIN");
-        verify(taskListUserRepository).save(any(TaskListUser.class));
-    }
-
-    @Test
-    void joinList_WhenAlreadyMember_ReturnsExistingRole() {
-        TaskListUser existingMembership = new TaskListUser();
-        existingMembership.setRole(TaskListRole.ADMIN);
-
-        ListResponse expectedResponse = ListResponse.builder()
-                .id(10L).name("TestList").role("ADMIN").build();
-
-        when(taskListRepository.findByName("TestList")).thenReturn(Optional.of(testTaskList));
-        when(passwordEncoder.matches("pass123", "$2a$10$hashedListPass")).thenReturn(true);
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        // findBy возвращает существующую запись — один запрос вместо existsBy + findBy
-        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
-                .thenReturn(Optional.of(existingMembership));
-        when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN)).thenReturn(expectedResponse);
-
-        ListResponse result = taskListService.joinList("TestList", "pass123", 1L);
-
-        assertThat(result.getRole()).isEqualTo("ADMIN");
-        verify(taskListUserRepository, never()).save(any());
-    }
-
-    @Test
-    void joinList_WithWrongPassword_ThrowsIllegalArgumentException() {
-        when(taskListRepository.findByName("TestList")).thenReturn(Optional.of(testTaskList));
-        when(passwordEncoder.matches("wrongpass", "$2a$10$hashedListPass")).thenReturn(false);
-
-        assertThatThrownBy(() -> taskListService.joinList("TestList", "wrongpass", 1L))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("пароль");
-    }
-
-    @Test
-    void joinList_WithNonExistentList_ThrowsIllegalArgumentException() {
-        when(taskListRepository.findByName("Unknown")).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> taskListService.joinList("Unknown", "pass", 1L))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Unknown");
     }
 
     // --- getListsByUserId ---

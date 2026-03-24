@@ -23,6 +23,7 @@ public class TaskListMapper {
         return ListResponse.builder()
                 .id(taskList.getId())
                 .name(taskList.getName())
+                .creatorName(taskList.getCreator() != null ? taskList.getCreator().getName() : null)
                 .role(role != null ? role.name() : null)
                 .createdAt(taskList.getCreatedAt())
                 .build();

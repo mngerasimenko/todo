@@ -19,6 +19,11 @@ import java.util.Optional;
 @Repository
 public interface TaskListUserRepository extends JpaRepository<TaskListUser, TaskListUserId> {
 
+    /**
+     * Загружает списки пользователя вместе с создателем списка (JOIN FETCH).
+     * Избегает N+1 запросов при обращении к taskList.creator.name в маппере.
+     */
+    @EntityGraph(attributePaths = {"taskList", "taskList.creator"})
     List<TaskListUser> findByUserId(Long userId);
 
     boolean existsByIdListIdAndIdUserId(Long listId, Long userId);

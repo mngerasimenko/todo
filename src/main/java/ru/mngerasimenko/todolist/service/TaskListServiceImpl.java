@@ -3,7 +3,6 @@ package ru.mngerasimenko.todolist.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.mngerasimenko.todolist.dto.TodoDto;
@@ -44,7 +43,6 @@ public class TaskListServiceImpl implements TaskListService {
     private final TodoRepository todoRepository;
     private final TaskListMapper taskListMapper;
     private final TodoMapper todoMapper;
-    private final PasswordEncoder passwordEncoder;
     private final SubscriptionService subscriptionService;
     private final InviteTokenRepository inviteTokenRepository;
     private final EmailService emailService;
@@ -52,19 +50,19 @@ public class TaskListServiceImpl implements TaskListService {
 
     @Override
     @Transactional(noRollbackFor = DataIntegrityViolationException.class)
-    public ListResponse createList(String name, String password, Long creatorUserId) {
+    public ListResponse createList(String name, Long creatorUserId) {
         subscriptionService.assertCanCreateList(creatorUserId);
 
         User creator = userRepository.findById(creatorUserId)
                 .orElseThrow(() -> new UserNotFoundException("User not found with id: " + creatorUserId));
 
-        TaskList taskList = new TaskList(name, passwordEncoder.encode(password));
+        TaskList taskList = new TaskList(name, creator);
 
         TaskList savedTaskList;
         try {
             savedTaskList = taskListRepository.saveAndFlush(taskList);
         } catch (DataIntegrityViolationException e) {
-            throw new IllegalArgumentException("Список с названием '" + name + "' уже существует");
+            throw new IllegalArgumentException("У вас уже есть список с названием '" + name + "'");
         }
 
         TaskListUser taskListUser = new TaskListUser(savedTaskList, creator, TaskListRole.ADMIN);
@@ -72,40 +70,6 @@ public class TaskListServiceImpl implements TaskListService {
 
         log.info("Создан список: id={}, name='{}', creatorId={}", savedTaskList.getId(), name, creatorUserId);
         return taskListMapper.toResponse(savedTaskList, TaskListRole.ADMIN);
-    }
-
-    @Override
-    @Transactional
-    public ListResponse joinList(String name, String password, Long userId) {
-        TaskList taskList = taskListRepository.findByName(name)
-                .orElseThrow(() -> new IllegalArgumentException("Список с названием '" + name + "' не найден"));
-
-        if (!passwordEncoder.matches(password, taskList.getPasswordHash())) {
-            throw new IllegalArgumentException("Неверный пароль списка");
-        }
-
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
-
-        Optional<TaskListUser> existing =
-                taskListUserRepository.findByIdListIdAndIdUserId(taskList.getId(), userId);
-        if (existing.isEmpty()) {
-            subscriptionService.assertCanJoinList(taskList.getId(), userId);
-        }
-        if (existing.isPresent()) {
-            log.info("Пользователь уже в списке: listId={}, userId={}", taskList.getId(), userId);
-            return taskListMapper.toResponse(taskList, existing.get().getRole());
-        }
-
-        TaskListRole role = taskListUserRepository.existsByIdListIdAndRole(taskList.getId(), TaskListRole.ADMIN)
-                ? TaskListRole.USER
-                : TaskListRole.ADMIN;
-
-        TaskListUser taskListUser = new TaskListUser(taskList, user, role);
-        taskListUserRepository.save(taskListUser);
-
-        log.info("Пользователь вступил в список: listId={}, userId={}, role={}", taskList.getId(), userId, role);
-        return taskListMapper.toResponse(taskList, role);
     }
 
     @Override

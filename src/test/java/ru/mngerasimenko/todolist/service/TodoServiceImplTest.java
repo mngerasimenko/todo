@@ -67,7 +67,7 @@ public class TodoServiceImplTest {
         testUser.setName("testuser");
         testUser.setEmail("test@mail.ru");
 
-        testTaskList = new TaskList("TestList", "$2a$10$hashedPass");
+        testTaskList = new TaskList("TestList", testUser);
         testTaskList.setId(1L);
 
         testTodo = new Todo();

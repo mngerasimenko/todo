@@ -75,7 +75,7 @@ class MarkAsDoneConcurrencyTest extends AbstractIntegrationTest {
         testUser = userRepository.save(testUser);
 
         // Создаём список задач
-        testList = new TaskList("DoneTestList", passwordEncoder.encode("pass"));
+        testList = new TaskList("DoneTestList", testUser);
         testList = taskListRepository.save(testList);
 
         // Создаём задачу со статусом done=false

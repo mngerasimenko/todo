@@ -28,7 +28,7 @@ class TodoMapperTest {
         user.setName("testuser");
         user.setEmail("test@mail.ru");
 
-        TaskList taskList = new TaskList("TestList", "hash");
+        TaskList taskList = new TaskList("TestList", user);
         taskList.setId(1L);
 
         Todo todo = new Todo();

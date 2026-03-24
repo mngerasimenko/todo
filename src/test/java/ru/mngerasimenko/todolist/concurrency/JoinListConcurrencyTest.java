@@ -5,20 +5,20 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import ru.mngerasimenko.todolist.AbstractIntegrationTest;
-import ru.mngerasimenko.todolist.model.TaskList;
-import ru.mngerasimenko.todolist.model.User;
+import ru.mngerasimenko.todolist.dto.UserDto;
+import ru.mngerasimenko.todolist.dto.list.InviteResponse;
+import ru.mngerasimenko.todolist.dto.list.ListResponse;
 import ru.mngerasimenko.todolist.repository.TaskListRepository;
 import ru.mngerasimenko.todolist.repository.TaskListUserRepository;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 import ru.mngerasimenko.todolist.service.TaskListService;
+import ru.mngerasimenko.todolist.service.UserService;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -27,8 +27,8 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Нагрузочный тест: 10 потоков одновременно вступают в один список.
- * Ожидаемый результат: ровно 1 запись в task_list_user.
+ * Нагрузочный тест: 10 потоков одновременно принимают приглашение в один список.
+ * Ожидаемый результат: ровно 1 запись в task_list_user на каждого пользователя.
  */
 @Tag("integration")
 class JoinListConcurrencyTest extends AbstractIntegrationTest {
@@ -37,10 +37,10 @@ class JoinListConcurrencyTest extends AbstractIntegrationTest {
     private TaskListService taskListService;
 
     @Autowired
-    private UserRepository userRepository;
+    private UserService userService;
 
     @Autowired
-    private TaskListRepository taskListRepository;
+    private UserRepository userRepository;
 
     @Autowired
     private TaskListUserRepository taskListUserRepository;
@@ -49,58 +49,62 @@ class JoinListConcurrencyTest extends AbstractIntegrationTest {
     private TodoRepository todoRepository;
 
     @Autowired
-    private PasswordEncoder passwordEncoder;
+    private TaskListRepository taskListRepository;
 
-    private User testUser;
-    private TaskList testList;
-    private static final String LIST_PASSWORD = "joinPassword123";
-    private static final String LIST_NAME = "ConcurrencyTestList";
+    private Long adminUserId;
+    private Long joiningUserId;
+    private String inviteToken;
 
     @BeforeEach
     void setUp() {
-        // Очищаем состояние в правильном порядке (FK constraints)
-        taskListUserRepository.deleteAll();
-        todoRepository.deleteAll();
-        taskListRepository.deleteAll();
-        userRepository.deleteAll();
+        // Создаём админа списка
+        UserDto admin = UserDto.builder()
+                .name("invite-admin")
+                .email("invite-admin@integration.ru")
+                .password("pass123")
+                .build();
+        UserDto createdAdmin = userService.createUser(admin);
+        adminUserId = createdAdmin.getId();
 
-        // Создаём пользователя-участника
-        testUser = new User();
-        testUser.setAuthId(UUID.randomUUID().toString());
-        testUser.setEmail("join-test@integration.ru");
-        testUser.setPassword(passwordEncoder.encode("userpass"));
-        testUser.setName("joinTestUser");
-        testUser = userRepository.save(testUser);
+        // Создаём список
+        ListResponse list = taskListService.createList("InviteTestList", adminUserId);
 
-        // Создаём список (без создателя в task_list_user — просто пустой список для теста)
-        testList = new TaskList(LIST_NAME, passwordEncoder.encode(LIST_PASSWORD));
-        testList = taskListRepository.save(testList);
+        // Создаём приглашение
+        InviteResponse invite = taskListService.createInvite(list.getId(), adminUserId, null);
+        // Извлекаем raw-токен из ссылки
+        inviteToken = invite.getInviteLink().substring(invite.getInviteLink().lastIndexOf("/") + 1);
+
+        // Создаём пользователя, который будет вступать
+        UserDto joiner = UserDto.builder()
+                .name("invite-joiner")
+                .email("invite-joiner@integration.ru")
+                .password("pass123")
+                .build();
+        UserDto createdJoiner = userService.createUser(joiner);
+        joiningUserId = createdJoiner.getId();
     }
 
     @AfterEach
     void tearDown() {
-        taskListUserRepository.deleteAll();
         todoRepository.deleteAll();
+        taskListUserRepository.deleteAll();
         taskListRepository.deleteAll();
         userRepository.deleteAll();
     }
 
     @Test
-    void joinListConcurrently_OnlyOneEntryCreatedInDatabase() throws InterruptedException {
-        int threads = 10;
-        ExecutorService executor = Executors.newFixedThreadPool(threads);
+    void acceptInvite_ConcurrentSameUser_OnlyOneRecord() throws InterruptedException {
+        int threadCount = 10;
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
         CountDownLatch startLatch = new CountDownLatch(1);
-        CountDownLatch doneLatch = new CountDownLatch(threads);
+        CountDownLatch doneLatch = new CountDownLatch(threadCount);
         List<Exception> errors = Collections.synchronizedList(new ArrayList<>());
 
-        Long userId = testUser.getId();
-        String listName = testList.getName();
-
-        for (int i = 0; i < threads; i++) {
+        for (int i = 0; i < threadCount; i++) {
             executor.submit(() -> {
                 try {
                     startLatch.await();
-                    taskListService.joinList(listName, LIST_PASSWORD, userId);
+                    taskListService.acceptInvite(inviteToken, joiningUserId);
                 } catch (Exception e) {
                     errors.add(e);
                 } finally {
@@ -109,23 +113,17 @@ class JoinListConcurrencyTest extends AbstractIntegrationTest {
             });
         }
 
-        // Одновременный старт всех потоков
         startLatch.countDown();
-        assertThat(doneLatch.await(15, TimeUnit.SECONDS))
-                .as("Все потоки должны завершиться за 15 секунд")
-                .isTrue();
-        executor.shutdown();
+        boolean completed = doneLatch.await(15, TimeUnit.SECONDS);
+        executor.shutdownNow();
 
-        // Проверяем финальное состояние БД: ровно 1 запись участия
-        long memberCount = taskListUserRepository.findByIdListId(testList.getId()).size();
-        assertThat(memberCount)
-                .as("В таблице task_list_user должна быть ровно 1 запись")
-                .isEqualTo(1);
+        assertThat(completed).isTrue();
 
-        // Все ошибки должны быть связаны с race condition (DataIntegrityViolation) — не NPE и не ClassCast
-        errors.forEach(e ->
-                assertThat(e).as("Недопустимый тип исключения: %s", e.getClass().getName())
-                        .isNotInstanceOf(NullPointerException.class)
-                        .isNotInstanceOf(ClassCastException.class));
+        // Проверяем: ровно 1 запись участника (не дубликаты)
+        long memberCount = taskListUserRepository.countByListId(
+                taskListService.getListsByUserId(joiningUserId).get(0).getId()
+        );
+        // Админ + 1 вступивший = 2
+        assertThat(memberCount).isEqualTo(2);
     }
 }

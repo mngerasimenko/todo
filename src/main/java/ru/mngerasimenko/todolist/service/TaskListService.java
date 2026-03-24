@@ -13,12 +13,7 @@ public interface TaskListService {
     /**
      * Создать новый список задач. Создатель автоматически получает роль ADMIN.
      */
-    ListResponse createList(String name, String password, Long creatorUserId);
-
-    /**
-     * Вступить в существующий список по названию и паролю.
-     */
-    ListResponse joinList(String name, String password, Long userId);
+    ListResponse createList(String name, Long creatorUserId);
 
     /**
      * Получить списки задач текущего пользователя.

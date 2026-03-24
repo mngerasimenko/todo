@@ -24,6 +24,12 @@ public class ListResponse {
     private String name;
 
     /**
+     * Имя создателя списка.
+     */
+    @JsonProperty("creator_name")
+    private String creatorName;
+
+    /**
      * Роль текущего пользователя в списке.
      */
     private String role;

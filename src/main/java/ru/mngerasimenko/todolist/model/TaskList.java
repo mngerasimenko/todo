@@ -1,5 +1,6 @@
 package ru.mngerasimenko.todolist.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
@@ -11,10 +12,12 @@ import java.util.List;
 
 /**
  * Список задач — пространство для совместной работы над задачами.
- * Пользователи подключаются к списку по названию и паролю.
+ * Пользователи подключаются к списку по invite-ссылке.
  */
 @Entity
-@Table(name = "task_list")
+@Table(name = "task_list", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_task_list_name_creator", columnNames = {"name", "creator_id"})
+})
 @JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"})
 public class TaskList {
 
@@ -22,14 +25,21 @@ public class TaskList {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "name", nullable = false, unique = true, length = 128)
+    @Column(name = "name", nullable = false, length = 128)
     @NotBlank
     @Size(max = 128)
     private String name;
 
-    @Column(name = "password_hash", nullable = false, length = 128)
-    @NotBlank
+    @Column(name = "password_hash", length = 128)
     private String passwordHash;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "creator_id", nullable = false)
+    @JsonIgnore
+    private User creator;
+
+    @Column(name = "creator_id", insertable = false, updatable = false)
+    private Long creatorId;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -48,9 +58,9 @@ public class TaskList {
     public TaskList() {
     }
 
-    public TaskList(String name, String passwordHash) {
+    public TaskList(String name, User creator) {
         this.name = name;
-        this.passwordHash = passwordHash;
+        this.creator = creator;
         this.createdAt = LocalDateTime.now();
     }
 
@@ -83,6 +93,22 @@ public class TaskList {
 
     public void setPasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
+    }
+
+    public User getCreator() {
+        return creator;
+    }
+
+    public void setCreator(User creator) {
+        this.creator = creator;
+    }
+
+    public Long getCreatorId() {
+        return creatorId;
+    }
+
+    public void setCreatorId(Long creatorId) {
+        this.creatorId = creatorId;
     }
 
     public LocalDateTime getCreatedAt() {

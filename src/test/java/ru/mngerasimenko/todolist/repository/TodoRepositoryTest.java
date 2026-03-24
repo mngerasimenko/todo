@@ -47,7 +47,7 @@ class TodoRepositoryTest {
         testUser.setPassword("password123");
         userRepository.save(testUser);
 
-        testTaskList = new TaskList("TestList", "$2a$10$hashedPass");
+        testTaskList = new TaskList("TestList", testUser);
         taskListRepository.save(testTaskList);
 
         todo1 = new Todo();

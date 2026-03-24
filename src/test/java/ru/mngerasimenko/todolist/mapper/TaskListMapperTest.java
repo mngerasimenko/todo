@@ -25,15 +25,15 @@ class TaskListMapperTest {
     void setUp() {
         taskListMapper = new TaskListMapper();
 
-        testTaskList = new TaskList("TestList", "$2a$10$hash");
-        testTaskList.setId(1L);
-        testTaskList.setCreatedAt(LocalDateTime.of(2026, 1, 1, 12, 0));
-
         testUser = new User();
         testUser.setId(2L);
         testUser.setName("testuser");
         testUser.setEmail("test@mail.ru");
         testUser.setPassword("hash");
+
+        testTaskList = new TaskList("TestList", testUser);
+        testTaskList.setId(1L);
+        testTaskList.setCreatedAt(LocalDateTime.of(2026, 1, 1, 12, 0));
 
         testTaskListUser = new TaskListUser();
         testTaskListUser.setId(new TaskListUserId(1L, 2L));

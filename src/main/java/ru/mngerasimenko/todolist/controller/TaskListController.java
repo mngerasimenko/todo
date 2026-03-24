@@ -13,7 +13,6 @@ import ru.mngerasimenko.todolist.dto.list.CreateListRequest;
 import ru.mngerasimenko.todolist.dto.list.InviteInfoResponse;
 import ru.mngerasimenko.todolist.dto.list.InviteRequest;
 import ru.mngerasimenko.todolist.dto.list.InviteResponse;
-import ru.mngerasimenko.todolist.dto.list.JoinListRequest;
 import ru.mngerasimenko.todolist.dto.list.ListMemberResponse;
 import ru.mngerasimenko.todolist.dto.list.ListResponse;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
@@ -43,20 +42,8 @@ public class TaskListController {
             @Valid @RequestBody CreateListRequest request,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = getUserId(userDetails);
-        ListResponse response = taskListService.createList(request.getName(), request.getPassword(), userId);
+        ListResponse response = taskListService.createList(request.getName(), userId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
-
-    /**
-     * Вступить в существующий список по названию и паролю.
-     */
-    @PostMapping("/join")
-    public ResponseEntity<ListResponse> joinList(
-            @Valid @RequestBody JoinListRequest request,
-            @AuthenticationPrincipal UserDetails userDetails) {
-        Long userId = getUserId(userDetails);
-        ListResponse response = taskListService.joinList(request.getName(), request.getPassword(), userId);
-        return ResponseEntity.ok(response);
     }
 
     /**

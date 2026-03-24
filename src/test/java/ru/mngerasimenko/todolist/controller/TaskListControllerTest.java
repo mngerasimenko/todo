@@ -16,7 +16,6 @@ import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.dto.TodoResponse;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.dto.list.CreateListRequest;
-import ru.mngerasimenko.todolist.dto.list.JoinListRequest;
 import ru.mngerasimenko.todolist.dto.list.ListMemberResponse;
 import ru.mngerasimenko.todolist.dto.list.ListResponse;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
@@ -77,10 +76,9 @@ class TaskListControllerTest {
     void createList_ValidRequest_ReturnsCreated() throws Exception {
         CreateListRequest request = CreateListRequest.builder()
                 .name("Новый список")
-                .password("secret")
                 .build();
 
-        when(taskListService.createList("Новый список", "secret", 1L))
+        when(taskListService.createList("Новый список", 1L))
                 .thenReturn(testListResponse);
 
         mockMvc.perform(post("/api/lists")
@@ -92,7 +90,7 @@ class TaskListControllerTest {
                 .andExpect(jsonPath("$.name").value("Тестовый список"))
                 .andExpect(jsonPath("$.role").value("ADMIN"));
 
-        verify(taskListService).createList("Новый список", "secret", 1L);
+        verify(taskListService).createList("Новый список", 1L);
     }
 
     @Test
@@ -100,17 +98,16 @@ class TaskListControllerTest {
     void createList_DuplicateName_ReturnsBadRequest() throws Exception {
         CreateListRequest request = CreateListRequest.builder()
                 .name("Существующий")
-                .password("secret")
                 .build();
 
-        when(taskListService.createList("Существующий", "secret", 1L))
-                .thenThrow(new IllegalArgumentException("Список с названием 'Существующий' уже существует"));
+        when(taskListService.createList("Существующий", 1L))
+                .thenThrow(new IllegalArgumentException("У вас уже есть список с названием 'Существующий'"));
 
         mockMvc.perform(post("/api/lists")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Список с названием 'Существующий' уже существует"));
+                .andExpect(jsonPath("$.message").value("У вас уже есть список с названием 'Существующий'"));
     }
 
     @Test
@@ -118,23 +115,6 @@ class TaskListControllerTest {
     void createList_BlankName_ReturnsBadRequest() throws Exception {
         CreateListRequest request = CreateListRequest.builder()
                 .name("")
-                .password("secret")
-                .build();
-
-        mockMvc.perform(post("/api/lists")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
-
-        verifyNoInteractions(taskListService);
-    }
-
-    @Test
-    @WithMockUser(username = "user")
-    void createList_BlankPassword_ReturnsBadRequest() throws Exception {
-        CreateListRequest request = CreateListRequest.builder()
-                .name("Список")
-                .password("")
                 .build();
 
         mockMvc.perform(post("/api/lists")
@@ -150,23 +130,6 @@ class TaskListControllerTest {
     void createList_NameTooShort_ReturnsBadRequest() throws Exception {
         CreateListRequest request = CreateListRequest.builder()
                 .name("A")
-                .password("secret")
-                .build();
-
-        mockMvc.perform(post("/api/lists")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
-
-        verifyNoInteractions(taskListService);
-    }
-
-    @Test
-    @WithMockUser(username = "user")
-    void createList_PasswordTooShort_ReturnsBadRequest() throws Exception {
-        CreateListRequest request = CreateListRequest.builder()
-                .name("Список")
-                .password("ab")
                 .build();
 
         mockMvc.perform(post("/api/lists")
@@ -192,78 +155,12 @@ class TaskListControllerTest {
     void createList_Unauthenticated_ReturnsUnauthorized() throws Exception {
         CreateListRequest request = CreateListRequest.builder()
                 .name("Список")
-                .password("secret")
                 .build();
 
         mockMvc.perform(post("/api/lists")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnauthorized());
-
-        verifyNoInteractions(taskListService);
-    }
-
-    // === POST /api/lists/join — вступление в список ===
-
-    @Test
-    @WithMockUser(username = "user")
-    void joinList_ValidRequest_ReturnsOk() throws Exception {
-        JoinListRequest request = JoinListRequest.builder()
-                .name("Список")
-                .password("secret")
-                .build();
-
-        ListResponse joinedList = ListResponse.builder()
-                .id(2L)
-                .name("Список")
-                .role("USER")
-                .createdAt(LocalDateTime.of(2026, 1, 1, 0, 0, 0))
-                .build();
-
-        when(taskListService.joinList("Список", "secret", 1L))
-                .thenReturn(joinedList);
-
-        mockMvc.perform(post("/api/lists/join")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(2))
-                .andExpect(jsonPath("$.name").value("Список"))
-                .andExpect(jsonPath("$.role").value("USER"));
-
-        verify(taskListService).joinList("Список", "secret", 1L);
-    }
-
-    @Test
-    @WithMockUser(username = "user")
-    void joinList_WrongPassword_ReturnsBadRequest() throws Exception {
-        JoinListRequest request = JoinListRequest.builder()
-                .name("Список")
-                .password("wrong")
-                .build();
-
-        when(taskListService.joinList("Список", "wrong", 1L))
-                .thenThrow(new IllegalArgumentException("Неверный пароль списка"));
-
-        mockMvc.perform(post("/api/lists/join")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Неверный пароль списка"));
-    }
-
-    @Test
-    @WithMockUser(username = "user")
-    void joinList_BlankFields_ReturnsBadRequest() throws Exception {
-        JoinListRequest request = JoinListRequest.builder()
-                .name("")
-                .password("")
-                .build();
-
-        mockMvc.perform(post("/api/lists/join")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
 
         verifyNoInteractions(taskListService);
     }
