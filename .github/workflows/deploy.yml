@@ -108,7 +108,9 @@ jobs:
             cd /root/todo
 
             # Обновление репозитория (nginx.conf, assetlinks.json, мониторинг)
-            git pull origin master 2>/dev/null || true
+            # git fetch + reset вместо pull — не блокируется локальными изменениями (.env и т.д.)
+            git fetch origin master
+            git reset --hard origin/master
 
             # Создаём сеть и volumes, если не существуют
             docker network create todo-network 2>/dev/null || true
