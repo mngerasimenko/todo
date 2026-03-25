@@ -107,7 +107,7 @@ public class TaskListServiceImpl implements TaskListService {
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = DataIntegrityViolationException.class)
     public String leaveList(Long listId, Long userId) {
         TaskListUser membership = taskListUserRepository.findByIdListIdAndIdUserId(listId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Вы не являетесь участником данного списка"));
@@ -136,8 +136,14 @@ public class TaskListServiceImpl implements TaskListService {
                             taskListUserRepository.saveAndFlush(m);
                             // Если уходящий — создатель списка, передаём creator_id новому ADMIN
                             if (taskList.getCreatorId() != null && taskList.getCreatorId().equals(userId)) {
-                                taskList.setCreator(m.getUser());
-                                taskListRepository.saveAndFlush(taskList);
+                                try {
+                                    taskList.setCreator(m.getUser());
+                                    taskListRepository.saveAndFlush(taskList);
+                                } catch (DataIntegrityViolationException e) {
+                                    // У нового ADMIN уже есть список с таким именем — оставляем старый creator_id
+                                    log.warn("Не удалось передать creator_id: у нового ADMIN уже есть список '{}', listId={}",
+                                            taskList.getName(), taskList.getId());
+                                }
                             }
                         });
                 todoRepository.deletePrivateTodosByListIdAndUserId(listId, userId);
