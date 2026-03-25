@@ -53,7 +53,7 @@ REST API бэкенд для совместного управления спи�
 - Интерактивная документация API (Swagger UI / OpenAPI 3)
 - Контроль доступа: изменение и удаление аккаунта только владельцем, операции с задачами только для участников списка
 - Каскадное удаление аккаунта: передача ADMIN, удаление пустых списков, сохранение публичных задач через системного пользователя
-- 349 unit-тестов с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
+- 352 unit-теста с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
 
 ---
 
@@ -180,7 +180,7 @@ docker compose down
 ### Тесты
 
 ```bash
-# Unit-тесты (349 тестов, без Docker)
+# Unit-тесты (352 теста, без Docker)
 mvn test
 
 # С отчётом покрытия
@@ -200,7 +200,7 @@ mvn test -Pintegration
 Проект использует пайплайн `.github/workflows/deploy.yml`:
 
 **Этап 1 — Тесты** (все PR и push в master):
-- 349 unit-тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
+- 352 unit-теста + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
 - Нагрузочные тесты (3 шт.) запускаются отдельно: `mvn test -Pintegration` (требуют Docker)
 
 **Этап 2 — Деплой** (только push в master):
@@ -277,7 +277,7 @@ src/main/java/ru/mngerasimenko/todolist/
 
 src/main/resources/db/migration/   Liquibase-миграции (master + 10 changeset-файлов)
 src/main/resources/templates/      HTML-шаблоны email (верификация, сброс пароля, приглашение)
-src/test/java/        349 тестов (controller, service, repository, mapper, concurrency)
+src/test/java/        352 теста (controller, service, repository, mapper, concurrency)
 postman/             Postman-коллекция + окружения
 monitoring/          VK-мониторинг (скрипты, systemd-сервис, конфиг) + backup PostgreSQL
 ```
