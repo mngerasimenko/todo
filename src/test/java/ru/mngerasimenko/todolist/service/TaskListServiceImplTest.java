@@ -293,6 +293,111 @@ class TaskListServiceImplTest {
     }
 
     @Test
+    void leaveList_WhenCreatorLeaves_TransfersCreatorId() {
+        User creator = new User(); creator.setId(1L); creator.setName("Иван");
+        User newAdmin = new User(); newAdmin.setId(2L); newAdmin.setName("Мария");
+
+        TaskList list = new TaskList("Продукты", creator);
+        list.setId(20L);
+        list.setCreatorId(1L);
+
+        TaskListUser creatorMember = new TaskListUser();
+        creatorMember.setId(new TaskListUserId(20L, 1L));
+        creatorMember.setRole(TaskListRole.ADMIN);
+        creatorMember.setUser(creator);
+        creatorMember.setTaskList(list);
+
+        TaskListUser otherMember = new TaskListUser();
+        otherMember.setId(new TaskListUserId(20L, 2L));
+        otherMember.setRole(TaskListRole.USER);
+        otherMember.setUser(newAdmin);
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(20L, 1L))
+                .thenReturn(Optional.of(creatorMember));
+        when(taskListUserRepository.findByIdListId(20L))
+                .thenReturn(List.of(creatorMember, otherMember));
+
+        taskListService.leaveList(20L, 1L);
+
+        // creator_id передан новому ADMIN
+        assertThat(list.getCreator()).isEqualTo(newAdmin);
+        verify(taskListRepository).saveAndFlush(list);
+    }
+
+    @Test
+    void leaveList_WhenCreatorLeavesAndNameConflict_RenamesList() {
+        User creator = new User(); creator.setId(1L); creator.setName("Иван");
+        User newAdmin = new User(); newAdmin.setId(2L); newAdmin.setName("Мария");
+
+        TaskList list = new TaskList("ремонт", creator);
+        list.setId(30L);
+        list.setCreatorId(1L);
+
+        TaskListUser creatorMember = new TaskListUser();
+        creatorMember.setId(new TaskListUserId(30L, 1L));
+        creatorMember.setRole(TaskListRole.ADMIN);
+        creatorMember.setUser(creator);
+        creatorMember.setTaskList(list);
+
+        TaskListUser otherMember = new TaskListUser();
+        otherMember.setId(new TaskListUserId(30L, 2L));
+        otherMember.setRole(TaskListRole.USER);
+        otherMember.setUser(newAdmin);
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(30L, 1L))
+                .thenReturn(Optional.of(creatorMember));
+        when(taskListUserRepository.findByIdListId(30L))
+                .thenReturn(List.of(creatorMember, otherMember));
+        // Первый saveAndFlush (creator transfer) — конфликт UNIQUE
+        when(taskListRepository.saveAndFlush(list))
+                .thenThrow(new DataIntegrityViolationException("duplicate key: uk_task_list_name_creator"))
+                .thenReturn(list); // Второй вызов (с переименованием) — ОК
+
+        String message = taskListService.leaveList(30L, 1L);
+
+        assertThat(message).contains("переданы");
+        // Список переименован: "ремонт" → "ремонт (Иван)"
+        assertThat(list.getName()).isEqualTo("ремонт (Иван)");
+        assertThat(list.getCreator()).isEqualTo(newAdmin);
+        // saveAndFlush вызван дважды: первый — конфликт, второй — с новым именем
+        verify(taskListRepository, times(2)).saveAndFlush(list);
+    }
+
+    @Test
+    void leaveList_WhenNonCreatorAdminLeaves_DoesNotChangeCreatorId() {
+        User creator = new User(); creator.setId(1L); creator.setName("Иван");
+        User admin = new User(); admin.setId(2L); admin.setName("Мария");
+        User member = new User(); member.setId(3L); member.setName("Пётр");
+
+        TaskList list = new TaskList("Задачи", creator);
+        list.setId(40L);
+        list.setCreatorId(1L);
+
+        // admin (не создатель) уходит
+        TaskListUser adminMember = new TaskListUser();
+        adminMember.setId(new TaskListUserId(40L, 2L));
+        adminMember.setRole(TaskListRole.ADMIN);
+        adminMember.setUser(admin);
+        adminMember.setTaskList(list);
+
+        TaskListUser otherMember = new TaskListUser();
+        otherMember.setId(new TaskListUserId(40L, 3L));
+        otherMember.setRole(TaskListRole.USER);
+        otherMember.setUser(member);
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(40L, 2L))
+                .thenReturn(Optional.of(adminMember));
+        when(taskListUserRepository.findByIdListId(40L))
+                .thenReturn(List.of(adminMember, otherMember));
+
+        taskListService.leaveList(40L, 2L);
+
+        // creator_id НЕ изменился — уходящий не был создателем
+        assertThat(list.getCreator()).isEqualTo(creator);
+        verify(taskListRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
     void leaveList_WhenUserIsNotMember_ThrowsIllegalArgumentException() {
         when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 99L))
                 .thenReturn(Optional.empty());
