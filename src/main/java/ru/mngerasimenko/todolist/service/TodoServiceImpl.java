@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.mngerasimenko.todolist.dto.TodoDto;
+import ru.mngerasimenko.todolist.exception.ListNotFoundException;
 import ru.mngerasimenko.todolist.exception.TodoNotFoundException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
@@ -41,7 +42,7 @@ public class TodoServiceImpl implements TodoService {
                         "User not found with id: " + todoDto.getUserId()));
 
         TaskList taskList = taskListRepository.findById(todoDto.getListId())
-                .orElseThrow(() -> new IllegalArgumentException(
+                .orElseThrow(() -> new ListNotFoundException(
                         "Список не найден. Возможно, он был удалён"));
 
         if (!taskListUserRepository.existsByIdListIdAndIdUserId(todoDto.getListId(), todoDto.getUserId())) {

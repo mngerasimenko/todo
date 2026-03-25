@@ -10,6 +10,7 @@ import ru.mngerasimenko.todolist.dto.list.InviteInfoResponse;
 import ru.mngerasimenko.todolist.dto.list.InviteResponse;
 import ru.mngerasimenko.todolist.dto.list.ListMemberResponse;
 import ru.mngerasimenko.todolist.dto.list.ListResponse;
+import ru.mngerasimenko.todolist.exception.ListNotFoundException;
 import ru.mngerasimenko.todolist.exception.TokenExpiredException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.TaskListMapper;
@@ -85,7 +86,7 @@ public class TaskListServiceImpl implements TaskListService {
     @Transactional(readOnly = true)
     public List<ListMemberResponse> getMembers(Long listId, Long requestingUserId) {
         if (!taskListRepository.existsById(listId)) {
-            throw new IllegalArgumentException("Список не найден. Возможно, он был удалён");
+            throw new ListNotFoundException("Список не найден. Возможно, он был удалён");
         }
         if (!taskListUserRepository.existsByIdListIdAndIdUserId(listId, requestingUserId)) {
             throw new IllegalArgumentException("Вы не являетесь участником данного списка");
@@ -101,7 +102,7 @@ public class TaskListServiceImpl implements TaskListService {
     @Transactional(readOnly = true)
     public List<TodoDto> getTodosByList(Long listId, Long requestingUserId) {
         if (!taskListRepository.existsById(listId)) {
-            throw new IllegalArgumentException("Список не найден. Возможно, он был удалён");
+            throw new ListNotFoundException("Список не найден. Возможно, он был удалён");
         }
         if (!taskListUserRepository.existsByIdListIdAndIdUserId(listId, requestingUserId)) {
             throw new IllegalArgumentException("Вы не являетесь участником данного списка");

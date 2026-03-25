@@ -46,6 +46,15 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Обрабатывает ошибки: список задач не найден (HTTP 404).
+     */
+    @ExceptionHandler(ListNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleListNotFound(ListNotFoundException ex) {
+        log.warn("List Not Found: {}", ex.getMessage());
+        return createErrorResponse(HttpStatus.NOT_FOUND, "List Not Found", ex.getMessage());
+    }
+
+    /**
      * Обрабатывает некорректные аргументы запроса (HTTP 400).
      */
     @ExceptionHandler(IllegalArgumentException.class)
