@@ -42,7 +42,7 @@ public class TodoServiceImpl implements TodoService {
 
         TaskList taskList = taskListRepository.findById(todoDto.getListId())
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "List not found with id: " + todoDto.getListId()));
+                        "Список не найден. Возможно, он был удалён"));
 
         if (!taskListUserRepository.existsByIdListIdAndIdUserId(todoDto.getListId(), todoDto.getUserId())) {
             throw new IllegalArgumentException("Пользователь не является участником данного списка");

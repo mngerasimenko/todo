@@ -175,6 +175,7 @@ class TaskListServiceImplTest {
         ListMemberResponse memberResponse = ListMemberResponse.builder()
                 .userId(1L).userName("testuser").role("ADMIN").build();
 
+        when(taskListRepository.existsById(10L)).thenReturn(true);
         when(taskListUserRepository.existsByIdListIdAndIdUserId(10L, 1L)).thenReturn(true);
         when(taskListUserRepository.findByIdListId(10L)).thenReturn(List.of(testTaskListUser));
         when(taskListMapper.toMemberResponse(testTaskListUser)).thenReturn(memberResponse);
@@ -187,6 +188,7 @@ class TaskListServiceImplTest {
 
     @Test
     void getMembers_WhenUserIsNotMember_ThrowsIllegalArgumentException() {
+        when(taskListRepository.existsById(10L)).thenReturn(true);
         when(taskListUserRepository.existsByIdListIdAndIdUserId(10L, 99L)).thenReturn(false);
 
         assertThatThrownBy(() -> taskListService.getMembers(10L, 99L))
@@ -206,6 +208,7 @@ class TaskListServiceImplTest {
         todoDto.setId(1L);
         todoDto.setName("Task");
 
+        when(taskListRepository.existsById(10L)).thenReturn(true);
         when(taskListUserRepository.existsByIdListIdAndIdUserId(10L, 1L)).thenReturn(true);
         when(todoRepository.findByListIdVisibleToUser(10L, 1L)).thenReturn(List.of(todo));
         when(todoMapper.toDto(todo)).thenReturn(todoDto);
@@ -218,6 +221,7 @@ class TaskListServiceImplTest {
 
     @Test
     void getTodosByList_WhenUserIsNotMember_ThrowsIllegalArgumentException() {
+        when(taskListRepository.existsById(10L)).thenReturn(true);
         when(taskListUserRepository.existsByIdListIdAndIdUserId(10L, 99L)).thenReturn(false);
 
         assertThatThrownBy(() -> taskListService.getTodosByList(10L, 99L))
