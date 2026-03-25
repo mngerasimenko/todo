@@ -136,12 +136,16 @@ public class TaskListServiceImpl implements TaskListService {
                             taskListUserRepository.saveAndFlush(m);
                             // Если уходящий — создатель списка, передаём creator_id новому ADMIN
                             if (taskList.getCreatorId() != null && taskList.getCreatorId().equals(userId)) {
+                                String previousCreatorName = membership.getUser().getName();
+                                taskList.setCreator(m.getUser());
                                 try {
-                                    taskList.setCreator(m.getUser());
                                     taskListRepository.saveAndFlush(taskList);
                                 } catch (DataIntegrityViolationException e) {
-                                    // У нового ADMIN уже есть список с таким именем — оставляем старый creator_id
-                                    log.warn("Не удалось передать creator_id: у нового ADMIN уже есть список '{}', listId={}",
+                                    // У нового ADMIN уже есть список с таким именем —
+                                    // переименовываем: "ремонт" → "ремонт (Иван)"
+                                    taskList.setName(taskList.getName() + " (" + previousCreatorName + ")");
+                                    taskListRepository.saveAndFlush(taskList);
+                                    log.info("Список переименован при передаче: '{}', listId={}",
                                             taskList.getName(), taskList.getId());
                                 }
                             }
