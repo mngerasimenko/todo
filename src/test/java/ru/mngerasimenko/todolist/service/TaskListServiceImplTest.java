@@ -271,6 +271,7 @@ class TaskListServiceImplTest {
         adminUser.setId(new TaskListUserId(10L, 1L));
         adminUser.setRole(TaskListRole.ADMIN);
         adminUser.setUser(user1);
+        adminUser.setTaskList(testTaskList);
 
         TaskListUser otherUser = new TaskListUser();
         otherUser.setId(new TaskListUserId(10L, 2L));

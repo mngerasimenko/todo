@@ -127,12 +127,18 @@ public class TaskListServiceImpl implements TaskListService {
                 message = "Список удалён, так как вы были единственным участником";
             } else {
                 // ADMIN с другими участниками — передаём права первому
+                TaskList taskList = membership.getTaskList();
                 allMembers.stream()
                         .filter(m -> !m.getUser().getId().equals(userId))
                         .findFirst()
                         .ifPresent(m -> {
                             m.setRole(TaskListRole.ADMIN);
                             taskListUserRepository.saveAndFlush(m);
+                            // Если уходящий — создатель списка, передаём creator_id новому ADMIN
+                            if (taskList.getCreatorId() != null && taskList.getCreatorId().equals(userId)) {
+                                taskList.setCreator(m.getUser());
+                                taskListRepository.saveAndFlush(taskList);
+                            }
                         });
                 todoRepository.deletePrivateTodosByListIdAndUserId(listId, userId);
                 taskListUserRepository.deleteByListIdAndUserId(listId, userId);
