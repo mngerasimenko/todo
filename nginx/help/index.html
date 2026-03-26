@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Помощь — Список задач</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', 'Segoe UI', Roboto, -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #f5f6fa;
+            color: #2d3436;
+            line-height: 1.7;
+        }
+        .container {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 40px 24px 80px;
+            text-align: center;
+        }
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #2e7d32;
+        }
+        .subtitle {
+            color: #636e72;
+            font-size: 15px;
+            margin-bottom: 40px;
+        }
+        .platforms {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .platform-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 32px 40px;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            text-decoration: none;
+            color: #2d3436;
+            transition: transform 0.2s, box-shadow 0.2s;
+            min-width: 200px;
+        }
+        .platform-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+            text-decoration: none;
+        }
+        .platform-card .icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+        .platform-card .name {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .platform-card .status {
+            font-size: 13px;
+            color: #636e72;
+        }
+        .platform-card.disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        .back {
+            display: inline-block;
+            margin-top: 40px;
+            padding: 10px 24px;
+            background: #2e7d32;
+            color: #fff;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+        }
+        .back:hover { background: #1b5e20; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Помощь</h1>
+    <p class="subtitle">Выберите платформу</p>
+
+    <div class="platforms">
+        <a href="/help/android" class="platform-card">
+            <span class="icon">📱</span>
+            <span class="name">Android</span>
+            <span class="status">Руководство пользователя</span>
+        </a>
+        <div class="platform-card disabled">
+            <span class="icon">🌐</span>
+            <span class="name">Web</span>
+            <span class="status">В разработке</span>
+        </div>
+    </div>
+
+    <a class="back" href="https://todo.keepware.ru">← На главную</a>
+</div>
+</body>
+</html>

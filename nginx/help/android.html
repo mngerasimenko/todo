@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Помощь — Android — Список задач</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', 'Segoe UI', Roboto, -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #f5f6fa;
+            color: #2d3436;
+            line-height: 1.7;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 24px 80px;
+        }
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #2e7d32;
+        }
+        .subtitle {
+            color: #636e72;
+            font-size: 14px;
+            margin-bottom: 32px;
+        }
+        h2 {
+            font-size: 22px;
+            font-weight: 600;
+            margin-top: 48px;
+            margin-bottom: 16px;
+            color: #2e7d32;
+            padding-top: 16px;
+            border-top: 1px solid #dfe6e9;
+        }
+        h3 {
+            font-size: 17px;
+            font-weight: 600;
+            margin-top: 24px;
+            margin-bottom: 8px;
+            color: #2d3436;
+        }
+        p, li {
+            font-size: 15px;
+            margin-bottom: 12px;
+        }
+        ul {
+            padding-left: 24px;
+            margin-bottom: 16px;
+        }
+        li { margin-bottom: 6px; }
+        .screenshot {
+            display: block;
+            max-width: 280px;
+            margin: 16px auto;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+        }
+        .screenshot-row {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin: 16px 0;
+        }
+        .screenshot-row img {
+            max-width: 220px;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+        }
+        .tip {
+            background: #e8f5e9;
+            border-left: 4px solid #2e7d32;
+            padding: 12px 16px;
+            border-radius: 0 8px 8px 0;
+            margin: 16px 0;
+            font-size: 14px;
+        }
+        .toc {
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px 24px;
+            margin-bottom: 32px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .toc h3 {
+            margin-top: 0;
+            margin-bottom: 12px;
+            color: #2e7d32;
+        }
+        .toc ol {
+            padding-left: 20px;
+        }
+        .toc li {
+            margin-bottom: 4px;
+        }
+        .toc a {
+            color: #2e7d32;
+            text-decoration: none;
+        }
+        .toc a:hover { text-decoration: underline; }
+        a { color: #2e7d32; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .back {
+            display: inline-block;
+            margin-top: 32px;
+            padding: 10px 24px;
+            background: #2e7d32;
+            color: #fff;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+        }
+        .back:hover { background: #1b5e20; text-decoration: none; }
+        .nav-top {
+            margin-bottom: 24px;
+        }
+        .nav-top a {
+            color: #636e72;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="nav-top">
+        <a href="/help">← Помощь</a>
+    </div>
+
+    <h1>Руководство пользователя</h1>
+    <p class="subtitle">Android-приложение «Список задач»</p>
+
+    <div class="toc">
+        <h3>Содержание</h3>
+        <ol>
+            <li><a href="#start">Начало работы</a></li>
+            <li><a href="#lists">Списки задач</a></li>
+            <li><a href="#tasks">Работа с задачами</a></li>
+            <li><a href="#invite">Совместная работа</a></li>
+            <li><a href="#filters">Фильтры и группировка</a></li>
+            <li><a href="#design">Персонализация</a></li>
+            <li><a href="#offline">Офлайн-режим</a></li>
+            <li><a href="#account">Аккаунт и безопасность</a></li>
+            <li><a href="#menu">Меню приложения</a></li>
+        </ol>
+    </div>
+
+    <!-- 1. Начало работы -->
+    <h2 id="start">1. Начало работы</h2>
+
+    <h3>Регистрация</h3>
+    <p>Откройте приложение и нажмите «Нет аккаунта? Зарегистрироваться». Введите email, имя пользователя и пароль. После регистрации на указанный email придёт письмо — подтвердите адрес.</p>
+
+    <h3>Вход</h3>
+    <p>Введите имя пользователя и пароль на экране входа. Если забыли пароль — нажмите «Забыли пароль?» и следуйте инструкциям в письме.</p>
+
+    <div class="screenshot-row">
+        <img src="/help/img/login_light.jpg" alt="Экран входа" class="screenshot">
+    </div>
+
+    <!-- 2. Списки задач -->
+    <h2 id="lists">2. Списки задач</h2>
+
+    <p>Списки — это пространства для задач. Вы можете создать несколько списков для разных целей: «Продукты», «Ремонт», «Работа».</p>
+
+    <h3>Создание списка</h3>
+    <p>На экране «Мои списки» нажмите кнопку <strong>«+ Создать»</strong>. Введите название и нажмите «Создать». Вы автоматически станете администратором списка.</p>
+
+    <h3>Выбор списка</h3>
+    <p>Нажмите на название списка, чтобы перейти к его задачам. Для переключения между списками нажмите иконку ↔ в верхней части экрана.</p>
+
+    <div class="screenshot-row">
+        <img src="/help/img/list_selection_light.jpg" alt="Мои списки">
+    </div>
+
+    <h3>Удаление списка</h3>
+    <p>Только администратор может удалить список. Откройте меню (⋮) → «Удалить список». Все задачи и участники будут удалены.</p>
+
+    <div class="tip">Если в списке есть другие участники, вы увидите предупреждение с их количеством.</div>
+
+    <!-- 3. Работа с задачами -->
+    <h2 id="tasks">3. Работа с задачами</h2>
+
+    <h3>Создание задачи</h3>
+    <p>Введите текст в поле «Новая задача...» и нажмите <strong>+</strong>. Задача появится в списке.</p>
+
+    <h3>Выполнение</h3>
+    <p>Нажмите на кружок слева от задачи, чтобы отметить её выполненной. Повторное нажатие снимет отметку.</p>
+
+    <h3>Переименование</h3>
+    <p><strong>Долгое нажатие</strong> на задачу откроет диалог переименования.</p>
+
+    <div class="screenshot-row">
+        <img src="/help/img/tasks_light_1.jpg" alt="Задачи (светлая тема)">
+        <img src="/help/img/rename_task_dark.jpg" alt="Переименование задачи">
+    </div>
+
+    <h3>Удаление</h3>
+    <p><strong>Свайп влево</strong> по задаче удалит её.</p>
+
+    <h3>Приватные задачи</h3>
+    <p>Нажмите иконку 🔒 рядом с полем ввода перед созданием задачи. Приватная задача видна только вам, даже в совместном списке.</p>
+
+    <div class="tip">Удобно для записи подарков в общий список покупок семьи.</div>
+
+    <!-- 4. Совместная работа -->
+    <h2 id="invite">4. Совместная работа</h2>
+
+    <h3>Приглашение участников</h3>
+    <p>Администратор списка может пригласить других пользователей. Откройте меню (⋮) → «Пригласить в список». Будет сгенерирована ссылка, действительная 24 часа.</p>
+
+    <div class="screenshot-row">
+        <img src="/help/img/invite_dialog.jpg" alt="Диалог приглашения">
+        <img src="/help/img/invite_accept.jpg" alt="Принятие приглашения">
+    </div>
+
+    <p>Отправьте ссылку через мессенджер (кнопка «Поделиться») или скопируйте (кнопка «Копировать»).</p>
+
+    <h3>Принятие приглашения</h3>
+    <p>Получатель нажимает на ссылку — приложение откроется с экраном приглашения. Нажмите «Принять приглашение».</p>
+
+    <h3>Роли</h3>
+    <ul>
+        <li><strong>Администратор</strong> — создатель списка. Может приглашать участников, удалять список.</li>
+        <li><strong>Участник</strong> — может создавать, выполнять и удалять задачи.</li>
+    </ul>
+
+    <h3>Выход из списка</h3>
+    <p>Меню (⋮) → «Покинуть список». Ваши приватные задачи в этом списке будут удалены.</p>
+
+    <!-- 5. Фильтры и группировка -->
+    <h2 id="filters">5. Фильтры и группировка</h2>
+
+    <h3>Фильтры</h3>
+    <p>Над списком задач расположены фильтры:</p>
+    <ul>
+        <li><strong>Все</strong> — все задачи</li>
+        <li><strong>Активные</strong> — невыполненные (по умолчанию)</li>
+        <li><strong>Готово</strong> — выполненные</li>
+    </ul>
+
+    <h3>Группировка</h3>
+    <p>Задачи группируются по дате или по автору:</p>
+    <ul>
+        <li><strong>По дате</strong> — Сегодня, Вчера, На этой неделе, Ранее</li>
+        <li><strong>По автору</strong> — задачи сгруппированы по имени создателя</li>
+    </ul>
+
+    <div class="screenshot-row">
+        <img src="/help/img/tasks_light_2.jpg" alt="Группировка по дате">
+    </div>
+
+    <!-- 6. Персонализация -->
+    <h2 id="design">6. Персонализация</h2>
+
+    <h3>Цвет приложения</h3>
+    <p>Меню (⋮) → «Цвет приложения». Выберите один из 9 цветов или «Системный» (Material You — цвета подстраиваются под обои, Android 12+).</p>
+
+    <div class="screenshot-row">
+        <img src="/help/img/color_picker.jpg" alt="Выбор цвета">
+    </div>
+
+    <h3>Тёмная тема</h3>
+    <p>Приложение автоматически переключается между светлой и тёмной темой в зависимости от настроек системы.</p>
+
+    <div class="screenshot-row">
+        <img src="/help/img/tasks_light_3.jpg" alt="Светлая тема">
+        <img src="/help/img/tasks_dark_2.jpg" alt="Тёмная тема">
+    </div>
+
+    <!-- 7. Офлайн-режим -->
+    <h2 id="offline">7. Офлайн-режим</h2>
+
+    <p>Приложение работает без интернета. Вы можете создавать и отмечать задачи — они сохраняются локально.</p>
+
+    <p>При появлении сети данные автоматически синхронизируются с сервером. В верхней части экрана отображается статус:</p>
+    <ul>
+        <li><strong>«Нет сети»</strong> — работа в офлайн-режиме</li>
+        <li><strong>«Синхронизация...»</strong> — отправка изменений на сервер</li>
+    </ul>
+
+    <div class="tip">Все данные кэшируются на устройстве. При открытии приложения без сети вы увидите последние загруженные задачи.</div>
+
+    <!-- 8. Аккаунт -->
+    <h2 id="account">8. Аккаунт и безопасность</h2>
+
+    <h3>Подтверждение email</h3>
+    <p>После регистрации на экране появится баннер «Email не подтверждён». Нажмите «Отправить повторно» — на вашу почту придёт письмо со ссылкой. Нажмите на ссылку — email будет подтверждён прямо в приложении.</p>
+
+    <h3>Сброс пароля</h3>
+    <p>На экране входа нажмите «Забыли пароль?». Введите email — на него придёт ссылка для установки нового пароля.</p>
+
+    <h3>Выход из аккаунта</h3>
+    <p>Меню (⋮) → «Выйти из аккаунта».</p>
+
+    <h3>Удаление аккаунта</h3>
+    <p>Меню (⋮) → «Удалить аккаунт». Все ваши данные будут безвозвратно удалены. Публичные задачи в совместных списках сохранятся под именем «Удалённый пользователь».</p>
+
+    <!-- 9. Меню -->
+    <h2 id="menu">9. Меню приложения</h2>
+
+    <p>Нажмите на три точки (⋮) в правом верхнем углу экрана задач:</p>
+
+    <img src="/help/img/menu_overflow.jpg" alt="Меню приложения" class="screenshot">
+
+    <ul>
+        <li><strong>Подписка</strong> — текущий тип подписки (FREE / PRO)</li>
+        <li><strong>Цвет приложения</strong> — выбор цветовой темы</li>
+        <li><strong>Пригласить в список</strong> — создание ссылки-приглашения (только администратор)</li>
+        <li><strong>Покинуть список</strong> — выход из текущего списка</li>
+        <li><strong>Удалить список</strong> — удаление списка (только администратор)</li>
+        <li><strong>Выйти из аккаунта</strong> — выход из системы</li>
+        <li><strong>Удалить аккаунт</strong> — безвозвратное удаление</li>
+    </ul>
+
+    <a class="back" href="/help">← Помощь</a>
+</div>
+</body>
+</html>
