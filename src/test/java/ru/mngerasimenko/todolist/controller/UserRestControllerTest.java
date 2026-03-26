@@ -227,8 +227,9 @@ class UserRestControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "user", roles = {"USER"})
-    void getUserById_WithValidId_ReturnsUser() throws Exception {
+    @WithMockUser(username = "testuser", roles = {"USER"})
+    void getUserById_OwnAccount_ReturnsUser() throws Exception {
+        when(userService.getUserByUserName("testuser")).thenReturn(testUserDto);
         when(userService.getUserById(1L)).thenReturn(testUserDto);
         when(userMapper.toResponse(testUserDto)).thenReturn(testUserResponse);
 
@@ -241,21 +242,16 @@ class UserRestControllerTest {
                 .andExpect(jsonPath("$.email").value("test@mail.ru"));
 
         verify(userService, times(1)).getUserById(1L);
-        verify(userMapper, times(1)).toResponse(testUserDto);
     }
 
     @Test
-    @WithMockUser(username = "user", roles = {"USER"})
-    void getUserById_WithNonExistentId_ReturnsNotFound() throws Exception {
-        when(userService.getUserById(999L))
-                .thenThrow(new UserNotFoundException("User not found with id: 999"));
+    @WithMockUser(username = "testuser", roles = {"USER"})
+    void getUserById_OtherAccount_ReturnsForbidden() throws Exception {
+        when(userService.getUserByUserName("testuser")).thenReturn(testUserDto);
 
         mockMvc.perform(get("/api/users/999")
                         .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.message").value("User not found with id: 999"));
-
-        verify(userService, times(1)).getUserById(999L);
+                .andExpect(status().isForbidden());
     }
 
     // === Тесты updateUser с проверкой прав доступа ===
@@ -472,7 +468,7 @@ class UserRestControllerTest {
     // === Тест create + get ===
 
     @Test
-    @WithMockUser(username = "user", roles = {"USER"})
+    @WithMockUser(username = "createduser", roles = {"USER"})
     void createUserThenGetUser_ReturnsCreatedUser() throws Exception {
         UserDto createdUserDto = new UserDto();
         createdUserDto.setId(3L);
@@ -494,6 +490,7 @@ class UserRestControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(3));
 
+        when(userService.getUserByUserName("createduser")).thenReturn(createdUserDto);
         when(userService.getUserById(3L)).thenReturn(createdUserDto);
 
         mockMvc.perform(get("/api/users/3")

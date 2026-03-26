@@ -36,3 +36,6 @@ build/
 monitoring/monitor.conf
 /marketing/
 /design/
+
+# JVM crash logs
+hs_err_pid*.log

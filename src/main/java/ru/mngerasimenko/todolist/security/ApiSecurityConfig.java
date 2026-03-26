@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -25,6 +26,7 @@ import java.util.List;
  * Применяется к эндпоинтам /api/**
  */
 @Configuration
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class ApiSecurityConfig {
 
@@ -80,6 +82,20 @@ public class ApiSecurityConfig {
                             response.setContentType("application/json");
                             response.setCharacterEncoding("UTF-8");
                             response.getWriter().write("{\"error\":\"Unauthorized\"}");
+                        })
+                        .accessDeniedHandler((request, response, accessDeniedException) -> {
+                            // Скрываем существование /api/admin — возвращаем 404 вместо 403
+                            if (request.getRequestURI().startsWith("/api/admin")) {
+                                response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                                response.setContentType("application/json");
+                                response.setCharacterEncoding("UTF-8");
+                                response.getWriter().write("{\"error\":\"Not Found\"}");
+                            } else {
+                                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                                response.setContentType("application/json");
+                                response.setCharacterEncoding("UTF-8");
+                                response.getWriter().write("{\"error\":\"Forbidden\"}");
+                            }
                         })
                 )
                 // Отключаем HTTP Basic (используем JWT)

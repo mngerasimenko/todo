@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.validation.annotation.Validated;
@@ -59,8 +60,9 @@ public class UserRestController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    /** Получение списка всех пользователей */
+    /** Получение списка всех пользователей (только суперадмин) */
     @GetMapping("/all")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<UserResponse>> showAll() {
         List<UserDto> users = userService.getAll();
         List<UserResponse> response = users.stream()
@@ -69,9 +71,12 @@ public class UserRestController {
         return ResponseEntity.ok(response);
     }
 
-    /** Получение пользователя по ID */
+    /** Получение пользователя по ID (только свой аккаунт) */
     @GetMapping("/{id}")
-    public ResponseEntity<UserResponse> getUserById(@PathVariable Long id) {
+    public ResponseEntity<UserResponse> getUserById(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        assertOwner(id, userDetails);
         UserDto userDto = userService.getUserById(id);
         UserResponse response = userMapper.toResponse(userDto);
         return ResponseEntity.ok(response);

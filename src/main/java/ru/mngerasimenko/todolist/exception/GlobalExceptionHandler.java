@@ -115,7 +115,7 @@ public class GlobalExceptionHandler {
 
         log.warn("JSON parse error: {}", ex.getMessage());
 
-        return createErrorResponse(HttpStatus.BAD_REQUEST, "Invalid JSON format in request body", ex.getMessage());
+        return createErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", "Некорректный формат запроса");
     }
 
     /**
@@ -187,7 +187,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<Map<String, Object>> handleNoResourceFound(NoResourceFoundException ex) {
         log.warn("Static resource not found: {}", ex.getResourcePath());
-        return createErrorResponse(HttpStatus.NOT_FOUND, "Not Found", ex.getMessage());
+        return createErrorResponse(HttpStatus.NOT_FOUND, "Not Found", "Ресурс не найден");
     }
 
     /**
@@ -198,7 +198,7 @@ public class GlobalExceptionHandler {
 
         log.error("Unexpected error: {}", ex.getMessage(), ex);
 
-        return createErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error", ex.getMessage());
+        return createErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", "Внутренняя ошибка сервера");
     }
 
     /**
