@@ -73,6 +73,7 @@ services:
       - MAIL_PASSWORD=${MAIL_PASSWORD:-}
       - MAIL_FROM=${MAIL_FROM:-todo-noreply@keepware.ru}
       - APP_BASE_URL=${APP_BASE_URL:-https://todo.keepware.ru}
+      - JWT_SECRET=${JWT_SECRET:-}
       - SUBSCRIPTION_ENFORCEMENT=${SUBSCRIPTION_ENFORCEMENT:-false}
       - FREE_MAX_LISTS=${FREE_MAX_LISTS:-2}
       - FREE_MAX_TASKS=${FREE_MAX_TASKS:-30}
