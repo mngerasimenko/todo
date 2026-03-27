@@ -44,7 +44,7 @@ public class TodoRestController {
     public ResponseEntity<TodoResponse> update(@PathVariable Long id,
                                                @Valid @RequestBody TodoRequest request,
                                                @AuthenticationPrincipal UserDetails userDetails) {
-        UserDto currentUser = userService.getUserByUserName(userDetails.getUsername());
+        UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
         TodoDto todoDto = todoMapper.toDto(request);
         TodoDto updatedTodo = todoService.updateTodo(id, todoDto, currentUser.getId());
         TodoResponse response = todoMapper.toResponse(updatedTodo);
@@ -55,7 +55,7 @@ public class TodoRestController {
     @GetMapping("/{id}")
     public ResponseEntity<TodoResponse> getTodoById(@PathVariable Long id,
                                                      @AuthenticationPrincipal UserDetails userDetails) {
-        UserDto currentUser = userService.getUserByUserName(userDetails.getUsername());
+        UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
         TodoDto todoDto = todoService.getTodoById(id, currentUser.getId());
         TodoResponse response = todoMapper.toResponse(todoDto);
         return ResponseEntity.ok(response);
@@ -65,7 +65,7 @@ public class TodoRestController {
     @GetMapping("/all")
     public ResponseEntity<List<TodoResponse>> getAllTodos(
             @AuthenticationPrincipal UserDetails userDetails) {
-        UserDto currentUser = userService.getUserByUserName(userDetails.getUsername());
+        UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
         List<TodoDto> todos = todoService.getAllTodos(currentUser.getId());
         List<TodoResponse> responses = todos.stream()
                 .map(todoMapper::toResponse)
@@ -77,7 +77,7 @@ public class TodoRestController {
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<TodoResponse>> getTodosByUserId(@PathVariable Long userId,
                                                                 @AuthenticationPrincipal UserDetails userDetails) {
-        UserDto currentUser = userService.getUserByUserName(userDetails.getUsername());
+        UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
         List<TodoDto> todos = todoService.getTodosByUserId(userId, currentUser.getId());
         List<TodoResponse> responses = todos.stream()
                 .map(todoMapper::toResponse)
@@ -89,7 +89,7 @@ public class TodoRestController {
     @PatchMapping("/{id}/done")
     public ResponseEntity<TodoResponse> markAsDone(@PathVariable Long id,
                                                    @AuthenticationPrincipal UserDetails userDetails) {
-        UserDto currentUser = userService.getUserByUserName(userDetails.getUsername());
+        UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
         TodoDto todoDto = todoService.markAsDone(id, currentUser.getId());
         TodoResponse response = todoMapper.toResponse(todoDto);
         return ResponseEntity.ok(response);
@@ -99,7 +99,7 @@ public class TodoRestController {
     @PatchMapping("/{id}/undone")
     public ResponseEntity<TodoResponse> markAsUndone(@PathVariable Long id,
                                                       @AuthenticationPrincipal UserDetails userDetails) {
-        UserDto currentUser = userService.getUserByUserName(userDetails.getUsername());
+        UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
         TodoDto todoDto = todoService.markAsUndone(id, currentUser.getId());
         TodoResponse response = todoMapper.toResponse(todoDto);
         return ResponseEntity.ok(response);
@@ -109,7 +109,7 @@ public class TodoRestController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id,
                                         @AuthenticationPrincipal UserDetails userDetails) {
-        UserDto currentUser = userService.getUserByUserName(userDetails.getUsername());
+        UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
         todoService.deleteTodo(id, currentUser.getId());
         return ResponseEntity.noContent().build();
     }

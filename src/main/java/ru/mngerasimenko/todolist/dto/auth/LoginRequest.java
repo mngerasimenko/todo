@@ -1,5 +1,6 @@
 package ru.mngerasimenko.todolist.dto.auth;
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -17,11 +18,12 @@ import lombok.NoArgsConstructor;
 public class LoginRequest {
 
     /**
-     * Имя пользователя
+     * Email пользователя
      */
-    @NotBlank(message = "Имя пользователя не может быть пустым")
-    @Size(min = 2, max = 128, message = "Имя пользователя должно содержать от 2 до 128 символов")
-    private String username;
+    @NotBlank(message = "Email не может быть пустым")
+    @Email(message = "Некорректный формат email")
+    @Size(max = 128, message = "Email не должен превышать 128 символов")
+    private String email;
 
     /**
      * Пароль

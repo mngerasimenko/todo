@@ -149,10 +149,10 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     @Override
     @Transactional(readOnly = true)
-    public SubscriptionStatusResponse getSubscriptionStatus(String username) {
-        User user = userRepository.getUserByName(username);
+    public SubscriptionStatusResponse getSubscriptionStatus(String email) {
+        User user = userRepository.getUserByEmail(email);
         if (user == null) {
-            throw new UserNotFoundException("User not found: " + username);
+            throw new UserNotFoundException("User not found: " + email);
         }
 
         String effectiveType = getEffectiveSubscriptionType(user);

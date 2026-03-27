@@ -51,7 +51,7 @@ public interface SubscriptionService {
     long getListsCount(Long userId);
 
     /**
-     * Возвращает полный статус подписки пользователя по имени (username из JWT).
+     * Возвращает полный статус подписки пользователя по email (из JWT).
      */
-    SubscriptionStatusResponse getSubscriptionStatus(String username);
+    SubscriptionStatusResponse getSubscriptionStatus(String email);
 }

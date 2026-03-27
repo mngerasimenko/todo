@@ -58,6 +58,7 @@ class TaskListControllerTest {
         currentUser = new UserDto();
         currentUser.setId(1L);
         currentUser.setName("user");
+        currentUser.setEmail("user@mail.ru");
 
         testListResponse = ListResponse.builder()
                 .id(1L)
@@ -66,13 +67,13 @@ class TaskListControllerTest {
                 .createdAt(LocalDateTime.of(2026, 1, 1, 0, 0, 0))
                 .build();
 
-        when(userService.getUserByUserName("user")).thenReturn(currentUser);
+        when(userService.getUserByEmail("user@mail.ru")).thenReturn(currentUser);
     }
 
     // === POST /api/lists — создание списка ===
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void createList_ValidRequest_ReturnsCreated() throws Exception {
         CreateListRequest request = CreateListRequest.builder()
                 .name("Новый список")
@@ -94,7 +95,7 @@ class TaskListControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void createList_DuplicateName_ReturnsBadRequest() throws Exception {
         CreateListRequest request = CreateListRequest.builder()
                 .name("Существующий")
@@ -111,7 +112,7 @@ class TaskListControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void createList_BlankName_ReturnsBadRequest() throws Exception {
         CreateListRequest request = CreateListRequest.builder()
                 .name("")
@@ -126,7 +127,7 @@ class TaskListControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void createList_NameTooShort_ReturnsBadRequest() throws Exception {
         CreateListRequest request = CreateListRequest.builder()
                 .name("A")
@@ -141,7 +142,7 @@ class TaskListControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void createList_MissingBody_ReturnsBadRequest() throws Exception {
         mockMvc.perform(post("/api/lists")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -168,7 +169,7 @@ class TaskListControllerTest {
     // === GET /api/lists — мои списки ===
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void getMyLists_ReturnsList() throws Exception {
         ListResponse list1 = ListResponse.builder()
                 .id(1L).name("Список 1").role("ADMIN").build();
@@ -192,7 +193,7 @@ class TaskListControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void getMyLists_Empty_ReturnsEmptyArray() throws Exception {
         when(taskListService.getListsByUserId(1L)).thenReturn(List.of());
 
@@ -212,7 +213,7 @@ class TaskListControllerTest {
     // === GET /api/lists/{id}/members — участники списка ===
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void getMembers_ValidList_ReturnsMembers() throws Exception {
         ListMemberResponse member1 = ListMemberResponse.builder()
                 .userId(1L).userName("user").role("ADMIN").joinedAt(LocalDateTime.of(2026, 1, 1, 0, 0, 0)).build();
@@ -236,7 +237,7 @@ class TaskListControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void getMembers_NotMember_ReturnsBadRequest() throws Exception {
         when(taskListService.getMembers(99L, 1L))
                 .thenThrow(new IllegalArgumentException("Вы не являетесь участником данного списка"));
@@ -247,7 +248,7 @@ class TaskListControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void getMembers_InvalidIdFormat_ReturnsBadRequest() throws Exception {
         mockMvc.perform(get("/api/lists/abc/members"))
                 .andExpect(status().isBadRequest());
@@ -256,7 +257,7 @@ class TaskListControllerTest {
     // === GET /api/lists/{id}/todos — задачи списка ===
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void getTodosByList_ValidList_ReturnsTodos() throws Exception {
         TodoDto todoDto1 = new TodoDto();
         todoDto1.setId(1L);
@@ -299,7 +300,7 @@ class TaskListControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void getTodosByList_EmptyList_ReturnsEmptyArray() throws Exception {
         when(taskListService.getTodosByList(1L, 1L)).thenReturn(List.of());
 
@@ -309,7 +310,7 @@ class TaskListControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void getTodosByList_NotMember_ReturnsBadRequest() throws Exception {
         when(taskListService.getTodosByList(99L, 1L))
                 .thenThrow(new IllegalArgumentException("Вы не являетесь участником данного списка"));
@@ -322,7 +323,7 @@ class TaskListControllerTest {
     // === DELETE /api/lists/{id}/leave — выход из списка ===
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void leaveList_Member_ReturnsOkWithMessage() throws Exception {
         when(taskListService.leaveList(1L, 1L)).thenReturn("Вы покинули список");
 
@@ -334,7 +335,7 @@ class TaskListControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void leaveList_AdminWithOthers_ReturnsOkWithTransferMessage() throws Exception {
         when(taskListService.leaveList(1L, 1L))
                 .thenReturn("Вы покинули список. Права администратора переданы другому участнику");
@@ -345,7 +346,7 @@ class TaskListControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void leaveList_AdminAlone_ReturnsOkWithDeleteMessage() throws Exception {
         when(taskListService.leaveList(1L, 1L))
                 .thenReturn("Список удалён, так как вы были единственным участником");
@@ -356,7 +357,7 @@ class TaskListControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void leaveList_NotMember_ReturnsBadRequest() throws Exception {
         doThrow(new IllegalArgumentException("Вы не являетесь участником данного списка"))
                 .when(taskListService).leaveList(99L, 1L);
@@ -369,7 +370,7 @@ class TaskListControllerTest {
     // === DELETE /api/lists/{id} — удаление списка ===
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void deleteList_Admin_ReturnsNoContent() throws Exception {
         doNothing().when(taskListService).deleteList(1L, 1L);
 
@@ -380,7 +381,7 @@ class TaskListControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void deleteList_NotAdmin_ReturnsBadRequest() throws Exception {
         doThrow(new IllegalArgumentException("Только администратор может удалить список"))
                 .when(taskListService).deleteList(1L, 1L);
@@ -391,7 +392,7 @@ class TaskListControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void deleteList_AccessDenied_ReturnsForbidden() throws Exception {
         doThrow(new AccessDeniedException("Доступ запрещён"))
                 .when(taskListService).deleteList(1L, 1L);
@@ -409,7 +410,7 @@ class TaskListControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@mail.ru")
     void deleteList_InvalidIdFormat_ReturnsBadRequest() throws Exception {
         mockMvc.perform(delete("/api/lists/abc"))
                 .andExpect(status().isBadRequest());

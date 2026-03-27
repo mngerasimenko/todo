@@ -19,6 +19,9 @@ public interface UserService {
     /** Находит пользователя по имени */
     UserDto getUserByUserName(String userName);
 
+    /** Находит пользователя по email */
+    UserDto getUserByEmail(String email);
+
     /** Находит пользователя по auth ID (устройство) */
     UserDto getUserByAuthId(String authId);
 

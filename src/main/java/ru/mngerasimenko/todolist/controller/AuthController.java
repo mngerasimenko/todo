@@ -45,24 +45,24 @@ public class AuthController {
      */
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest loginRequest) {
-        log.info("Попытка входа пользователя: {}", loginRequest.getUsername());
+        log.info("Попытка входа пользователя: {}", loginRequest.getEmail());
 
-        // Аутентификация пользователя
+        // Аутентификация пользователя (поле username содержит email)
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
-                        loginRequest.getUsername(),
+                        loginRequest.getEmail(),
                         loginRequest.getPassword()
                 )
         );
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
-        // Генерация токенов
+        // Генерация токенов (sub = email)
         String accessToken = jwtTokenProvider.generateAccessToken(authentication);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(loginRequest.getUsername());
+        String refreshToken = jwtTokenProvider.generateRefreshToken(loginRequest.getEmail());
 
         // Получение информации о пользователе
-        UserDto userDto = userService.getUserByUserName(loginRequest.getUsername());
+        UserDto userDto = userService.getUserByEmail(loginRequest.getEmail());
         UserResponse userResponse = userMapper.toResponse(userDto);
 
         LoginResponse response = LoginResponse.builder()
@@ -73,7 +73,7 @@ public class AuthController {
                 .user(userResponse)
                 .build();
 
-        log.info("Успешный вход пользователя: {}", loginRequest.getUsername());
+        log.info("Успешный вход пользователя: {}", loginRequest.getEmail());
         return ResponseEntity.ok(response);
     }
 
@@ -96,9 +96,9 @@ public class AuthController {
 
         UserDto createdUser = userService.createUser(newUserDto);
 
-        // Генерация токенов для нового пользователя
-        String accessToken = jwtTokenProvider.generateAccessToken(createdUser.getName());
-        String refreshToken = jwtTokenProvider.generateRefreshToken(createdUser.getName());
+        // Генерация токенов для нового пользователя (sub = email)
+        String accessToken = jwtTokenProvider.generateAccessToken(createdUser.getEmail());
+        String refreshToken = jwtTokenProvider.generateRefreshToken(createdUser.getEmail());
 
         UserResponse userResponse = userMapper.toResponse(createdUser);
 
@@ -139,8 +139,8 @@ public class AuthController {
         String newAccessToken = jwtTokenProvider.generateAccessToken(username);
         String newRefreshToken = jwtTokenProvider.generateRefreshToken(username);
 
-        // Получение информации о пользователе
-        UserDto userDto = userService.getUserByUserName(username);
+        // Получение информации о пользователе (username = email из JWT)
+        UserDto userDto = userService.getUserByEmail(username);
         UserResponse userResponse = userMapper.toResponse(userDto);
 
         LoginResponse response = LoginResponse.builder()
@@ -171,7 +171,7 @@ public class AuthController {
     @PostMapping("/resend-verification")
     public ResponseEntity<Map<String, String>> resendVerification(
             @AuthenticationPrincipal UserDetails userDetails) {
-        Long userId = userService.getUserByUserName(userDetails.getUsername()).getId();
+        Long userId = userService.getUserByEmail(userDetails.getUsername()).getId();
         userService.resendVerificationEmail(userId);
         return ResponseEntity.ok(Map.of("message", "Письмо отправлено"));
     }
@@ -203,7 +203,7 @@ public class AuthController {
     public ResponseEntity<Map<String, String>> changeEmail(
             @AuthenticationPrincipal UserDetails userDetails,
             @Valid @RequestBody ChangeEmailRequest request) {
-        Long userId = userService.getUserByUserName(userDetails.getUsername()).getId();
+        Long userId = userService.getUserByEmail(userDetails.getUsername()).getId();
         userService.changeEmail(userId, request.getEmail());
         return ResponseEntity.ok(Map.of("message", "Письмо подтверждения отправлено на новый email"));
     }

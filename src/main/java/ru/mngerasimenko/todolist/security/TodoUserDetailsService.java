@@ -21,19 +21,20 @@ public class TodoUserDetailsService implements UserDetailsService {
     }
 
     @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
 
-        UserDto userDto = userService.getUserByUserName(username);
+        UserDto userDto = userService.getUserByEmail(email);
 
         if (userDto == null) {
-            throw new UsernameNotFoundException("User not found: " + username);
+            throw new UsernameNotFoundException("User not found: " + email);
         }
 
-        // Используем пароль из БД (уже BCrypt-хэш).
+        // Используем email как идентификатор в Spring Security.
+        // Пароль из БД (уже BCrypt-хэш).
         // Роль — только USER; роли ADMIN/USER управляются через task_list_user (per-list).
         return org.springframework.security.core.userdetails.User
                 .builder()
-                .username(userDto.getName())
+                .username(userDto.getEmail())
                 .password(userDto.getPassword())
                 .roles("USER")
                 .build();

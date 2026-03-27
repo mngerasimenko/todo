@@ -40,7 +40,7 @@ public class UserRestController {
     /** Получение текущего пользователя по JWT-токену */
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getCurrentUser(@AuthenticationPrincipal UserDetails userDetails) {
-        UserDto userDto = userService.getUserByUserName(userDetails.getUsername());
+        UserDto userDto = userService.getUserByEmail(userDetails.getUsername());
         UserResponse response = userMapper.toResponse(userDto);
         return ResponseEntity.ok(response);
     }
@@ -135,7 +135,7 @@ public class UserRestController {
      * Сравнивает ID из URL с ID текущего пользователя из JWT.
      */
     private void assertOwner(Long targetUserId, UserDetails userDetails) {
-        UserDto currentUser = userService.getUserByUserName(userDetails.getUsername());
+        UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
         if (!currentUser.getId().equals(targetUserId)) {
             throw new AccessDeniedException("Доступ запрещён: можно изменять только свой аккаунт");
         }
