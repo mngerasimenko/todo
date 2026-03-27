@@ -134,7 +134,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"username\": \"runner_{{runId}}\",\n  \"password\": \"runner_{{runId}}\"\n}"
+							"raw": "{\n  \"email\": \"runner_{{runId}}@example.com\",\n  \"password\": \"runner_{{runId}}\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/auth/login",
@@ -1991,7 +1991,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"username\": \"invalidUser\",\n  \"password\": \"wrongPassword\"\n}"
+							"raw": "{\n  \"email\": \"invalid@example.com\",\n  \"password\": \"wrongPassword\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/auth/login",
@@ -2419,7 +2419,7 @@
 									"    url: baseUrl + '/api/auth/login',",
 									"    method: 'POST',",
 									"    header: { 'Content-Type': 'application/json' },",
-									"    body: { mode: 'raw', raw: JSON.stringify({ username: 'fakeUser', password: 'fakePass' }) }",
+									"    body: { mode: 'raw', raw: JSON.stringify({ email: 'fake@example.com', password: 'fakePass' }) }",
 									"};",
 									"pm.sendRequest(reqOpts, () => {",
 									"    pm.sendRequest(reqOpts, () => {",
@@ -2472,7 +2472,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"username\": \"fakeUser\",\n  \"password\": \"fakePass\"\n}"
+							"raw": "{\n  \"email\": \"fake@example.com\",\n  \"password\": \"fakePass\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/auth/login",
