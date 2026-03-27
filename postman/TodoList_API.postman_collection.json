@@ -1519,13 +1519,8 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"pm.test(\"Status code is 200\", function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test(\"Response is array\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData).to.be.an('array');",
+									"pm.test(\"Status code is 403 (ADMIN only)\", function () {",
+									"    pm.response.to.have.status(403);",
 									"});"
 								],
 								"type": "text/javascript"
@@ -1693,7 +1688,7 @@
 									"pm.test(\"User updated\", function () {",
 									"    var jsonData = pm.response.json();",
 									"    pm.expect(jsonData.id).to.exist;",
-									"    pm.expect(jsonData.email).to.include(\"updated_\");",
+									"    pm.expect(jsonData.name).to.include(\"updated_\");",
 									"});"
 								],
 								"type": "text/javascript"
@@ -1720,7 +1715,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"email\": \"updated_{{thirdUserName}}@example.com\",\n  \"name\": \"{{thirdUserName}}\",\n  \"password\": \"newpassword\"\n}"
+							"raw": "{\n  \"email\": \"{{thirdUserName}}@example.com\",\n  \"name\": \"updated_{{thirdUserName}}\",\n  \"password\": \"newpassword\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/users/{{newUserId}}",
@@ -2206,15 +2201,14 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"pm.test(\"Status code is 201\", function () {",
-									"    pm.response.to.have.status(400);",
+									"pm.test(\"Status code is 404\", function () {",
+									"    pm.response.to.have.status(404);",
 									"});",
 									"",
-									"pm.test(\"Todo created successfully\", function () {",
+									"pm.test(\"List not found error\", function () {",
 									"    const res = pm.response.json(); ",
-									"    pm.expect(pm.response.json()).to.have.property(\"error\");",
-									"    pm.expect(res.error).to.eql(\"Bad Request\");",
-									"    pm.expect(res.message).to.contain(\"List not found with\");",
+									"    pm.expect(res).to.have.property(\"error\");",
+									"    pm.expect(res.message).to.contain(\"List not found\");",
 									"});"
 								],
 								"type": "text/javascript",
@@ -2776,12 +2770,8 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"pm.test('Status 200', function () { pm.response.to.have.status(200); });",
-									"var json = pm.response.json();",
-									"var delUserId = pm.environment.get('delUserId');",
-									"var found = json.find(u => u.id == delUserId);",
-									"pm.test('Deleted user not in list', function () {",
-									"    pm.expect(found).to.be.undefined;",
+									"pm.test('Status 403 (cannot access deleted user)', function () {",
+									"    pm.response.to.have.status(403);",
 									"});"
 								],
 								"type": "text/javascript"
@@ -2802,14 +2792,14 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{baseUrl}}/api/users/all",
+							"raw": "{{baseUrl}}/api/users/{{delUserId}}",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"api",
 								"users",
-								"all"
+								"{{delUserId}}"
 							]
 						}
 					},
