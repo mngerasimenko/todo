@@ -335,8 +335,9 @@ class UserRestControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "admin", roles = {"ADMIN"})
+    @WithMockUser(username = "testuser", roles = {"USER"})
     void updateUser_MissingRequiredFields_ReturnsBadRequest() throws Exception {
+        when(userService.getUserByUserName("testuser")).thenReturn(testUserDto);
         UserRequest invalidRequest = new UserRequest();
 
         mockMvc.perform(put("/api/users/1")

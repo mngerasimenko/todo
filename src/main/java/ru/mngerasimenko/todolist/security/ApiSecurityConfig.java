@@ -101,7 +101,11 @@ public class ApiSecurityConfig {
                 // Отключаем HTTP Basic (используем JWT)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 // Отключаем CSRF для API (stateless)
-                .csrf(AbstractHttpConfigurer::disable);
+                .csrf(AbstractHttpConfigurer::disable)
+                // Отключаем HSTS в Spring Security (устанавливается nginx)
+                .headers(headers -> headers
+                        .httpStrictTransportSecurity(hsts -> hsts.disable())
+                );
 
         return http.build();
     }

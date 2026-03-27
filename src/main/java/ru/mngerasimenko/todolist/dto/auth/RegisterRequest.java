@@ -2,6 +2,7 @@ package ru.mngerasimenko.todolist.dto.auth;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -30,6 +31,7 @@ public class RegisterRequest {
      */
     @NotBlank(message = "Имя пользователя не может быть пустым")
     @Size(min = 2, max = 128, message = "Имя пользователя должно содержать от 2 до 128 символов")
+    @Pattern(regexp = "^[^<>]*$", message = "Имя содержит недопустимые символы")
     private String name;
 
     /**

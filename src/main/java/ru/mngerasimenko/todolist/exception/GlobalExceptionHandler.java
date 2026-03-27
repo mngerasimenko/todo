@@ -10,6 +10,7 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -188,6 +189,16 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleNoResourceFound(NoResourceFoundException ex) {
         log.warn("Static resource not found: {}", ex.getResourcePath());
         return createErrorResponse(HttpStatus.NOT_FOUND, "Not Found", "Ресурс не найден");
+    }
+
+    /**
+     * Обрабатывает вызов неподдерживаемого HTTP-метода (HTTP 405).
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<Map<String, Object>> handleMethodNotSupported(
+            HttpRequestMethodNotSupportedException ex) {
+        log.warn("Method not supported: {} {}", ex.getMethod(), ex.getMessage());
+        return createErrorResponse(HttpStatus.METHOD_NOT_ALLOWED, "Method Not Allowed", "Метод не поддерживается");
     }
 
     /**

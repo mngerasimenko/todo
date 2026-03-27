@@ -1,6 +1,7 @@
 package ru.mngerasimenko.todolist.controller;
 
 import jakarta.validation.Valid;
+import jakarta.validation.Validator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -34,6 +35,7 @@ public class UserRestController {
     private final UserService userService;
     private final UserMapper userMapper;
     private final SubscriptionService subscriptionService;
+    private final Validator validator;
 
     /** Получение текущего пользователя по JWT-токену */
     @GetMapping("/me")
@@ -86,9 +88,10 @@ public class UserRestController {
     @PutMapping("/{id}")
     public ResponseEntity<UserResponse> updateUser(
             @PathVariable Long id,
-            @Valid @RequestBody UserRequest request,
+            @RequestBody UserRequest request,
             @AuthenticationPrincipal UserDetails userDetails) {
         assertOwner(id, userDetails);
+        validateRequest(request);
         UserDto userDto = userMapper.toDto(request);
         UserDto updatedUser = userService.updateUser(id, userDto);
         UserResponse response = userMapper.toResponse(updatedUser);
@@ -115,6 +118,16 @@ public class UserRestController {
         assertOwner(id, userDetails);
         userService.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Ручная валидация запроса (используется когда авторизация должна проверяться до валидации).
+     */
+    private <T> void validateRequest(T request) {
+        var violations = validator.validate(request);
+        if (!violations.isEmpty()) {
+            throw new jakarta.validation.ConstraintViolationException(violations);
+        }
     }
 
     /**
