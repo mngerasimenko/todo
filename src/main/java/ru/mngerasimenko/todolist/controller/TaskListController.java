@@ -148,6 +148,6 @@ public class TaskListController {
      * Получить ID текущего аутентифицированного пользователя по username.
      */
     private Long getUserId(UserDetails userDetails) {
-        return userService.getUserByUserName(userDetails.getUsername()).getId();
+        return userService.getUserByEmail(userDetails.getUsername()).getId();
     }
 }

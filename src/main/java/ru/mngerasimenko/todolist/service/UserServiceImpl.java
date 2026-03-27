@@ -109,6 +109,15 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public UserDto getUserByEmail(String email) {
+        if (StringUtils.isBlank(email)) {
+            return null;
+        }
+        return mapper.toDto(repository.getUserByEmail(email));
+    }
+
+    @Override
     public UserDto getUserByAuthId(String authId) {
         if (StringUtils.isBlank(authId)) {
             return null;

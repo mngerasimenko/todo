@@ -1,0 +1,9 @@
+databaseChangeLog:
+  - changeSet:
+      id: 012-remove-user-name-uniqueness
+      author: mngerasimenko
+      comment: Remove UNIQUE constraint from user name - login now uses email instead of name
+      changes:
+        - dropUniqueConstraint:
+            tableName: todo_users
+            constraintName: todo_users_name_key

@@ -45,7 +45,7 @@ public class User {
     @Size(min = 5, max = 128)
     private String password;
 
-    @Column(name = "name", nullable = false, unique = true)
+    @Column(name = "name", nullable = false)
     private String name;
 
     /**

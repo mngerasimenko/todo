@@ -91,12 +91,12 @@ class AuthControllerTest {
     void login_ValidCredentials_ReturnsTokensAndUserInfo() throws Exception {
         // Arrange
         LoginRequest loginRequest = LoginRequest.builder()
-                .username("testUser")
+                .email("test@example.com")
                 .password("password123")
                 .build();
 
         Authentication authentication = new UsernamePasswordAuthenticationToken(
-                "testUser",
+                "test@example.com",
                 "password123",
                 Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
         );
@@ -105,9 +105,9 @@ class AuthControllerTest {
                 .thenReturn(authentication);
         when(jwtTokenProvider.generateAccessToken(any(Authentication.class)))
                 .thenReturn("access-token-123");
-        when(jwtTokenProvider.generateRefreshToken("testUser"))
+        when(jwtTokenProvider.generateRefreshToken("test@example.com"))
                 .thenReturn("refresh-token-123");
-        when(userService.getUserByUserName("testUser")).thenReturn(testUserDto);
+        when(userService.getUserByEmail("test@example.com")).thenReturn(testUserDto);
         when(userMapper.toResponse(testUserDto)).thenReturn(testUserResponse);
 
         // Act & Assert
@@ -129,7 +129,7 @@ class AuthControllerTest {
     void login_InvalidCredentials_ReturnsUnauthorized() throws Exception {
         // Arrange
         LoginRequest loginRequest = LoginRequest.builder()
-                .username("testUser")
+                .email("test@example.com")
                 .password("wrongPassword")
                 .build();
 
@@ -150,7 +150,7 @@ class AuthControllerTest {
     void login_EmptyUsername_ReturnsBadRequest() throws Exception {
         // Arrange
         LoginRequest loginRequest = LoginRequest.builder()
-                .username("")
+                .email("")
                 .password("password123")
                 .build();
 
@@ -159,14 +159,14 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message.username").exists());
+                .andExpect(jsonPath("$.message.email").exists());
     }
 
     @Test
     void login_EmptyPassword_ReturnsBadRequest() throws Exception {
         // Arrange
         LoginRequest loginRequest = LoginRequest.builder()
-                .username("testUser")
+                .email("test@example.com")
                 .password("")
                 .build();
 
@@ -181,7 +181,7 @@ class AuthControllerTest {
     @Test
     void login_NullFields_ReturnsBadRequest() throws Exception {
         // Arrange
-        String invalidJson = "{\"username\": null, \"password\": null}";
+        String invalidJson = "{\"email\": null, \"password\": null}";
 
         // Act & Assert
         mockMvc.perform(post("/api/auth/login")
@@ -215,8 +215,8 @@ class AuthControllerTest {
                 .build();
 
         when(userService.createUser(any(UserDto.class))).thenReturn(newUserDto);
-        when(jwtTokenProvider.generateAccessToken("newUser")).thenReturn("new-access-token");
-        when(jwtTokenProvider.generateRefreshToken("newUser")).thenReturn("new-refresh-token");
+        when(jwtTokenProvider.generateAccessToken("new@example.com")).thenReturn("new-access-token");
+        when(jwtTokenProvider.generateRefreshToken("new@example.com")).thenReturn("new-refresh-token");
         when(userMapper.toResponse(newUserDto)).thenReturn(newUserResponse);
 
         // Act & Assert
@@ -351,10 +351,10 @@ class AuthControllerTest {
                 .build();
 
         when(jwtTokenProvider.validateToken("valid-refresh-token")).thenReturn(true);
-        when(jwtTokenProvider.getUsernameFromToken("valid-refresh-token")).thenReturn("testUser");
-        when(jwtTokenProvider.generateAccessToken("testUser")).thenReturn("new-access-token");
-        when(jwtTokenProvider.generateRefreshToken("testUser")).thenReturn("new-refresh-token");
-        when(userService.getUserByUserName("testUser")).thenReturn(testUserDto);
+        when(jwtTokenProvider.getUsernameFromToken("valid-refresh-token")).thenReturn("test@example.com");
+        when(jwtTokenProvider.generateAccessToken("test@example.com")).thenReturn("new-access-token");
+        when(jwtTokenProvider.generateRefreshToken("test@example.com")).thenReturn("new-refresh-token");
+        when(userService.getUserByEmail("test@example.com")).thenReturn(testUserDto);
         when(userMapper.toResponse(testUserDto)).thenReturn(testUserResponse);
 
         // Act & Assert
@@ -420,18 +420,18 @@ class AuthControllerTest {
     void login_ReturnsJsonContentType() throws Exception {
         // Arrange
         LoginRequest loginRequest = LoginRequest.builder()
-                .username("testUser")
+                .email("test@example.com")
                 .password("password123")
                 .build();
 
         Authentication authentication = new UsernamePasswordAuthenticationToken(
-                "testUser", "password123"
+                "test@example.com", "password123"
         );
 
         when(authenticationManager.authenticate(any())).thenReturn(authentication);
         when(jwtTokenProvider.generateAccessToken(any(Authentication.class))).thenReturn("token");
         when(jwtTokenProvider.generateRefreshToken(anyString())).thenReturn("refresh");
-        when(userService.getUserByUserName(anyString())).thenReturn(testUserDto);
+        when(userService.getUserByEmail(anyString())).thenReturn(testUserDto);
         when(userMapper.toResponse(any())).thenReturn(testUserResponse);
 
         // Act & Assert
@@ -470,10 +470,10 @@ class AuthControllerTest {
                 .build();
 
         when(jwtTokenProvider.validateToken(anyString())).thenReturn(true);
-        when(jwtTokenProvider.getUsernameFromToken(anyString())).thenReturn("testUser");
+        when(jwtTokenProvider.getUsernameFromToken(anyString())).thenReturn("test@example.com");
         when(jwtTokenProvider.generateAccessToken(anyString())).thenReturn("token");
         when(jwtTokenProvider.generateRefreshToken(anyString())).thenReturn("refresh");
-        when(userService.getUserByUserName(anyString())).thenReturn(testUserDto);
+        when(userService.getUserByEmail(anyString())).thenReturn(testUserDto);
         when(userMapper.toResponse(any())).thenReturn(testUserResponse);
 
         // Act & Assert
@@ -544,11 +544,11 @@ class AuthControllerTest {
     // ==================== RESEND VERIFICATION TESTS ====================
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@example.com")
     void resendVerification_Authenticated_ReturnsOk() throws Exception {
-        // Arrange — мокируем получение пользователя по имени
-        UserDto userDto = UserDto.builder().id(1L).name("user").build();
-        when(userService.getUserByUserName("user")).thenReturn(userDto);
+        // Arrange — мокируем получение пользователя по email
+        UserDto userDto = UserDto.builder().id(1L).name("user").email("user@example.com").build();
+        when(userService.getUserByEmail("user@example.com")).thenReturn(userDto);
         doNothing().when(userService).resendVerificationEmail(1L);
 
         // Act & Assert
@@ -696,11 +696,11 @@ class AuthControllerTest {
     // ==================== CHANGE EMAIL TESTS ====================
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@example.com")
     void changeEmail_Authenticated_ReturnsOk() throws Exception {
-        // Arrange — мокируем получение пользователя по имени
-        UserDto userDto = UserDto.builder().id(1L).name("user").build();
-        when(userService.getUserByUserName("user")).thenReturn(userDto);
+        // Arrange — мокируем получение пользователя по email
+        UserDto userDto = UserDto.builder().id(1L).name("user").email("user@example.com").build();
+        when(userService.getUserByEmail("user@example.com")).thenReturn(userDto);
         doNothing().when(userService).changeEmail(1L, "new@example.com");
 
         ChangeEmailRequest request = new ChangeEmailRequest("new@example.com");
@@ -727,7 +727,7 @@ class AuthControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@example.com")
     void changeEmail_EmptyEmail_ReturnsBadRequest() throws Exception {
         // Arrange — пустой email
         ChangeEmailRequest request = new ChangeEmailRequest("");
@@ -741,7 +741,7 @@ class AuthControllerTest {
     }
 
     @Test
-    @WithMockUser(username = "user")
+    @WithMockUser(username = "user@example.com")
     void changeEmail_InvalidEmail_ReturnsBadRequest() throws Exception {
         // Arrange — некорректный формат email
         ChangeEmailRequest request = new ChangeEmailRequest("not-an-email");
