@@ -114,7 +114,7 @@ public class UserServiceImpl implements UserService {
         if (StringUtils.isBlank(email)) {
             return null;
         }
-        return mapper.toDto(repository.getUserByEmail(email));
+        return mapper.toDto(repository.getUserByEmail(email.toLowerCase()));
     }
 
     @Override
@@ -129,6 +129,9 @@ public class UserServiceImpl implements UserService {
     @Transactional(noRollbackFor = DataIntegrityViolationException.class)
     public UserDto createUser(UserDto userDto) {
         User user = mapper.toEntity(userDto);
+
+        // Нормализация email в нижний регистр
+        user.setEmail(user.getEmail().toLowerCase());
 
         if (user.getAuthId() == null) {
             UUID uuid = UUID.randomUUID();
@@ -240,7 +243,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public void initiatePasswordReset(String email) {
-        User user = repository.getUserByEmail(email);
+        User user = repository.getUserByEmail(email.toLowerCase());
         // Всегда 200 — не раскрываем существование аккаунта
         if (user == null || !user.isEmailVerified()) {
             return;
@@ -279,13 +282,14 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
 
         // Проверяем, что новый email не занят другим пользователем
-        User existingUser = repository.getUserByEmail(newEmail);
+        String normalizedEmail = newEmail.toLowerCase();
+        User existingUser = repository.getUserByEmail(normalizedEmail);
         if (existingUser != null && !existingUser.getId().equals(userId)) {
             throw new IllegalArgumentException("Email " + newEmail + " уже используется");
         }
 
         // Обновляем email и сбрасываем верификацию
-        user.setEmail(newEmail);
+        user.setEmail(normalizedEmail);
         user.setEmailVerified(false);
 
         // Генерируем новый токен верификации
@@ -307,7 +311,7 @@ public class UserServiceImpl implements UserService {
 
     @Transactional(readOnly = true)
     public boolean existsByEmail(String email) {
-        return repository.getUserByEmail(email) != null;
+        return repository.getUserByEmail(email.toLowerCase()) != null;
     }
 
     @Transactional(readOnly = true)

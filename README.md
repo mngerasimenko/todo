@@ -21,10 +21,10 @@ REST API бэкенд для совместного управления спи�
 
 | Клиент | URL | Логин |
 |--------|-----|-------|
-| React UI | **[https://todo.keepware.ru](https://todo.keepware.ru)** | `testUser` / `testUser` |
+| React UI | **[https://todo.keepware.ru](https://todo.keepware.ru)** | `testuser@todolist.ru` / `testUser` |
 | REST API | `https://todo.keepware.ru/api/` | JWT |
 | Swagger UI | **[https://todo.keepware.ru/api/swagger-ui.html](https://todo.keepware.ru/api/swagger-ui.html)** | — |
-| Android | **[todolist-android](https://github.com/mngerasimenko/todolist-android)** | `testUser` / `testUser` |
+| Android | **[todolist-android](https://github.com/mngerasimenko/todolist-android)** | `testuser@todolist.ru` / `testUser` |
 
 ---
 
@@ -39,6 +39,7 @@ REST API бэкенд для совместного управления спи�
 - Сброс пароля по email
 - Смена email с повторной верификацией
 - Политика конфиденциальности и пользовательское соглашение (`/privacy`, `/terms`)
+- Вход по email (имена пользователей не уникальны)
 - REST API с JWT аутентификацией (React SPA, Android-клиент)
 - BCrypt хэширование паролей
 - CORS для поддержки React SPA и прямых API-запросов

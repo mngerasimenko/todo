@@ -150,7 +150,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     @Override
     @Transactional(readOnly = true)
     public SubscriptionStatusResponse getSubscriptionStatus(String email) {
-        User user = userRepository.getUserByEmail(email);
+        User user = userRepository.getUserByEmail(email.toLowerCase());
         if (user == null) {
             throw new UserNotFoundException("User not found: " + email);
         }
