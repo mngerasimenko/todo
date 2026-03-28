@@ -40,7 +40,9 @@ REST API бэкенд для совместного управления спи�
 - Смена email с повторной верификацией
 - Политика конфиденциальности и пользовательское соглашение (`/privacy`, `/terms`)
 - Вход по email (имена пользователей не уникальны)
-- REST API с JWT аутентификацией (React SPA, Android-клиент)
+- REST API с JWT аутентификацией (access JWT + opaque refresh tokens в БД)
+- Ротация refresh-токенов с reuse detection (компрометация цепочки → отзыв всей семьи)
+- Logout с in-memory blacklist access-токенов и отзывом refresh-токенов
 - BCrypt хэширование паролей
 - CORS для поддержки React SPA и прямых API-запросов
 - Автоверсионирование (MAJOR.MINOR.PATCH) с проверкой совместимости Android-клиента
@@ -54,7 +56,7 @@ REST API бэкенд для совместного управления спи�
 - Интерактивная документация API (Swagger UI / OpenAPI 3)
 - Контроль доступа: изменение и удаление аккаунта только владельцем, операции с задачами только для участников списка
 - Каскадное удаление аккаунта: передача ADMIN, удаление пустых списков, сохранение публичных задач через системного пользователя
-- 352 unit-теста с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
+- 376 unit-тестов с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
 
 ---
 
@@ -93,6 +95,7 @@ REST API бэкенд для совместного управления спи�
 | POST | `/api/auth/forgot-password` | Запрос сброса пароля |
 | POST | `/api/auth/reset-password` | Установка нового пароля |
 | POST | `/api/auth/change-email` | Смена email (JWT) |
+| POST | `/api/auth/logout` | Выход: blacklist access + revoke refresh (JWT) |
 
 ### Списки задач
 
@@ -201,7 +204,7 @@ mvn test -Pintegration
 Проект использует пайплайн `.github/workflows/deploy.yml`:
 
 **Этап 1 — Тесты** (все PR и push в master):
-- 352 unit-теста + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
+- 376 unit-тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
 - Нагрузочные тесты (3 шт.) запускаются отдельно: `mvn test -Pintegration` (требуют Docker)
 
 **Этап 2 — Деплой** (только push в master):
@@ -265,10 +268,10 @@ chmod +x setup-server.sh
 ```
 src/main/java/ru/mngerasimenko/todolist/
 ├── controller/      REST-контроллеры (5: App, Todo, User, TaskList, Auth)
-├── service/         Бизнес-логика (6 интерфейсов + 6 реализаций, включая EmailService, SubscriptionService, StatisticsService)
-├── repository/      Spring Data JPA (5 репозиториев, включая InviteTokenRepository)
-├── model/           JPA-сущности (User, Todo, TaskList, TaskListUser, TaskListRole, InviteToken) + @Version
-├── dto/             DTO + list/ + auth/ подпакеты (email-верификация, сброс пароля, приглашения)
+├── service/         Бизнес-логика (8 интерфейсов + 8 реализаций, включая RefreshTokenService, TokenBlacklistService)
+├── repository/      Spring Data JPA (6 репозиториев, включая RefreshTokenRepository)
+├── model/           JPA-сущности (User, Todo, TaskList, TaskListUser, TaskListRole, InviteToken, RefreshToken) + @Version
+├── dto/             DTO + list/ + auth/ подпакеты (email-верификация, сброс пароля, приглашения, logout)
 ├── mapper/          Ручные мапперы (Todo, User, TaskList)
 ├── config/          OpenApiConfig (Swagger UI), UsageStatsEndpoint (Actuator)
 ├── security/        Spring Security + JWT + Rate Limiting (Bucket4j)
@@ -276,9 +279,9 @@ src/main/java/ru/mngerasimenko/todolist/
 ├── exception/       GlobalExceptionHandler + кастомные исключения (включая TokenExpiredException)
 └── TodolistApplication.java
 
-src/main/resources/db/migration/   Liquibase-миграции (master + 10 changeset-файлов)
+src/main/resources/db/migration/   Liquibase-миграции (master + 13 changeset-файлов)
 src/main/resources/templates/      HTML-шаблоны email (верификация, сброс пароля, приглашение)
-src/test/java/        352 теста (controller, service, repository, mapper, concurrency)
+src/test/java/        376 тестов (controller, service, repository, mapper, security, concurrency)
 postman/             Postman-коллекция + окружения
 monitoring/          VK-мониторинг (скрипты, systemd-сервис, конфиг) + backup PostgreSQL
 ```
