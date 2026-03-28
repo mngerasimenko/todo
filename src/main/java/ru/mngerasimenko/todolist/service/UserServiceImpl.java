@@ -159,7 +159,7 @@ public class UserServiceImpl implements UserService {
             return mapper.toDto(savedUser);
         } catch (DataIntegrityViolationException e) {
             throw new IllegalArgumentException(
-                    "Пользователь с таким именем или email уже существует");
+                    "Не удалось создать аккаунт. Проверьте введённые данные и попробуйте снова");
         }
     }
 

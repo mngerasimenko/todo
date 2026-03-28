@@ -382,7 +382,7 @@ class UserServiceImplTest {
 
         assertThatThrownBy(() -> userService.createUser(existingUserDto))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("уже существует");
+                .hasMessageContaining("Не удалось создать аккаунт");
     }
 
     @Test
