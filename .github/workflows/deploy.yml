@@ -51,6 +51,7 @@ jobs:
       APP_VERSION_MAJOR: 0
       APP_VERSION_MINOR: 1
       APP_VERSION_PATCH_OFFSET: 60
+      DEPLOY_DIR: ${{ secrets.DEPLOY_DIR || '/root/todo' }}
 
     steps:
       - name: Checkout code
@@ -96,7 +97,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "docker-compose.yml"
-          target: "${{ secrets.DEPLOY_DIR }}"
+          target: "${{ env.DEPLOY_DIR }}"
 
       - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -105,7 +106,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd "${{ secrets.DEPLOY_DIR }}"
+            cd "${{ env.DEPLOY_DIR }}"
 
             # Обновление репозитория (nginx.conf, assetlinks.json, мониторинг)
             # git fetch + reset вместо pull — не блокируется локальными изменениями (.env и т.д.)
