@@ -132,9 +132,9 @@ jobs:
               MAIL_PASSWORD=${{ secrets.MAIL_PASSWORD }} \
               docker compose up -d todo-app
 
-            # Пересоздание nginx-proxy (для подхвата новых volumes и конфига)
-            docker compose up -d --force-recreate nginx-proxy 2>/dev/null || \
-              docker exec nginx-proxy nginx -s reload 2>/dev/null || true
+            # Перезагрузка nginx для подхвата обновлённой статики и конфига
+            docker exec nginx-proxy nginx -s reload 2>/dev/null || \
+              docker compose up -d --force-recreate nginx-proxy 2>/dev/null || true
 
             # Очистка неиспользуемых образов
             docker image prune -f 2>/dev/null || true
