@@ -94,13 +94,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     /**
-     * Определяет IP-адрес клиента с учётом nginx reverse proxy.
+     * Определяет IP-адрес клиента через доверенный заголовок от nginx reverse proxy.
+     * Использует X-Real-IP (одно значение, задаётся nginx), а не X-Forwarded-For (спуфится клиентом).
      */
     String resolveClientIp(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
-            // Берём первый IP (реальный клиент), остальные — промежуточные прокси
-            return xForwardedFor.split(",")[0].trim();
+        String header = properties.getClientIpHeader();
+        if (header != null && !header.isBlank()) {
+            String ip = request.getHeader(header);
+            if (ip != null && !ip.isBlank()) {
+                return ip.trim();
+            }
         }
         return request.getRemoteAddr();
     }
