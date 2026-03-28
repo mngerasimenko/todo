@@ -123,8 +123,7 @@ services:
   postgres-db:
     image: postgres:17
     container_name: postgres-db
-    ports:
-      - "5433:5432"
+    # Port NOT exposed to host — access only via Docker network (todo-app connects to postgres-db:5432)
 
     environment:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
@@ -147,7 +146,7 @@ services:
       - todo-network
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres && psql -h 127.0.0.1 -U postgres -d todo -c 'SELECT 1' -q || (sed -i 's/scram-sha-256/trust/' /var/lib/postgresql/data/pg_hba.conf && su postgres -c 'pg_ctl reload -D /var/lib/postgresql/data' && false)"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 30s
       timeout: 10s
       retries: 10
