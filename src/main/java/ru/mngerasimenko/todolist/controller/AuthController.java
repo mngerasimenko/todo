@@ -20,6 +20,9 @@ import ru.mngerasimenko.todolist.dto.auth.*;
 import ru.mngerasimenko.todolist.mapper.UserMapper;
 import ru.mngerasimenko.todolist.security.jwt.JwtProperties;
 import ru.mngerasimenko.todolist.security.jwt.JwtTokenProvider;
+import ru.mngerasimenko.todolist.service.RefreshTokenService;
+import ru.mngerasimenko.todolist.service.RefreshTokenService.RefreshTokenRotationResult;
+import ru.mngerasimenko.todolist.service.TokenBlacklistService;
 import ru.mngerasimenko.todolist.service.UserService;
 
 /**
@@ -36,6 +39,8 @@ public class AuthController {
     private final UserMapper userMapper;
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
+    private final RefreshTokenService refreshTokenService;
+    private final TokenBlacklistService tokenBlacklistService;
 
     /**
      * Вход пользователя в систему
@@ -57,13 +62,13 @@ public class AuthController {
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
-        // Генерация токенов (sub = email)
-        String accessToken = jwtTokenProvider.generateAccessToken(authentication);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(loginRequest.getEmail());
-
         // Получение информации о пользователе
         UserDto userDto = userService.getUserByEmail(loginRequest.getEmail());
         UserResponse userResponse = userMapper.toResponse(userDto);
+
+        // Генерация access JWT + opaque refresh-токена в БД
+        String accessToken = jwtTokenProvider.generateAccessToken(authentication);
+        String refreshToken = refreshTokenService.createRefreshToken(userDto.getId());
 
         LoginResponse response = LoginResponse.builder()
                 .accessToken(accessToken)
@@ -96,9 +101,9 @@ public class AuthController {
 
         UserDto createdUser = userService.createUser(newUserDto);
 
-        // Генерация токенов для нового пользователя (sub = email)
+        // Генерация access JWT + opaque refresh-токена в БД
         String accessToken = jwtTokenProvider.generateAccessToken(createdUser.getEmail());
-        String refreshToken = jwtTokenProvider.generateRefreshToken(createdUser.getEmail());
+        String refreshToken = refreshTokenService.createRefreshToken(createdUser.getId());
 
         UserResponse userResponse = userMapper.toResponse(createdUser);
 
@@ -123,36 +128,55 @@ public class AuthController {
     @PostMapping("/refresh")
     public ResponseEntity<LoginResponse> refresh(@Valid @RequestBody RefreshTokenRequest refreshTokenRequest) {
         log.debug("POST /api/auth/refresh — запрос получен");
-        String refreshToken = refreshTokenRequest.getRefreshToken();
 
-        // Валидация refresh токена
-        if (!jwtTokenProvider.validateToken(refreshToken)) {
-            log.warn("POST /api/auth/refresh — refresh токен невалиден, возвращаем 401");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+        // Ротация opaque refresh-токена (валидация + reuse detection внутри сервиса)
+        RefreshTokenRotationResult result = refreshTokenService.rotateRefreshToken(
+                refreshTokenRequest.getRefreshToken());
 
-        // Извлечение username из токена
-        String username = jwtTokenProvider.getUsernameFromToken(refreshToken);
-        log.debug("POST /api/auth/refresh — токен валиден, пользователь: {}", username);
+        // Генерация нового access JWT
+        String newAccessToken = jwtTokenProvider.generateAccessToken(result.email());
 
-        // Генерация новых токенов
-        String newAccessToken = jwtTokenProvider.generateAccessToken(username);
-        String newRefreshToken = jwtTokenProvider.generateRefreshToken(username);
-
-        // Получение информации о пользователе (username = email из JWT)
-        UserDto userDto = userService.getUserByEmail(username);
+        // Получение информации о пользователе
+        UserDto userDto = userService.getUserByEmail(result.email());
         UserResponse userResponse = userMapper.toResponse(userDto);
 
         LoginResponse response = LoginResponse.builder()
                 .accessToken(newAccessToken)
-                .refreshToken(newRefreshToken)
+                .refreshToken(result.newRawToken())
                 .expiresIn(jwtProperties.getAccessTokenExpiration() / 1000)
                 .tokenType("Bearer")
                 .user(userResponse)
                 .build();
 
-        log.info("Успешное обновление токена для пользователя: {}", username);
+        log.info("Успешное обновление токена для пользователя: {}", result.email());
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Выход из системы — инвалидация access-токена и отзыв refresh-токена
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<Map<String, String>> logout(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestHeader("Authorization") String authHeader,
+            @RequestBody(required = false) LogoutRequest logoutRequest) {
+
+        // Blacklist текущего access-токена
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        String accessToken = authHeader.substring(7);
+        tokenBlacklistService.blacklistAccessToken(
+                accessToken, jwtTokenProvider.getExpirationFromToken(accessToken));
+
+        // Отзыв refresh-токена если передан
+        if (logoutRequest != null && logoutRequest.getRefreshToken() != null
+                && !logoutRequest.getRefreshToken().isBlank()) {
+            refreshTokenService.revokeByRawToken(logoutRequest.getRefreshToken());
+        }
+
+        log.info("Выход пользователя: {}", userDetails.getUsername());
+        return ResponseEntity.ok(Map.of("message", "Выход выполнен"));
     }
 
     /**
