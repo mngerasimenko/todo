@@ -211,29 +211,29 @@ class RateLimitFilterTest {
     class ClientIpResolution {
 
         @Test
-        @DisplayName("IP из X-Forwarded-For (за nginx)")
-        void xForwardedFor_ShouldUseFirstIp() {
+        @DisplayName("IP из X-Real-IP (доверенный заголовок от nginx)")
+        void xRealIp_ShouldUseHeaderValue() {
             MockHttpServletRequest request = createRequest("GET", "/api/todos/all");
-            request.addHeader("X-Forwarded-For", "203.0.113.50, 70.41.3.18, 150.172.238.178");
+            request.addHeader("X-Real-IP", "203.0.113.50");
 
             String ip = filter.resolveClientIp(request);
             assertThat(ip).isEqualTo("203.0.113.50");
         }
 
         @Test
-        @DisplayName("IP из remoteAddr без X-Forwarded-For")
-        void noXForwardedFor_ShouldUseRemoteAddr() {
+        @DisplayName("X-Forwarded-For игнорируется — используется remoteAddr")
+        void xForwardedFor_ShouldBeIgnored() {
             MockHttpServletRequest request = createRequest("GET", "/api/todos/all");
+            request.addHeader("X-Forwarded-For", "203.0.113.50, 70.41.3.18");
 
             String ip = filter.resolveClientIp(request);
             assertThat(ip).isEqualTo("192.168.1.1");
         }
 
         @Test
-        @DisplayName("Пустой X-Forwarded-For — используется remoteAddr")
-        void emptyXForwardedFor_ShouldUseRemoteAddr() {
+        @DisplayName("Без заголовков — используется remoteAddr")
+        void noHeaders_ShouldUseRemoteAddr() {
             MockHttpServletRequest request = createRequest("GET", "/api/todos/all");
-            request.addHeader("X-Forwarded-For", "   ");
 
             String ip = filter.resolveClientIp(request);
             assertThat(ip).isEqualTo("192.168.1.1");
