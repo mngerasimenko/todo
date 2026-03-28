@@ -51,7 +51,7 @@ jobs:
       APP_VERSION_MAJOR: 0
       APP_VERSION_MINOR: 1
       APP_VERSION_PATCH_OFFSET: 60
-      MIN_ANDROID_VERSION: 2
+      MIN_ANDROID_VERSION: 4
       DEPLOY_DIR: ${{ secrets.DEPLOY_DIR || '/root/todo' }}
 
     steps:
