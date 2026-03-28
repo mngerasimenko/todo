@@ -51,6 +51,7 @@ jobs:
       APP_VERSION_MAJOR: 0
       APP_VERSION_MINOR: 1
       APP_VERSION_PATCH_OFFSET: 60
+      MIN_ANDROID_VERSION: 2
       DEPLOY_DIR: ${{ secrets.DEPLOY_DIR || '/root/todo' }}
 
     steps:
@@ -125,6 +126,7 @@ jobs:
 
             # Перезапуск через compose (depends_on гарантирует здоровый postgres)
             APP_VERSION=${{ env.APP_VERSION_MAJOR }}.${{ env.APP_VERSION_MINOR }}.${{ env.APP_PATCH }} \
+              MIN_ANDROID_VERSION=${{ env.MIN_ANDROID_VERSION }} \
               POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} \
               MAIL_USERNAME=${{ secrets.MAIL_USERNAME }} \
               MAIL_PASSWORD=${{ secrets.MAIL_PASSWORD }} \
