@@ -135,6 +135,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
             if (uri.equals("/api/auth/change-email")) {
                 return "changeEmail:" + clientIp;
             }
+            if (uri.equals("/api/auth/logout")) {
+                return "logout:" + clientIp;
+            }
         }
 
         // Пропускаем статус, swagger, api-docs без лимитов
@@ -168,6 +171,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             if (uri.equals("/api/auth/reset-password")) return properties.getResetPassword();
             if (uri.equals("/api/auth/resend-verification")) return properties.getResendVerification();
             if (uri.equals("/api/auth/change-email")) return properties.getChangeEmail();
+            if (uri.equals("/api/auth/logout")) return properties.getLogout();
         }
         return properties.getGeneral();
     }

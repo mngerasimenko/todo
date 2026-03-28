@@ -15,12 +15,14 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
+import ru.mngerasimenko.todolist.service.TokenBlacklistService;
 
 import java.io.IOException;
 
 /**
  * Фильтр для проверки JWT токена в каждом запросе.
  * Извлекает токен из заголовка Authorization и устанавливает аутентификацию в SecurityContext.
+ * Проверяет, что токен не находится в blacklist (после logout).
  */
 @Component
 @RequiredArgsConstructor
@@ -29,6 +31,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final UserDetailsService userDetailsService;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Override
     protected void doFilterInternal(
@@ -40,7 +43,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             String jwt = getJwtFromRequest(request);
 
-            if (StringUtils.hasText(jwt) && jwtTokenProvider.validateToken(jwt)) {
+            if (StringUtils.hasText(jwt) && jwtTokenProvider.validateAccessToken(jwt)
+                    && !tokenBlacklistService.isBlacklisted(jwt)) {
                 String username = jwtTokenProvider.getUsernameFromToken(jwt);
 
                 UserDetails userDetails = userDetailsService.loadUserByUsername(username);

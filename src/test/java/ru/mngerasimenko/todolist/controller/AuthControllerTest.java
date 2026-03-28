@@ -24,6 +24,9 @@ import ru.mngerasimenko.todolist.mapper.UserMapper;
 import ru.mngerasimenko.todolist.security.ApiSecurityConfig;
 import ru.mngerasimenko.todolist.security.jwt.JwtProperties;
 import ru.mngerasimenko.todolist.security.jwt.JwtTokenProvider;
+import ru.mngerasimenko.todolist.service.RefreshTokenService;
+import ru.mngerasimenko.todolist.service.RefreshTokenService.RefreshTokenRotationResult;
+import ru.mngerasimenko.todolist.service.TokenBlacklistService;
 import ru.mngerasimenko.todolist.service.UserService;
 
 import java.util.Collections;
@@ -55,6 +58,12 @@ class AuthControllerTest {
 
     @MockitoBean
     private UserMapper userMapper;
+
+    @MockitoBean
+    private RefreshTokenService refreshTokenService;
+
+    @MockitoBean
+    private TokenBlacklistService tokenBlacklistService;
 
     @Autowired
     private JwtTokenProvider jwtTokenProvider;
@@ -103,12 +112,12 @@ class AuthControllerTest {
 
         when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
                 .thenReturn(authentication);
-        when(jwtTokenProvider.generateAccessToken(any(Authentication.class)))
-                .thenReturn("access-token-123");
-        when(jwtTokenProvider.generateRefreshToken("test@example.com"))
-                .thenReturn("refresh-token-123");
         when(userService.getUserByEmail("test@example.com")).thenReturn(testUserDto);
         when(userMapper.toResponse(testUserDto)).thenReturn(testUserResponse);
+        when(jwtTokenProvider.generateAccessToken(any(Authentication.class)))
+                .thenReturn("access-token-123");
+        when(refreshTokenService.createRefreshToken(1L))
+                .thenReturn("refresh-token-123");
 
         // Act & Assert
         mockMvc.perform(post("/api/auth/login")
@@ -216,7 +225,7 @@ class AuthControllerTest {
 
         when(userService.createUser(any(UserDto.class))).thenReturn(newUserDto);
         when(jwtTokenProvider.generateAccessToken("new@example.com")).thenReturn("new-access-token");
-        when(jwtTokenProvider.generateRefreshToken("new@example.com")).thenReturn("new-refresh-token");
+        when(refreshTokenService.createRefreshToken(2L)).thenReturn("new-refresh-token");
         when(userMapper.toResponse(newUserDto)).thenReturn(newUserResponse);
 
         // Act & Assert
@@ -350,10 +359,9 @@ class AuthControllerTest {
                 .refreshToken("valid-refresh-token")
                 .build();
 
-        when(jwtTokenProvider.validateToken("valid-refresh-token")).thenReturn(true);
-        when(jwtTokenProvider.getUsernameFromToken("valid-refresh-token")).thenReturn("test@example.com");
+        when(refreshTokenService.rotateRefreshToken("valid-refresh-token"))
+                .thenReturn(new RefreshTokenRotationResult("new-refresh-token", "test@example.com"));
         when(jwtTokenProvider.generateAccessToken("test@example.com")).thenReturn("new-access-token");
-        when(jwtTokenProvider.generateRefreshToken("test@example.com")).thenReturn("new-refresh-token");
         when(userService.getUserByEmail("test@example.com")).thenReturn(testUserDto);
         when(userMapper.toResponse(testUserDto)).thenReturn(testUserResponse);
 
@@ -378,7 +386,8 @@ class AuthControllerTest {
                 .refreshToken("invalid-refresh-token")
                 .build();
 
-        when(jwtTokenProvider.validateToken("invalid-refresh-token")).thenReturn(false);
+        when(refreshTokenService.rotateRefreshToken("invalid-refresh-token"))
+                .thenThrow(new BadCredentialsException("Невалидный refresh-токен"));
 
         // Act & Assert
         mockMvc.perform(post("/api/auth/refresh")
@@ -429,10 +438,10 @@ class AuthControllerTest {
         );
 
         when(authenticationManager.authenticate(any())).thenReturn(authentication);
-        when(jwtTokenProvider.generateAccessToken(any(Authentication.class))).thenReturn("token");
-        when(jwtTokenProvider.generateRefreshToken(anyString())).thenReturn("refresh");
         when(userService.getUserByEmail(anyString())).thenReturn(testUserDto);
         when(userMapper.toResponse(any())).thenReturn(testUserResponse);
+        when(jwtTokenProvider.generateAccessToken(any(Authentication.class))).thenReturn("token");
+        when(refreshTokenService.createRefreshToken(anyLong())).thenReturn("refresh");
 
         // Act & Assert
         mockMvc.perform(post("/api/auth/login")
@@ -452,7 +461,7 @@ class AuthControllerTest {
 
         when(userService.createUser(any())).thenReturn(testUserDto);
         when(jwtTokenProvider.generateAccessToken(anyString())).thenReturn("token");
-        when(jwtTokenProvider.generateRefreshToken(anyString())).thenReturn("refresh");
+        when(refreshTokenService.createRefreshToken(anyLong())).thenReturn("refresh");
         when(userMapper.toResponse(any())).thenReturn(testUserResponse);
 
         // Act & Assert
@@ -469,10 +478,9 @@ class AuthControllerTest {
                 .refreshToken("valid-token")
                 .build();
 
-        when(jwtTokenProvider.validateToken(anyString())).thenReturn(true);
-        when(jwtTokenProvider.getUsernameFromToken(anyString())).thenReturn("test@example.com");
-        when(jwtTokenProvider.generateAccessToken(anyString())).thenReturn("token");
-        when(jwtTokenProvider.generateRefreshToken(anyString())).thenReturn("refresh");
+        when(refreshTokenService.rotateRefreshToken("valid-token"))
+                .thenReturn(new RefreshTokenRotationResult("new-refresh", "test@example.com"));
+        when(jwtTokenProvider.generateAccessToken("test@example.com")).thenReturn("token");
         when(userService.getUserByEmail(anyString())).thenReturn(testUserDto);
         when(userMapper.toResponse(any())).thenReturn(testUserResponse);
 
@@ -752,5 +760,60 @@ class AuthControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message.email").exists());
+    }
+
+    // ==================== LOGOUT TESTS ====================
+
+    @Test
+    @WithMockUser(username = "test@example.com")
+    void logout_WithRefreshToken_ReturnsOk() throws Exception {
+        // Arrange
+        LogoutRequest logoutRequest = LogoutRequest.builder()
+                .refreshToken("some-refresh-token")
+                .build();
+
+        when(jwtTokenProvider.validateAccessToken(anyString())).thenReturn(true);
+        when(jwtTokenProvider.getExpirationFromToken(anyString()))
+                .thenReturn(java.time.Instant.now().plusSeconds(3600));
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/logout")
+                        .header("Authorization", "Bearer test-access-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(logoutRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Выход выполнен"));
+
+        verify(tokenBlacklistService).blacklistAccessToken(eq("test-access-token"), any());
+        verify(refreshTokenService).revokeByRawToken("some-refresh-token");
+    }
+
+    @Test
+    @WithMockUser(username = "test@example.com")
+    void logout_WithoutRefreshToken_ReturnsOk() throws Exception {
+        // Arrange
+        when(jwtTokenProvider.validateAccessToken(anyString())).thenReturn(true);
+        when(jwtTokenProvider.getExpirationFromToken(anyString()))
+                .thenReturn(java.time.Instant.now().plusSeconds(3600));
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/logout")
+                        .header("Authorization", "Bearer test-access-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Выход выполнен"));
+
+        verify(tokenBlacklistService).blacklistAccessToken(eq("test-access-token"), any());
+        verify(refreshTokenService, never()).revokeByRawToken(anyString());
+    }
+
+    @Test
+    void logout_Unauthenticated_ReturnsUnauthorized() throws Exception {
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
     }
 }

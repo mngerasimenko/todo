@@ -11,6 +11,7 @@ import ru.mngerasimenko.todolist.security.RateLimitProperties;
 import ru.mngerasimenko.todolist.security.jwt.JwtAuthenticationFilter;
 import ru.mngerasimenko.todolist.security.jwt.JwtProperties;
 import ru.mngerasimenko.todolist.security.jwt.JwtTokenProvider;
+import ru.mngerasimenko.todolist.service.TokenBlacklistService;
 import ru.mngerasimenko.todolist.settings.AppProperties;
 
 /**
@@ -46,6 +47,11 @@ public class TestSecurityConfig {
         return new AppProperties();
     }
 
+    @Bean
+    public TokenBlacklistService tokenBlacklistService() {
+        return Mockito.mock(TokenBlacklistService.class);
+    }
+
     /**
      * Создаёт настоящий JwtAuthenticationFilter для тестов.
      * Фильтр использует замокированные зависимости, но корректно пропускает запросы через filterChain.
@@ -53,9 +59,10 @@ public class TestSecurityConfig {
     @Bean
     public JwtAuthenticationFilter jwtAuthenticationFilter(
             JwtTokenProvider jwtTokenProvider,
-            UserDetailsService userDetailsService
+            UserDetailsService userDetailsService,
+            TokenBlacklistService tokenBlacklistService
     ) {
-        return new JwtAuthenticationFilter(jwtTokenProvider, userDetailsService);
+        return new JwtAuthenticationFilter(jwtTokenProvider, userDetailsService, tokenBlacklistService);
     }
 
     /**

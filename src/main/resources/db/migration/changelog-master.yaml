@@ -23,3 +23,5 @@ databaseChangeLog:
       file: db/migration/011-remove-list-name-uniqueness.yaml
   - include:
       file: db/migration/012-remove-user-name-uniqueness.yaml
+  - include:
+      file: db/migration/013-create-refresh-token.yaml

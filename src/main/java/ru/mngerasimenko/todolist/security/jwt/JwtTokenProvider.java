@@ -10,6 +10,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+import java.time.Instant;
 import java.util.Date;
 
 /**
@@ -48,26 +49,7 @@ public class JwtTokenProvider {
 
         return Jwts.builder()
                 .subject(username)
-                .issuedAt(now)
-                .expiration(expiryDate)
-                .signWith(getSigningKey())
-                .compact();
-    }
-
-    /**
-     * Генерирует refresh токен для пользователя
-     *
-     * @param username имя пользователя
-     * @return JWT refresh токен
-     */
-    public String generateRefreshToken(String username) {
-        Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + jwtProperties.getRefreshTokenExpiration());
-
-        log.debug("Выдача refresh токена: user={}, истекает через {}с", username, jwtProperties.getRefreshTokenExpiration() / 1000);
-
-        return Jwts.builder()
-                .subject(username)
+                .claim("type", "access")
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(getSigningKey())
@@ -81,28 +63,53 @@ public class JwtTokenProvider {
      * @return username пользователя
      */
     public String getUsernameFromToken(String token) {
-        Claims claims = Jwts.parser()
-                .verifyWith(getSigningKey())
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
-
-        return claims.getSubject();
+        return parseClaims(token).getSubject();
     }
 
     /**
-     * Валидирует JWT токен
+     * Валидирует JWT токен (без проверки типа)
      *
      * @param token JWT токен
      * @return true если токен валиден, false в противном случае
      */
     public boolean validateToken(String token) {
+        return parseClaims(token) != null;
+    }
+
+    /**
+     * Валидирует access токен за один парсинг (подпись + срок + type=access)
+     */
+    public boolean validateAccessToken(String token) {
+        Claims claims = parseClaims(token);
+        if (claims == null) {
+            return false;
+        }
+        String type = claims.get("type", String.class);
+        if (!"access".equals(type)) {
+            log.warn("Токен не является access-токеном, type={}", type);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Извлекает время истечения токена
+     */
+    public Instant getExpirationFromToken(String token) {
+        return parseClaims(token).getExpiration().toInstant();
+    }
+
+    /**
+     * Парсит и валидирует JWT, возвращает claims или null при ошибке.
+     * Единственная точка парсинга — исключает повторную верификацию подписи.
+     */
+    private Claims parseClaims(String token) {
         try {
-            Jwts.parser()
+            return Jwts.parser()
                     .verifyWith(getSigningKey())
                     .build()
-                    .parseSignedClaims(token);
-            return true;
+                    .parseSignedClaims(token)
+                    .getPayload();
         } catch (SecurityException ex) {
             log.warn("Неверная подпись JWT токена");
         } catch (MalformedJwtException ex) {
@@ -114,7 +121,7 @@ public class JwtTokenProvider {
         } catch (IllegalArgumentException ex) {
             log.warn("JWT claims пустой");
         }
-        return false;
+        return null;
     }
 
     /**
