@@ -14,6 +14,7 @@ import ru.mngerasimenko.todolist.exception.ListNotFoundException;
 import ru.mngerasimenko.todolist.exception.TokenExpiredException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.TaskListMapper;
+import static ru.mngerasimenko.todolist.util.LogUtils.maskEmail;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
 import ru.mngerasimenko.todolist.model.InviteToken;
 import ru.mngerasimenko.todolist.model.TaskList;
@@ -219,7 +220,7 @@ public class TaskListServiceImpl implements TaskListService {
             emailService.sendInviteEmail(recipientEmail, inviteLink, taskList.getName(), inviter.getName());
         }
 
-        log.info("Создано приглашение: listId={}, inviterId={}, email={}", listId, userId, recipientEmail);
+        log.info("Создано приглашение: listId={}, inviterId={}, email={}", listId, userId, maskEmail(recipientEmail));
         return InviteResponse.builder()
                 .inviteLink(inviteLink)
                 .expiresAt(expiresAt)

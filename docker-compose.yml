@@ -60,7 +60,7 @@ services:
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-db:5432/todo
       - SPRING_DATASOURCE_USERNAME=postgres
-      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
       - SPRING_PROFILES_ACTIVE=production
       - JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS:--Xmx768m -Xms768m}
       - APP_VERSION=${APP_VERSION:-0.0.1}
@@ -126,7 +126,7 @@ services:
     # Port NOT exposed to host — access only via Docker network (todo-app connects to postgres-db:5432)
 
     environment:
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=todo
       - POSTGRES_USER=postgres
 

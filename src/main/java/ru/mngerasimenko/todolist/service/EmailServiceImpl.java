@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import ru.mngerasimenko.todolist.settings.EmailProperties;
 
 import org.springframework.web.util.HtmlUtils;
+import static ru.mngerasimenko.todolist.util.LogUtils.maskEmail;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -63,9 +64,9 @@ public class EmailServiceImpl implements EmailService {
             helper.setSubject(subject);
             helper.setText(htmlBody, true);
             mailSender.send(message);
-            log.info("Email отправлен на {}: {}", to, subject);
+            log.info("Email отправлен на {}: {}", maskEmail(to), subject);
         } catch (Exception e) {
-            log.error("Ошибка отправки email на {}: {}", to, e.getMessage());
+            log.error("Ошибка отправки email на {}: {}", maskEmail(to), e.getMessage());
         }
     }
 

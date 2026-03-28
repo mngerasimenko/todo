@@ -23,7 +23,7 @@ send_telegram_alert() {
 }
 
 # Create dump on production and copy via SSH
-ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no -i "$SSH_KEY" root@${PRODUCTION_SERVER} \
+ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=accept-new -i "$SSH_KEY" root@${PRODUCTION_SERVER} \
   "docker exec postgres-db pg_dump -U postgres -Fc todo" > "$FILENAME" 2>/dev/null
 
 if [ -s "$FILENAME" ]; then

@@ -11,6 +11,7 @@ import ru.mngerasimenko.todolist.repository.RefreshTokenRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 import ru.mngerasimenko.todolist.security.jwt.JwtProperties;
 import ru.mngerasimenko.todolist.util.TokenUtils;
+import static ru.mngerasimenko.todolist.util.LogUtils.maskEmail;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -43,7 +44,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         RefreshToken refreshToken = new RefreshToken(tokenHash, user, familyId, expiresAt);
         refreshTokenRepository.saveAndFlush(refreshToken);
 
-        log.info("Создан refresh-токен для пользователя: {}", user.getEmail());
+        log.info("Создан refresh-токен для пользователя: {}", maskEmail(user.getEmail()));
         return rawToken;
     }
 
@@ -60,7 +61,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
 
         // Проверка истечения
         if (existing.getExpiresAt().isBefore(LocalDateTime.now())) {
-            log.warn("Refresh-токен истёк для пользователя: {}", existing.getUser().getEmail());
+            log.warn("Refresh-токен истёк для пользователя: {}", maskEmail(existing.getUser().getEmail()));
             throw new BadCredentialsException("Refresh-токен истёк");
         }
 
@@ -68,7 +69,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         if (existing.isRevoked()) {
             log.warn("REUSE DETECTION: повторное использование отозванного refresh-токена! " +
                     "Пользователь: {}, familyId: {}. Отзываем всю семью.",
-                    existing.getUser().getEmail(), existing.getFamilyId());
+                    maskEmail(existing.getUser().getEmail()), existing.getFamilyId());
             refreshTokenRepository.revokeFamily(existing.getFamilyId());
             throw new BadCredentialsException("Refresh-токен отозван. Войдите заново.");
         }
@@ -88,7 +89,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         refreshTokenRepository.saveAndFlush(newToken);
 
         String email = existing.getUser().getEmail();
-        log.info("Ротация refresh-токена для пользователя: {}", email);
+        log.info("Ротация refresh-токена для пользователя: {}", maskEmail(email));
 
         return new RefreshTokenRotationResult(newRawToken, email);
     }
@@ -101,7 +102,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
                 .ifPresent(token -> {
                     token.setRevoked(true);
                     refreshTokenRepository.saveAndFlush(token);
-                    log.info("Refresh-токен отозван для пользователя: {}", token.getUser().getEmail());
+                    log.info("Refresh-токен отозван для пользователя: {}", maskEmail(token.getUser().getEmail()));
                 });
     }
 

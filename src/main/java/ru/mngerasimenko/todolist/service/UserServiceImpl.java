@@ -14,6 +14,7 @@ import ru.mngerasimenko.todolist.mapper.UserMapper;
 import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 import ru.mngerasimenko.todolist.settings.EmailProperties;
+import static ru.mngerasimenko.todolist.util.LogUtils.maskEmail;
 
 import ru.mngerasimenko.todolist.model.TaskListRole;
 import ru.mngerasimenko.todolist.model.TaskListUser;
@@ -306,7 +307,7 @@ public class UserServiceImpl implements UserService {
 
         // Отправляем письмо верификации на новый email
         emailService.sendVerificationEmail(newEmail, rawToken);
-        log.info("Email изменён: userId={}, newEmail={}", userId, newEmail);
+        log.info("Email изменён: userId={}, newEmail={}", userId, maskEmail(newEmail));
     }
 
     @Transactional(readOnly = true)

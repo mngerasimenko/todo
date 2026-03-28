@@ -24,6 +24,7 @@ import ru.mngerasimenko.todolist.service.RefreshTokenService;
 import ru.mngerasimenko.todolist.service.RefreshTokenService.RefreshTokenRotationResult;
 import ru.mngerasimenko.todolist.service.TokenBlacklistService;
 import ru.mngerasimenko.todolist.service.UserService;
+import static ru.mngerasimenko.todolist.util.LogUtils.maskEmail;
 
 /**
  * REST контроллер для аутентификации и регистрации пользователей
@@ -50,7 +51,7 @@ public class AuthController {
      */
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest loginRequest) {
-        log.info("Попытка входа пользователя: {}", loginRequest.getEmail());
+        log.info("Попытка входа пользователя: {}", maskEmail(loginRequest.getEmail()));
 
         // Аутентификация пользователя (поле username содержит email)
         Authentication authentication = authenticationManager.authenticate(
@@ -78,7 +79,7 @@ public class AuthController {
                 .user(userResponse)
                 .build();
 
-        log.info("Успешный вход пользователя: {}", loginRequest.getEmail());
+        log.info("Успешный вход пользователя: {}", maskEmail(loginRequest.getEmail()));
         return ResponseEntity.ok(response);
     }
 
@@ -148,7 +149,7 @@ public class AuthController {
                 .user(userResponse)
                 .build();
 
-        log.info("Успешное обновление токена для пользователя: {}", result.email());
+        log.info("Успешное обновление токена для пользователя: {}", maskEmail(result.email()));
         return ResponseEntity.ok(response);
     }
 
