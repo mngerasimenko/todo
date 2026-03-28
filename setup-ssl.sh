@@ -3,7 +3,7 @@
 # Запускать ОДИН РАЗ на сервере от root
 #
 # Предварительные условия:
-# 1. DNS A-запись todo.keepware.ru -> 185.244.172.45 уже настроена
+# 1. DNS A-запись todo.keepware.ru -> <server IP> уже настроена
 # 2. Порты 80 и 443 свободны
 # 3. Docker и Docker Compose установлены
 # 4. Контейнеры todo-app, todo-web, postgres-db запущены в сети todo-network

@@ -96,7 +96,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "docker-compose.yml"
-          target: "/root/todo/"
+          target: "${{ secrets.DEPLOY_DIR }}"
 
       - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -105,7 +105,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /root/todo
+            cd "${{ secrets.DEPLOY_DIR }}"
 
             # Обновление репозитория (nginx.conf, assetlinks.json, мониторинг)
             # git fetch + reset вместо pull — не блокируется локальными изменениями (.env и т.д.)

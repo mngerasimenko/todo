@@ -1,6 +1,6 @@
 #!/bin/bash
 # External monitoring: check production availability from another IP
-# Runs on BACKUP server (185.244.172.45), checks PRODUCTION (todo.keepware.ru)
+# Runs on BACKUP server, checks PRODUCTION (todo.keepware.ru)
 # Cron: */5 * * * * /root/monitoring/external-monitor.sh
 
 source /root/monitoring/monitor.conf

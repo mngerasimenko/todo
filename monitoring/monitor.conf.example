@@ -12,3 +12,7 @@ ALERT_COOLDOWN=1800
 
 # Containers to monitor
 MONITOR_CONTAINERS="todo-app postgres-db nginx-proxy todo-web"
+
+# Offsite backup settings (used by offsite-backup.sh)
+PRODUCTION_SERVER="your-production-ip-here"
+SSH_KEY="/root/.ssh/id_ed25519_backup"

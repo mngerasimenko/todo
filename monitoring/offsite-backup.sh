@@ -1,11 +1,18 @@
 #!/bin/bash
 # Offsite backup: copy PostgreSQL dump from production server
-# Runs on BACKUP server (185.244.172.45), pulls dump from PRODUCTION (82.114.226.107)
+# Runs on BACKUP server, pulls dump from PRODUCTION
 # Cron: 0 4 * * * /root/monitoring/offsite-backup.sh >> /root/backups/offsite-backup.log 2>&1
+# Required in monitor.conf: PRODUCTION_SERVER, SSH_KEY (or defaults below)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PRODUCTION_SERVER="82.114.226.107"
-SSH_KEY="/root/.ssh/id_ed25519_backup"
+
+# Load config (PRODUCTION_SERVER, SSH_KEY, TELEGRAM_BOT_TOKEN, etc.)
+if [ -f "${SCRIPT_DIR}/monitor.conf" ]; then
+    source "${SCRIPT_DIR}/monitor.conf"
+fi
+
+PRODUCTION_SERVER="${PRODUCTION_SERVER:?PRODUCTION_SERVER not set in monitor.conf}"
+SSH_KEY="${SSH_KEY:-/root/.ssh/id_ed25519_backup}"
 BACKUP_DIR="/root/backups/offsite"
 RETENTION_DAYS=14
 
@@ -13,8 +20,7 @@ mkdir -p "$BACKUP_DIR"
 FILENAME="$BACKUP_DIR/todo-$(date +%Y%m%d).dump"
 
 send_telegram_alert() {
-    if [ -f "${SCRIPT_DIR}/monitor.conf" ]; then
-        source "${SCRIPT_DIR}/monitor.conf"
+    if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
         curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
             -d parse_mode="HTML" \
