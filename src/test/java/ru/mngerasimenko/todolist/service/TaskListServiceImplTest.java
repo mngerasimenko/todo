@@ -532,7 +532,7 @@ class TaskListServiceImplTest {
         InviteInfoResponse result = taskListService.getInviteInfo(rawToken);
 
         assertThat(result.getListName()).isEqualTo("TestList");
-        assertThat(result.getInviterName()).isEqualTo("testuser");
+        assertThat(result.getInviterName()).isEqualTo("t***");
         assertThat(result.getExpiresAt()).isNotNull();
     }
 

@@ -237,9 +237,13 @@ public class TaskListServiceImpl implements TaskListService {
             throw new TokenExpiredException("Срок действия приглашения истёк");
         }
 
+        // Маскируем имя приглашающего для неавторизованных пользователей (Vuln #8)
+        String fullName = inviteToken.getInviter().getName();
+        String maskedName = fullName.substring(0, 1) + "***";
+
         return InviteInfoResponse.builder()
                 .listName(inviteToken.getTaskList().getName())
-                .inviterName(inviteToken.getInviter().getName())
+                .inviterName(maskedName)
                 .expiresAt(inviteToken.getExpiresAt())
                 .build();
     }

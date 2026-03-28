@@ -102,9 +102,12 @@ public class ApiSecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 // Отключаем CSRF для API (stateless)
                 .csrf(AbstractHttpConfigurer::disable)
-                // Отключаем HSTS в Spring Security (устанавливается nginx)
+                // Отключаем заголовки безопасности, которые уже устанавливает nginx,
+                // чтобы избежать дублирования (HSTS, X-Content-Type-Options, X-Frame-Options)
                 .headers(headers -> headers
                         .httpStrictTransportSecurity(hsts -> hsts.disable())
+                        .contentTypeOptions(cto -> cto.disable())
+                        .frameOptions(fo -> fo.disable())
                 );
 
         return http.build();
