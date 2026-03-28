@@ -1,0 +1,4 @@
+Contact: mailto:mngerasimenko@gmail.com
+Preferred-Languages: ru, en
+Canonical: https://todo.keepware.ru/.well-known/security.txt
+Expires: 2027-03-28T00:00:00.000Z
