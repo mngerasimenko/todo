@@ -10,6 +10,8 @@ import ru.mngerasimenko.todolist.exception.TodoNotFoundException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
 import ru.mngerasimenko.todolist.model.TaskList;
+import ru.mngerasimenko.todolist.model.TaskListRole;
+import ru.mngerasimenko.todolist.model.TaskListUser;
 import ru.mngerasimenko.todolist.model.Todo;
 import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.repository.TaskListRepository;
@@ -72,7 +74,7 @@ public class TodoServiceImpl implements TodoService {
     public TodoDto updateTodo(Long id, TodoDto todoDto, Long requestingUserId) {
         Todo existingTodo = todoRepository.findById(id)
                 .orElseThrow(() -> new TodoNotFoundException("Todo not found with id: " + id));
-        assertUserIsMember(existingTodo, requestingUserId);
+        assertCanModifyTodo(existingTodo, requestingUserId, "редактирование");
 
         if (todoDto.getUserId() != null && !todoDto.getUserId().equals(existingTodo.getUserId())) {
             User newUser = userRepository.findById(todoDto.getUserId())
@@ -175,7 +177,7 @@ public class TodoServiceImpl implements TodoService {
     public void deleteTodo(Long id, Long requestingUserId) {
         Todo todo = todoRepository.findById(id)
                 .orElseThrow(() -> new TodoNotFoundException("Todo not found with id: " + id));
-        assertUserIsMember(todo, requestingUserId);
+        assertCanModifyTodo(todo, requestingUserId, "удаление");
         todoRepository.deleteById(id);
         log.info("Удалена задача: id={}, userId={}", id, requestingUserId);
     }
@@ -191,7 +193,7 @@ public class TodoServiceImpl implements TodoService {
     public TodoDto markAsDone(Long id, Long completorUserId) {
         Todo todo = todoRepository.findById(id)
                 .orElseThrow(() -> new TodoNotFoundException("Todo not found with id: " + id));
-        assertUserIsMember(todo, completorUserId);
+        assertCanModifyTodo(todo, completorUserId, "отметка выполнения");
         todo.setDone(true);
         todo.setCompletedAt(LocalDateTime.now());
         if (completorUserId != null) {
@@ -208,7 +210,7 @@ public class TodoServiceImpl implements TodoService {
     public TodoDto markAsUndone(Long id, Long requestingUserId) {
         Todo todo = todoRepository.findById(id)
                 .orElseThrow(() -> new TodoNotFoundException("Todo not found with id: " + id));
-        assertUserIsMember(todo, requestingUserId);
+        assertCanModifyTodo(todo, requestingUserId, "снятие отметки выполнения");
         todo.setDone(false);
         todo.setCompletedAt(null);
         todo.setCompletorUser(null);
@@ -217,13 +219,52 @@ public class TodoServiceImpl implements TodoService {
     }
 
     /**
-     * Проверяет, что пользователь является участником списка, к которому принадлежит задача.
+     * Проверяет права доступа к задаче.
+     * 
+     * Правила доступа:
+     * 1. Только участник списка может работать с задачами
+     * 2. Владелец задачи может делать всё (кроме чужих приватных)
+     * 3. ADMIN списка может редактировать/удалять чужие публичные задачи
+     * 4. Приватные задачи доступны только их создателю
+     * 
+     * @param todo задача
+     * @param userId ID текущего пользователя
+     * @param action действие ("удаление", "редактирование", "отметка выполнения")
+     * @throws AccessDeniedException если доступ запрещён
      */
-    private void assertUserIsMember(Todo todo, Long userId) {
+    private void assertCanModifyTodo(Todo todo, Long userId, String action) {
         Long listId = todo.getTaskList().getId();
-        if (!taskListUserRepository.existsByIdListIdAndIdUserId(listId, userId)) {
-            throw new AccessDeniedException(
-                    "Доступ запрещён: пользователь не является участником списка задачи");
+        Long todoOwnerId = todo.getUser().getId();
+        boolean isPrivate = Boolean.TRUE.equals(todo.getIsPrivate());
+        
+        // 1. Проверка на участника списка
+        TaskListUser membership = taskListUserRepository.findByIdListIdAndIdUserId(listId, userId)
+                .orElseThrow(() -> new AccessDeniedException(
+                        "Доступ запрещён: пользователь не является участником списка задачи"));
+        
+        // 2. Если пользователь — владелец задачи, доступ разрешён
+        if (todoOwnerId.equals(userId)) {
+            return;
         }
+        
+        // 3. Если задача приватная — доступна только владельцу
+        if (isPrivate) {
+            log.warn("Попытка {} чужой приватной задачи пользователем id={}", action, userId);
+            throw new AccessDeniedException(
+                    "Приватные задачи доступны только их создателю");
+        }
+        
+        // 4. Если пользователь ADMIN списка — разрешаем редактирование/удаление публичных задач
+        if (membership.getRole() == TaskListRole.ADMIN) {
+            log.debug("ADMIN списка {} выполнил {} задачи id={} (владелец: {})", 
+                    userId, action, todo.getId(), todoOwnerId);
+            return;
+        }
+        
+        // 5. Обычный USER не может редактировать/удалять чужие публичные задачи
+        log.warn("Пользователь id={} (не ADMIN, не владелец) попытался {} чужую задачу id={}", 
+                userId, action, todo.getId());
+        throw new AccessDeniedException(
+                "Только создатель задачи или администратор списка могут " + action.toLowerCase() + " эту задачу");
     }
 }
