@@ -150,18 +150,18 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Обрабатывает превышение лимита подписки (HTTP 403).
+     * Обрабатывает превышение лимита подписки (HTTP 402 Payment Required).
      */
     @ExceptionHandler(SubscriptionLimitExceededException.class)
     public ResponseEntity<Map<String, Object>> handleSubscriptionLimit(SubscriptionLimitExceededException ex) {
         log.warn("Subscription limit exceeded: {} (type: {})", ex.getMessage(), ex.getLimitType());
         Map<String, Object> response = new HashMap<>();
         response.put("timestamp", LocalDateTime.now());
-        response.put("status", HttpStatus.FORBIDDEN.value());
+        response.put("status", 402);
         response.put("error", "Subscription Limit Exceeded");
         response.put("message", ex.getMessage());
         response.put("limit_type", ex.getLimitType().name());
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+        return ResponseEntity.status(402).body(response);
     }
 
     /**
