@@ -12,6 +12,8 @@ import ru.mngerasimenko.todolist.exception.TodoNotFoundException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
 import ru.mngerasimenko.todolist.model.TaskList;
+import ru.mngerasimenko.todolist.model.TaskListRole;
+import ru.mngerasimenko.todolist.model.TaskListUser;
 import ru.mngerasimenko.todolist.model.Todo;
 import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.repository.TaskListRepository;
@@ -241,7 +243,8 @@ public class TodoServiceImplTest {
         updatedTodoDto.setCreatedAt(updatedTodo.getCreatedAt());
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(existingTodo));
-        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(new TaskListUser(testTaskList, testUser, TaskListRole.USER)));
         doNothing().when(todoMapper).updateEntityFromDto(updateDto, existingTodo);
         when(todoRepository.save(any(Todo.class))).thenReturn(updatedTodo);
         when(todoMapper.toDto(updatedTodo)).thenReturn(updatedTodoDto);
@@ -283,7 +286,8 @@ public class TodoServiceImplTest {
         existingTodo.setTaskList(testTaskList);
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(existingTodo));
-        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(new TaskListUser(testTaskList, testUser, TaskListRole.USER)));
         when(userRepository.findById(999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> todoService.updateTodo(1L, updateDto, 1L))
@@ -317,7 +321,8 @@ public class TodoServiceImplTest {
         updatedTodoDto.setUserId(newUser.getId());
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(existingTodo));
-        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(new TaskListUser(testTaskList, testUser, TaskListRole.USER)));
         when(userRepository.findById(2L)).thenReturn(Optional.of(newUser));
         doNothing().when(todoMapper).updateEntityFromDto(updateDto, existingTodo);
         when(todoRepository.save(any(Todo.class))).thenReturn(updatedTodo);
@@ -333,7 +338,8 @@ public class TodoServiceImplTest {
     @Test
     void getTodoById_WithValidId_ReturnsTodoDto() {
         when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
-        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(new TaskListUser(testTaskList, testUser, TaskListRole.USER)));
         when(todoMapper.toDto(testTodo)).thenReturn(testTodoDto);
 
         TodoDto result = todoService.getTodoById(1L, 1L);
@@ -357,7 +363,7 @@ public class TodoServiceImplTest {
     @Test
     void getTodoById_WithNonMember_ThrowsAccessDeniedException() {
         when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
-        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 99L)).thenReturn(false);
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> todoService.getTodoById(1L, 99L))
                 .isInstanceOf(AccessDeniedException.class);
@@ -534,7 +540,8 @@ public class TodoServiceImplTest {
     @Test
     void deleteTodo_WithValidId_DeletesTodo() {
         when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
-        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(new TaskListUser(testTaskList, testUser, TaskListRole.USER)));
 
         todoService.deleteTodo(1L, 1L);
 
@@ -567,6 +574,7 @@ public class TodoServiceImplTest {
         todoToMark.setName("Todo");
         todoToMark.setDone(false);
         todoToMark.setTaskList(testTaskList);
+        todoToMark.setUser(testUser);
 
         Todo markedTodo = new Todo();
         markedTodo.setId(1L);
@@ -581,7 +589,8 @@ public class TodoServiceImplTest {
         markedDto.setDone(true);
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(todoToMark));
-        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(new TaskListUser(testTaskList, testUser, TaskListRole.USER)));
         when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
         when(todoRepository.save(any(Todo.class))).thenReturn(markedTodo);
         when(todoMapper.toDto(markedTodo)).thenReturn(markedDto);
@@ -618,6 +627,7 @@ public class TodoServiceImplTest {
         todoToMark.setName("Todo");
         todoToMark.setDone(false);
         todoToMark.setTaskList(testTaskList);
+        todoToMark.setUser(testUser);
 
         Todo markedTodo = new Todo();
         markedTodo.setId(1L);
@@ -633,7 +643,8 @@ public class TodoServiceImplTest {
         markedDto.setCompletorUserId(2L);
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(todoToMark));
-        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 2L)).thenReturn(true);
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 2L))
+                .thenReturn(Optional.of(new TaskListUser(testTaskList, completor, TaskListRole.USER)));
         when(userRepository.findById(2L)).thenReturn(Optional.of(completor));
         when(todoRepository.save(any(Todo.class))).thenReturn(markedTodo);
         when(todoMapper.toDto(markedTodo)).thenReturn(markedDto);
@@ -655,6 +666,7 @@ public class TodoServiceImplTest {
         todoToMark.setDone(true);
         todoToMark.setCompletedAt(LocalDateTime.now());
         todoToMark.setTaskList(testTaskList);
+        todoToMark.setUser(testUser);
 
         Todo markedTodo = new Todo();
         markedTodo.setId(1L);
@@ -668,7 +680,8 @@ public class TodoServiceImplTest {
         markedDto.setDone(false);
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(todoToMark));
-        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(new TaskListUser(testTaskList, testUser, TaskListRole.USER)));
         when(todoRepository.save(any(Todo.class))).thenReturn(markedTodo);
         when(todoMapper.toDto(markedTodo)).thenReturn(markedDto);
 
@@ -705,7 +718,7 @@ public class TodoServiceImplTest {
         existingTodo.setTaskList(testTaskList);
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(existingTodo));
-        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 99L)).thenReturn(false);
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> todoService.updateTodo(1L, testTodoDto, 99L))
                 .isInstanceOf(AccessDeniedException.class)
@@ -717,7 +730,7 @@ public class TodoServiceImplTest {
     @Test
     void deleteTodo_WhenUserNotMember_ThrowsAccessDeniedException() {
         when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
-        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 99L)).thenReturn(false);
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> todoService.deleteTodo(1L, 99L))
                 .isInstanceOf(AccessDeniedException.class)
@@ -733,9 +746,10 @@ public class TodoServiceImplTest {
         todoToMark.setName("Todo");
         todoToMark.setDone(false);
         todoToMark.setTaskList(testTaskList);
+        todoToMark.setUser(testUser);
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(todoToMark));
-        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 99L)).thenReturn(false);
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> todoService.markAsDone(1L, 99L))
                 .isInstanceOf(AccessDeniedException.class)
@@ -751,14 +765,183 @@ public class TodoServiceImplTest {
         todoToMark.setName("Todo");
         todoToMark.setDone(true);
         todoToMark.setTaskList(testTaskList);
+        todoToMark.setUser(testUser);
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(todoToMark));
-        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 99L)).thenReturn(false);
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> todoService.markAsUndone(1L, 99L))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("не является участником");
 
         verify(todoRepository, never()).save(any(Todo.class));
+    }
+
+    // ========== Тесты на проверку владельца и ADMIN ==========
+
+    @Test
+    void deleteTodo_WhenUserIsOwner_DeletesSuccessfully() {
+        // Пользователь владеет задачей
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(new TaskListUser(testTaskList, testUser, TaskListRole.USER)));
+
+        todoService.deleteTodo(1L, 1L);
+
+        verify(todoRepository).deleteById(1L);
+    }
+
+    @Test
+    void deleteTodo_WhenUserIsAdmin_DeletesSuccessfully() {
+        // Пользователь — ADMIN списка, но не владелец задачи
+        User otherUser = new User();
+        otherUser.setId(2L);
+        testTodo.setUser(otherUser);
+
+        TaskListUser adminMembership = new TaskListUser();
+        adminMembership.setRole(TaskListRole.ADMIN);
+
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(adminMembership));
+
+        todoService.deleteTodo(1L, 1L);
+
+        verify(todoRepository).deleteById(1L);
+    }
+
+    @Test
+    void deleteTodo_WhenUserIsNotOwnerNotAdmin_ThrowsAccessDeniedException() {
+        // Пользователь — USER, не владелец задачи
+        User otherUser = new User();
+        otherUser.setId(2L);
+        testTodo.setUser(otherUser);
+
+        TaskListUser userMembership = new TaskListUser();
+        userMembership.setRole(TaskListRole.USER);
+
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(userMembership));
+
+        assertThatThrownBy(() -> todoService.deleteTodo(1L, 1L))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Только создатель задачи или администратор списка могут изменить эту задачу");
+
+        verify(todoRepository, never()).deleteById(anyLong());
+    }
+
+    @Test
+    void deleteTodo_WhenPrivateTodoNotOwner_ThrowsAccessDeniedException() {
+        // Приватная задача, пользователь не владелец
+        User otherUser = new User();
+        otherUser.setId(2L);
+        testTodo.setUser(otherUser);
+        testTodo.setIsPrivate(true);
+
+        TaskListUser adminMembership = new TaskListUser();
+        adminMembership.setRole(TaskListRole.ADMIN);
+
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(adminMembership));
+
+        assertThatThrownBy(() -> todoService.deleteTodo(1L, 1L))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Приватные задачи доступны только их создателю");
+
+        verify(todoRepository, never()).deleteById(anyLong());
+    }
+
+    @Test
+    void updateTodo_WhenUserIsNotOwnerNotAdmin_ThrowsAccessDeniedException() {
+        // Пользователь — USER, не владелец задачи
+        User otherUser = new User();
+        otherUser.setId(2L);
+        testTodo.setUser(otherUser);
+
+        TaskListUser userMembership = new TaskListUser();
+        userMembership.setRole(TaskListRole.USER);
+
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(userMembership));
+
+        assertThatThrownBy(() -> todoService.updateTodo(1L, testTodoDto, 1L))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Только создатель задачи или администратор списка могут изменить эту задачу");
+
+        verify(todoRepository, never()).save(any(Todo.class));
+    }
+
+    @Test
+    void updateTodo_WhenUserIsAdmin_UpdatesSuccessfully() {
+        // ADMIN списка может редактировать чужую публичную задачу
+        User otherUser = new User();
+        otherUser.setId(2L);
+        testTodo.setUser(otherUser);
+
+        TaskListUser adminMembership = new TaskListUser();
+        adminMembership.setRole(TaskListRole.ADMIN);
+
+        TodoDto updateDto = new TodoDto();
+        updateDto.setName("Updated");
+        updateDto.setDone(false);
+
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(adminMembership));
+        doNothing().when(todoMapper).updateEntityFromDto(updateDto, testTodo);
+        when(todoRepository.save(any(Todo.class))).thenReturn(testTodo);
+        when(todoMapper.toDto(testTodo)).thenReturn(testTodoDto);
+
+        TodoDto result = todoService.updateTodo(1L, updateDto, 1L);
+
+        assertThat(result).isNotNull();
+        verify(todoRepository).save(any(Todo.class));
+    }
+
+    // ========== Тесты на коллаборацию (отметка выполнения любым участником) ==========
+
+    @Test
+    void markAsDone_WhenUserIsNotOwnerButIsUser_MarksAsDone() {
+        // Пользователь — USER (не ADMIN, не владелец), может отметить чужую задачу
+        User otherUser = new User();
+        otherUser.setId(2L);
+        testTodo.setUser(otherUser);
+
+        TaskListUser userMembership = new TaskListUser();
+        userMembership.setRole(TaskListRole.USER);
+
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(userMembership));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+
+        todoService.markAsDone(1L, 1L);
+
+        verify(todoRepository).save(testTodo);
+        assertThat(testTodo.isDone()).isTrue();
+    }
+
+    @Test
+    void markAsUndone_WhenUserIsNotOwnerButIsUser_MarksAsUndone() {
+        // Пользователь — USER (не ADMIN, не владелец), может снять отметку с чужой задачи
+        User otherUser = new User();
+        otherUser.setId(2L);
+        testTodo.setUser(otherUser);
+        testTodo.setDone(true);
+
+        TaskListUser userMembership = new TaskListUser();
+        userMembership.setRole(TaskListRole.USER);
+
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(userMembership));
+
+        todoService.markAsUndone(1L, 1L);
+
+        verify(todoRepository).save(testTodo);
+        assertThat(testTodo.isDone()).isFalse();
     }
 }
