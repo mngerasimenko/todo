@@ -338,7 +338,8 @@ public class TodoServiceImplTest {
     @Test
     void getTodoById_WithValidId_ReturnsTodoDto() {
         when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
-        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(new TaskListUser(testTaskList, testUser, TaskListRole.USER)));
         when(todoMapper.toDto(testTodo)).thenReturn(testTodoDto);
 
         TodoDto result = todoService.getTodoById(1L, 1L);
@@ -362,7 +363,7 @@ public class TodoServiceImplTest {
     @Test
     void getTodoById_WithNonMember_ThrowsAccessDeniedException() {
         when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
-        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 99L)).thenReturn(false);
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> todoService.getTodoById(1L, 99L))
                 .isInstanceOf(AccessDeniedException.class);

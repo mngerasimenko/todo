@@ -115,7 +115,7 @@ public class TodoServiceImpl implements TodoService {
     public TodoDto getTodoById(Long id, Long requestingUserId) {
         Todo todo = todoRepository.findById(id)
                 .orElseThrow(() -> new TodoNotFoundException("Todo not found with id: " + id));
-        assertUserIsMember(todo, requestingUserId);
+        assertCanModifyTodo(todo, requestingUserId, true);
         return todoMapper.toDto(todo);
     }
 
