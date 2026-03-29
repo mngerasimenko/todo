@@ -121,10 +121,9 @@ jobs:
             git fetch origin master
             git reset --hard origin/master
 
-            # Pull and restart
-            docker compose -f docker-compose.staging.yml pull staging-app 2>/dev/null || \
-              docker compose -f docker-compose.staging.yml pull todo-app
-            docker compose -f docker-compose.staging.yml up -d
+            # Pull latest image and force-recreate container
+            docker pull mngerasimenko/todo-app:latest
+            docker compose -f docker-compose.staging.yml up -d --force-recreate todo-app
 
             # Cleanup
             docker image prune -f 2>/dev/null || true
