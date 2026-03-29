@@ -643,7 +643,7 @@ public class TodoServiceImplTest {
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(todoToMark));
         when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 2L))
-                .thenReturn(Optional.of(new TaskListUser(testTaskList, completor, TaskListRole.ADMIN)));
+                .thenReturn(Optional.of(new TaskListUser(testTaskList, completor, TaskListRole.USER)));
         when(userRepository.findById(2L)).thenReturn(Optional.of(completor));
         when(todoRepository.save(any(Todo.class))).thenReturn(markedTodo);
         when(todoMapper.toDto(markedTodo)).thenReturn(markedDto);
@@ -873,9 +873,11 @@ public class TodoServiceImplTest {
         verify(todoRepository, never()).save(any(Todo.class));
     }
 
+    // ========== Тесты на коллаборацию (отметка выполнения любым участником) ==========
+
     @Test
-    void markAsDone_WhenUserIsNotOwnerNotAdmin_ThrowsAccessDeniedException() {
-        // Пользователь — USER, не владелец задачи
+    void markAsDone_WhenUserIsNotOwnerButIsUser_MarksAsDone() {
+        // Пользователь — USER (не ADMIN, не владелец), может отметить чужую задачу
         User otherUser = new User();
         otherUser.setId(2L);
         testTodo.setUser(otherUser);
@@ -886,20 +888,21 @@ public class TodoServiceImplTest {
         when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
         when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
                 .thenReturn(Optional.of(userMembership));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
 
-        assertThatThrownBy(() -> todoService.markAsDone(1L, 1L))
-                .isInstanceOf(AccessDeniedException.class)
-                .hasMessageContaining("Только создатель задачи или администратор списка могут отметка выполнения эту задачу");
+        todoService.markAsDone(1L, 1L);
 
-        verify(todoRepository, never()).save(any(Todo.class));
+        verify(todoRepository).save(testTodo);
+        assertThat(testTodo.isDone()).isTrue();
     }
 
     @Test
-    void markAsUndone_WhenUserIsNotOwnerNotAdmin_ThrowsAccessDeniedException() {
-        // Пользователь — USER, не владелец задачи
+    void markAsUndone_WhenUserIsNotOwnerButIsUser_MarksAsUndone() {
+        // Пользователь — USER (не ADMIN, не владелец), может снять отметку с чужой задачи
         User otherUser = new User();
         otherUser.setId(2L);
         testTodo.setUser(otherUser);
+        testTodo.setDone(true);
 
         TaskListUser userMembership = new TaskListUser();
         userMembership.setRole(TaskListRole.USER);
@@ -908,10 +911,9 @@ public class TodoServiceImplTest {
         when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
                 .thenReturn(Optional.of(userMembership));
 
-        assertThatThrownBy(() -> todoService.markAsUndone(1L, 1L))
-                .isInstanceOf(AccessDeniedException.class)
-                .hasMessageContaining("Только создатель задачи или администратор списка могут снятие отметки выполнения эту задачу");
+        todoService.markAsUndone(1L, 1L);
 
-        verify(todoRepository, never()).save(any(Todo.class));
+        verify(todoRepository).save(testTodo);
+        assertThat(testTodo.isDone()).isFalse();
     }
 }
