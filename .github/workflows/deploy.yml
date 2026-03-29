@@ -5,6 +5,16 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+  workflow_dispatch:
+    inputs:
+      deploy_target:
+        description: 'Deploy target'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
 
 jobs:
   # ============================================
@@ -41,18 +51,16 @@ jobs:
           retention-days: 30
 
   # ============================================
-  # Этап 2: Сборка и деплой (только для пуши в master)
+  # Этап 2: Сборка Docker-образа
   # ============================================
-  deploy:
+  build:
     needs: test
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     env:
       APP_VERSION_MAJOR: 0
       APP_VERSION_MINOR: 1
       APP_VERSION_PATCH_OFFSET: 60
-      MIN_ANDROID_VERSION: 3
-      DEPLOY_DIR: ${{ secrets.DEPLOY_DIR || '/root/todo' }}
 
     steps:
       - name: Checkout code
@@ -91,6 +99,60 @@ jobs:
           docker push mngerasimenko/todo-app:${{ github.sha }}
           docker push mngerasimenko/todo-app:latest
 
+  # ============================================
+  # Этап 3: Деплой на staging (автоматически при push)
+  # ============================================
+  deploy-staging:
+    needs: build
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_target == 'staging')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to staging via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /root/todo
+
+            # Update repo
+            git fetch origin master
+            git reset --hard origin/master
+
+            # Pull and restart
+            docker compose -f docker-compose.staging.yml pull staging-app 2>/dev/null || \
+              docker compose -f docker-compose.staging.yml pull todo-app
+            docker compose -f docker-compose.staging.yml up -d
+
+            # Cleanup
+            docker image prune -f 2>/dev/null || true
+
+            echo "Staging deployed successfully"
+
+  # ============================================
+  # Этап 4: Деплой на production (только вручную)
+  # ============================================
+  deploy-production:
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_target == 'production'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      MIN_ANDROID_VERSION: 3
+      APP_VERSION_MAJOR: 0
+      APP_VERSION_MINOR: 1
+      APP_VERSION_PATCH_OFFSET: 60
+      DEPLOY_DIR: ${{ secrets.DEPLOY_DIR || '/home/deploy/todo' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Compute patch version
+        run: echo "APP_PATCH=$(( ${{ github.run_number }} - ${{ env.APP_VERSION_PATCH_OFFSET }} ))" >> $GITHUB_ENV
+
       - name: Copy docker-compose.yml to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -100,7 +162,7 @@ jobs:
           source: "docker-compose.yml"
           target: "${{ env.DEPLOY_DIR }}"
 
-      - name: Deploy to server via SSH
+      - name: Deploy to production via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -109,22 +171,20 @@ jobs:
           script: |
             cd "${{ env.DEPLOY_DIR }}"
 
-            # Обновление репозитория (nginx.conf, assetlinks.json, мониторинг)
-            # git fetch + reset вместо pull — не блокируется локальными изменениями (.env и т.д.)
+            # Update repo (nginx.conf, assetlinks.json, monitoring)
             git fetch origin master
             git reset --hard origin/master
 
-            # Создаём сеть и volumes, если не существуют
+            # Create network and volumes if not exist
             docker network create todo-network 2>/dev/null || true
             docker volume create postgres-data 2>/dev/null || true
             docker volume create todo-logs 2>/dev/null || true
             docker volume create certbot-conf 2>/dev/null || true
             docker volume create certbot-www 2>/dev/null || true
 
-            # Обновляем образ приложения
+            # Pull and restart app
             docker compose pull todo-app
 
-            # Перезапуск через compose (depends_on гарантирует здоровый postgres)
             APP_VERSION=${{ env.APP_VERSION_MAJOR }}.${{ env.APP_VERSION_MINOR }}.${{ env.APP_PATCH }} \
               MIN_ANDROID_VERSION=${{ env.MIN_ANDROID_VERSION }} \
               POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} \
@@ -132,20 +192,21 @@ jobs:
               MAIL_PASSWORD=${{ secrets.MAIL_PASSWORD }} \
               docker compose up -d todo-app
 
-            # Перезагрузка nginx для подхвата обновлённой статики и конфига
+            # Reload nginx for static file updates
             docker exec nginx-proxy nginx -s reload 2>/dev/null || \
               docker compose up -d --force-recreate nginx-proxy 2>/dev/null || true
 
-            # Очистка неиспользуемых образов
+            # Cleanup
             docker image prune -f 2>/dev/null || true
 
-            # Обновление всех скриптов мониторинга из репозитория
-            for f in /root/todo/monitoring/*.sh; do
+            # Update monitoring scripts
+            for f in /home/deploy/todo/monitoring/*.sh; do
               [ -f "$f" ] && cp "$f" /root/monitoring/ 2>/dev/null || true
             done
-            # Исправление Windows line endings (CRLF → LF)
             sed -i 's/\r$//' /root/monitoring/*.sh 2>/dev/null || true
             chmod +x /root/monitoring/*.sh 2>/dev/null || true
 
-            # Перезапуск VK-бота (подхват новых команд)
+            # Restart VK bot
             systemctl restart server-monitor-bot 2>/dev/null || true
+
+            echo "Production deployed successfully"
