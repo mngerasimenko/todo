@@ -825,7 +825,7 @@ public class TodoServiceImplTest {
 
         assertThatThrownBy(() -> todoService.deleteTodo(1L, 1L))
                 .isInstanceOf(AccessDeniedException.class)
-                .hasMessageContaining("Только создатель задачи или администратор списка могут удаление эту задачу");
+                .hasMessageContaining("Только создатель задачи или администратор списка могут изменить эту задачу");
 
         verify(todoRepository, never()).deleteById(anyLong());
     }
@@ -868,9 +868,36 @@ public class TodoServiceImplTest {
 
         assertThatThrownBy(() -> todoService.updateTodo(1L, testTodoDto, 1L))
                 .isInstanceOf(AccessDeniedException.class)
-                .hasMessageContaining("Только создатель задачи или администратор списка могут редактирование эту задачу");
+                .hasMessageContaining("Только создатель задачи или администратор списка могут изменить эту задачу");
 
         verify(todoRepository, never()).save(any(Todo.class));
+    }
+
+    @Test
+    void updateTodo_WhenUserIsAdmin_UpdatesSuccessfully() {
+        // ADMIN списка может редактировать чужую публичную задачу
+        User otherUser = new User();
+        otherUser.setId(2L);
+        testTodo.setUser(otherUser);
+
+        TaskListUser adminMembership = new TaskListUser();
+        adminMembership.setRole(TaskListRole.ADMIN);
+
+        TodoDto updateDto = new TodoDto();
+        updateDto.setName("Updated");
+        updateDto.setDone(false);
+
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(adminMembership));
+        doNothing().when(todoMapper).updateEntityFromDto(updateDto, testTodo);
+        when(todoRepository.save(any(Todo.class))).thenReturn(testTodo);
+        when(todoMapper.toDto(testTodo)).thenReturn(testTodoDto);
+
+        TodoDto result = todoService.updateTodo(1L, updateDto, 1L);
+
+        assertThat(result).isNotNull();
+        verify(todoRepository).save(any(Todo.class));
     }
 
     // ========== Тесты на коллаборацию (отметка выполнения любым участником) ==========

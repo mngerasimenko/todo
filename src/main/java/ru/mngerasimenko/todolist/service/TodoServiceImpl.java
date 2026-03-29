@@ -74,7 +74,7 @@ public class TodoServiceImpl implements TodoService {
     public TodoDto updateTodo(Long id, TodoDto todoDto, Long requestingUserId) {
         Todo existingTodo = todoRepository.findById(id)
                 .orElseThrow(() -> new TodoNotFoundException("Todo not found with id: " + id));
-        assertCanModifyTodo(existingTodo, requestingUserId, "редактирование");
+        assertCanModifyTodo(existingTodo, requestingUserId, false);
 
         if (todoDto.getUserId() != null && !todoDto.getUserId().equals(existingTodo.getUserId())) {
             User newUser = userRepository.findById(todoDto.getUserId())
@@ -177,7 +177,7 @@ public class TodoServiceImpl implements TodoService {
     public void deleteTodo(Long id, Long requestingUserId) {
         Todo todo = todoRepository.findById(id)
                 .orElseThrow(() -> new TodoNotFoundException("Todo not found with id: " + id));
-        assertCanModifyTodo(todo, requestingUserId, "удаление");
+        assertCanModifyTodo(todo, requestingUserId, false);
         todoRepository.deleteById(id);
         log.info("Удалена задача: id={}, userId={}", id, requestingUserId);
     }
@@ -193,7 +193,7 @@ public class TodoServiceImpl implements TodoService {
     public TodoDto markAsDone(Long id, Long completorUserId) {
         Todo todo = todoRepository.findById(id)
                 .orElseThrow(() -> new TodoNotFoundException("Todo not found with id: " + id));
-        assertCanModifyTodo(todo, completorUserId, "отметка выполнения");
+        assertCanModifyTodo(todo, completorUserId, true);
         todo.setDone(true);
         todo.setCompletedAt(LocalDateTime.now());
         if (completorUserId != null) {
@@ -210,7 +210,7 @@ public class TodoServiceImpl implements TodoService {
     public TodoDto markAsUndone(Long id, Long requestingUserId) {
         Todo todo = todoRepository.findById(id)
                 .orElseThrow(() -> new TodoNotFoundException("Todo not found with id: " + id));
-        assertCanModifyTodo(todo, requestingUserId, "снятие отметки выполнения");
+        assertCanModifyTodo(todo, requestingUserId, true);
         todo.setDone(false);
         todo.setCompletedAt(null);
         todo.setCompletorUser(null);
@@ -220,59 +220,53 @@ public class TodoServiceImpl implements TodoService {
 
     /**
      * Проверяет права доступа к задаче.
-     * 
+     *
      * Правила доступа:
      * 1. Только участник списка может работать с задачами
-     * 2. Владелец задачи может делать всё (кроме чужих приватных)
-     * 3. ADMIN списка может редактировать/удалять чужие публичные задачи
-     * 4. Любой участник списка может отметить чужую задачу как выполненную (коллаборация)
-     * 5. Приватные задачи доступны только их создателю
-     * 
+     * 2. Владелец задачи может делать всё
+     * 3. Приватные задачи доступны только их создателю
+     * 4. Отметка выполнения — любой участник списка (коллаборация)
+     * 5. Редактирование/удаление — только владелец или ADMIN списка
+     *
      * @param todo задача
      * @param userId ID текущего пользователя
-     * @param action действие ("удаление", "редактирование", "отметка выполнения", "снятие отметки")
+     * @param isMarkAction true для отметки/снятия выполнения, false для редактирования/удаления
      * @throws AccessDeniedException если доступ запрещён
      */
-    private void assertCanModifyTodo(Todo todo, Long userId, String action) {
+    private void assertCanModifyTodo(Todo todo, Long userId, boolean isMarkAction) {
         Long listId = todo.getTaskList().getId();
         Long todoOwnerId = todo.getUser().getId();
-        boolean isPrivate = Boolean.TRUE.equals(todo.getIsPrivate());
-        
+
         // 1. Проверка на участника списка
         TaskListUser membership = taskListUserRepository.findByIdListIdAndIdUserId(listId, userId)
                 .orElseThrow(() -> new AccessDeniedException(
                         "Доступ запрещён: пользователь не является участником списка задачи"));
-        
-        // 2. Если пользователь — владелец задачи, доступ разрешён
+
+        // 2. Владелец задачи — доступ разрешён
         if (todoOwnerId.equals(userId)) {
             return;
         }
-        
-        // 3. Если задача приватная — доступна только владельцу
-        if (isPrivate) {
-            log.warn("Попытка {} чужой приватной задачи пользователем id={}", action, userId);
+
+        // 3. Приватные задачи — только владелец
+        if (todo.getIsPrivate()) {
+            log.warn("Попытка доступа к чужой приватной задаче id={} пользователем id={}", todo.getId(), userId);
             throw new AccessDeniedException(
                     "Приватные задачи доступны только их создателю");
         }
-        
-        // 4. Для отметки выполнения/снятия отметки — достаточно быть участником списка (коллаборация)
-        if ("отметка выполнения".equals(action) || "снятие отметки выполнения".equals(action)) {
-            log.debug("Участник списка {} выполнил {} задачи id={} (владелец: {})", 
-                    userId, action, todo.getId(), todoOwnerId);
+
+        // 4. Отметка выполнения — любой участник списка
+        if (isMarkAction) {
             return;
         }
-        
-        // 5. Если пользователь ADMIN списка — разрешаем редактирование/удаление публичных задач
+
+        // 5. Редактирование/удаление — только ADMIN
         if (membership.getRole() == TaskListRole.ADMIN) {
-            log.debug("ADMIN списка {} выполнил {} задачи id={} (владелец: {})", 
-                    userId, action, todo.getId(), todoOwnerId);
             return;
         }
-        
-        // 6. Обычный USER не может редактировать/удалять чужие публичные задачи
-        log.warn("Пользователь id={} (не ADMIN, не владелец) попытался {} чужую задачу id={}", 
-                userId, action, todo.getId());
+
+        // 6. Обычный USER не может редактировать/удалять чужие задачи
+        log.warn("Пользователь id={} попытался изменить чужую задачу id={}", userId, todo.getId());
         throw new AccessDeniedException(
-                "Только создатель задачи или администратор списка могут " + action.toLowerCase() + " эту задачу");
+                "Только создатель задачи или администратор списка могут изменить эту задачу");
     }
 }
