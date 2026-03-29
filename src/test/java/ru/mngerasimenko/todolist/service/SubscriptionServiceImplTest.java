@@ -18,6 +18,8 @@ import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 import ru.mngerasimenko.todolist.settings.AppProperties;
 
+import ru.mngerasimenko.todolist.dto.SubscriptionStatusResponse;
+
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -51,6 +53,7 @@ class SubscriptionServiceImplTest {
 
     private User freeUser;
     private User proUser;
+    private User proLifetimeUser;
     private User betaUser;
     private User expiredProUser;
     private AppProperties.SubscriptionLimits freeLimits;
@@ -66,6 +69,7 @@ class SubscriptionServiceImplTest {
 
         freeUser = new User();
         freeUser.setId(1L);
+        freeUser.setEmail("free@test.ru");
         freeUser.setName("freeuser");
         freeUser.setSubscriptionType("FREE");
 
@@ -73,12 +77,21 @@ class SubscriptionServiceImplTest {
 
         proUser = new User();
         proUser.setId(2L);
+        proUser.setEmail("pro@test.ru");
         proUser.setName("prouser");
         proUser.setSubscriptionType("PRO");
         proUser.setSubscriptionExpiresAt(now.plusDays(30));
 
+        proLifetimeUser = new User();
+        proLifetimeUser.setId(5L);
+        proLifetimeUser.setEmail("prolifetime@test.ru");
+        proLifetimeUser.setName("prolifetimeuser");
+        proLifetimeUser.setSubscriptionType("PRO_LIFETIME");
+        proLifetimeUser.setSubscriptionExpiresAt(now.minusDays(90)); // дата активации (в прошлом)
+
         betaUser = new User();
         betaUser.setId(3L);
+        betaUser.setEmail("beta@test.ru");
         betaUser.setName("betauser");
         betaUser.setSubscriptionType("BETA");
         betaUser.setSubscriptionExpiresAt(now.plusDays(30));
@@ -86,6 +99,7 @@ class SubscriptionServiceImplTest {
 
         expiredProUser = new User();
         expiredProUser.setId(4L);
+        expiredProUser.setEmail("expired@test.ru");
         expiredProUser.setName("expireduser");
         expiredProUser.setSubscriptionType("PRO");
         expiredProUser.setSubscriptionExpiresAt(now.minusDays(1));
@@ -119,9 +133,33 @@ class SubscriptionServiceImplTest {
         }
 
         @Test
-        void proUser_WithNullExpiration_ReturnsPro() {
+        void proUser_WithNullExpiration_ReturnsFree() {
             proUser.setSubscriptionExpiresAt(null);
-            assertThat(subscriptionService.getEffectiveSubscriptionType(proUser)).isEqualTo("PRO");
+            assertThat(subscriptionService.getEffectiveSubscriptionType(proUser)).isEqualTo("FREE");
+        }
+
+        @Test
+        void betaUser_WithNullExpiration_ReturnsFree() {
+            betaUser.setSubscriptionExpiresAt(null);
+            assertThat(subscriptionService.getEffectiveSubscriptionType(betaUser)).isEqualTo("FREE");
+        }
+
+        @Test
+        void proLifetimeUser_ReturnsProLifetime() {
+            assertThat(subscriptionService.getEffectiveSubscriptionType(proLifetimeUser)).isEqualTo("PRO_LIFETIME");
+        }
+
+        @Test
+        void proLifetimeUser_WithNullExpiration_ReturnsFree() {
+            proLifetimeUser.setSubscriptionExpiresAt(null);
+            assertThat(subscriptionService.getEffectiveSubscriptionType(proLifetimeUser)).isEqualTo("FREE");
+        }
+
+        @Test
+        void proLifetimeUser_WithPastDate_StillReturnsProLifetime() {
+            proLifetimeUser.setSubscriptionExpiresAt(
+                    LocalDateTime.ofInstant(FIXED_INSTANT, ZONE).minusYears(1));
+            assertThat(subscriptionService.getEffectiveSubscriptionType(proLifetimeUser)).isEqualTo("PRO_LIFETIME");
         }
     }
 
@@ -145,6 +183,12 @@ class SubscriptionServiceImplTest {
         void beta_ReturnsProLimits() {
             when(appProperties.getProLimits()).thenReturn(proLimits);
             assertThat(subscriptionService.getLimitsForType("BETA")).isEqualTo(proLimits);
+        }
+
+        @Test
+        void proLifetime_ReturnsProLimits() {
+            when(appProperties.getProLimits()).thenReturn(proLimits);
+            assertThat(subscriptionService.getLimitsForType("PRO_LIFETIME")).isEqualTo(proLimits);
         }
     }
 
@@ -365,6 +409,84 @@ class SubscriptionServiceImplTest {
             when(appProperties.getProLimits()).thenReturn(proLimits);
 
             subscriptionService.assertCanCreatePrivateTodo(3L);
+        }
+    }
+
+    // --- getSubscriptionStatus ---
+
+    @Nested
+    class GetSubscriptionStatus {
+        @Test
+        void freeUser_ReturnsFreeLimits() {
+            when(userRepository.getUserByEmail("free@test.ru")).thenReturn(freeUser);
+            when(appProperties.getFreeLimits()).thenReturn(freeLimits);
+            when(taskListUserRepository.countByUserId(1L)).thenReturn(1L);
+
+            SubscriptionStatusResponse response = subscriptionService.getSubscriptionStatus("free@test.ru");
+
+            assertThat(response.getSubscriptionType()).isEqualTo("FREE");
+            assertThat(response.getSubscriptionExpiresAt()).isNull();
+            assertThat(response.getLimits().getMaxLists()).isEqualTo(2);
+            assertThat(response.getUsage().getListsCount()).isEqualTo(1L);
+            assertThat(response.getUsage().isCanCreateList()).isTrue();
+        }
+
+        @Test
+        void proUser_ReturnsProLimitsAndExpiresAt() {
+            when(userRepository.getUserByEmail("pro@test.ru")).thenReturn(proUser);
+            when(appProperties.getProLimits()).thenReturn(proLimits);
+            when(taskListUserRepository.countByUserId(2L)).thenReturn(0L);
+
+            SubscriptionStatusResponse response = subscriptionService.getSubscriptionStatus("pro@test.ru");
+
+            assertThat(response.getSubscriptionType()).isEqualTo("PRO");
+            assertThat(response.getSubscriptionExpiresAt()).isEqualTo(proUser.getSubscriptionExpiresAt());
+            assertThat(response.getLimits().getMaxLists()).isEqualTo(-1);
+        }
+
+        @Test
+        void proLifetimeUser_ReturnsProLimitsAndActivationDate() {
+            when(userRepository.getUserByEmail("prolifetime@test.ru")).thenReturn(proLifetimeUser);
+            when(appProperties.getProLimits()).thenReturn(proLimits);
+            when(taskListUserRepository.countByUserId(5L)).thenReturn(0L);
+
+            SubscriptionStatusResponse response = subscriptionService.getSubscriptionStatus("prolifetime@test.ru");
+
+            assertThat(response.getSubscriptionType()).isEqualTo("PRO_LIFETIME");
+            assertThat(response.getSubscriptionExpiresAt()).isEqualTo(proLifetimeUser.getSubscriptionExpiresAt());
+            assertThat(response.getLimits().getMaxLists()).isEqualTo(-1);
+        }
+
+        @Test
+        void expiredProUser_ReturnsFreeAndNullExpiresAt() {
+            when(userRepository.getUserByEmail("expired@test.ru")).thenReturn(expiredProUser);
+            when(appProperties.getFreeLimits()).thenReturn(freeLimits);
+            when(taskListUserRepository.countByUserId(4L)).thenReturn(0L);
+
+            SubscriptionStatusResponse response = subscriptionService.getSubscriptionStatus("expired@test.ru");
+
+            assertThat(response.getSubscriptionType()).isEqualTo("FREE");
+            assertThat(response.getSubscriptionExpiresAt()).isNull();
+            assertThat(response.getLimits().getMaxLists()).isEqualTo(2);
+        }
+
+        @Test
+        void nonExistentUser_ThrowsUserNotFoundException() {
+            when(userRepository.getUserByEmail("unknown@test.ru")).thenReturn(null);
+
+            assertThatThrownBy(() -> subscriptionService.getSubscriptionStatus("unknown@test.ru"))
+                    .isInstanceOf(UserNotFoundException.class);
+        }
+
+        @Test
+        void freeUser_AtLimit_CanCreateListIsFalse() {
+            when(userRepository.getUserByEmail("free@test.ru")).thenReturn(freeUser);
+            when(appProperties.getFreeLimits()).thenReturn(freeLimits);
+            when(taskListUserRepository.countByUserId(1L)).thenReturn(2L);
+
+            SubscriptionStatusResponse response = subscriptionService.getSubscriptionStatus("free@test.ru");
+
+            assertThat(response.getUsage().isCanCreateList()).isFalse();
         }
     }
 

@@ -22,8 +22,14 @@ import java.util.List;
 @JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"})
 public class User {
 
+    public static final String SUBSCRIPTION_FREE = "FREE";
+    public static final String SUBSCRIPTION_PRO = "PRO";
+    public static final String SUBSCRIPTION_PRO_LIFETIME = "PRO_LIFETIME";
+    public static final String SUBSCRIPTION_BETA = "BETA";
+
     private static final java.util.Set<String> VALID_SUBSCRIPTION_TYPES =
-            java.util.Set.of("FREE", "PRO", "BETA");
+            java.util.Set.of(SUBSCRIPTION_FREE, SUBSCRIPTION_PRO,
+                    SUBSCRIPTION_PRO_LIFETIME, SUBSCRIPTION_BETA);
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

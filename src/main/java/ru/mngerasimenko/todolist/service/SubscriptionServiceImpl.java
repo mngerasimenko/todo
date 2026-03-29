@@ -18,6 +18,8 @@ import ru.mngerasimenko.todolist.settings.AppProperties;
 import java.time.Clock;
 import java.time.LocalDateTime;
 
+import static ru.mngerasimenko.todolist.model.User.*;
+
 /**
  * Реализация сервиса проверки лимитов подписки.
  */
@@ -121,14 +123,23 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     @Override
     public String getEffectiveSubscriptionType(User user) {
         String type = user.getSubscriptionType();
-        if ("FREE".equals(type)) {
-            return "FREE";
+        if (SUBSCRIPTION_FREE.equals(type)) {
+            return SUBSCRIPTION_FREE;
+        }
+
+        // Любая платная подписка без даты — невалидна → FREE
+        if (user.getSubscriptionExpiresAt() == null) {
+            return SUBSCRIPTION_FREE;
+        }
+
+        // PRO_LIFETIME — бессрочная подписка, дата = дата активации (не проверяется на истечение)
+        if (SUBSCRIPTION_PRO_LIFETIME.equals(type)) {
+            return SUBSCRIPTION_PRO_LIFETIME;
         }
 
         // PRO и BETA — проверяем срок действия
-        if (user.getSubscriptionExpiresAt() != null
-                && user.getSubscriptionExpiresAt().isBefore(LocalDateTime.now(clock))) {
-            return "FREE";
+        if (user.getSubscriptionExpiresAt().isBefore(LocalDateTime.now(clock))) {
+            return SUBSCRIPTION_FREE;
         }
 
         return type;
@@ -136,7 +147,8 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     @Override
     public AppProperties.SubscriptionLimits getLimitsForType(String subscriptionType) {
-        if ("PRO".equals(subscriptionType) || "BETA".equals(subscriptionType)) {
+        if (SUBSCRIPTION_PRO.equals(subscriptionType) || SUBSCRIPTION_PRO_LIFETIME.equals(subscriptionType)
+                || SUBSCRIPTION_BETA.equals(subscriptionType)) {
             return appProperties.getProLimits();
         }
         return appProperties.getFreeLimits();
@@ -160,9 +172,13 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         long listsCount = taskListUserRepository.countByUserId(user.getId());
         boolean canCreateList = limits.getMaxLists() == -1 || listsCount < limits.getMaxLists();
 
+        // Дату окончания возвращаем только для активных платных подписок
+        LocalDateTime expiresAt = SUBSCRIPTION_FREE.equals(effectiveType)
+                ? null : user.getSubscriptionExpiresAt();
+
         return SubscriptionStatusResponse.builder()
                 .subscriptionType(effectiveType)
-                .subscriptionExpiresAt(user.getSubscriptionExpiresAt())
+                .subscriptionExpiresAt(expiresAt)
                 .betaTester(user.isBetaTester())
                 .limits(SubscriptionStatusResponse.Limits.builder()
                         .maxLists(limits.getMaxLists())
