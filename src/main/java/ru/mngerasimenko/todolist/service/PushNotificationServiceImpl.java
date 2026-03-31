@@ -68,7 +68,9 @@ public class PushNotificationServiceImpl implements PushNotificationService {
     @Override
     @Async
     public void notifyNewTodo(Long listId, Long authorUserId, String authorName, String todoName) {
+        log.info("Отправка push: новая задача '{}' в списке {}, автор userId={}", todoName, listId, authorUserId);
         List<String> tokens = pushTokenRepository.findFcmTokensByListIdExcludingUser(listId, authorUserId);
+        log.info("Найдено {} push-токенов для уведомления", tokens.size());
         if (tokens.isEmpty()) return;
 
         sendToMultiple(tokens, "Новая задача", authorName + " добавил: \"" + todoName + "\"");
