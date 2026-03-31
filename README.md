@@ -17,13 +17,11 @@ REST API бэкенд для совместного управления спи�
   <img src="https://render.gitanimals.org/lines/mngerasimenko?pet-id=823198080045774067" width="30%" height="100"/>  
 </a>
 
-## Demo
+## Demo (staging)
 
 | Клиент | URL | Логин |
 |--------|-----|-------|
-| React UI | **[https://todo.keepware.ru](https://todo.keepware.ru)** | `testuser@todolist.ru` / `testUser` |
-| REST API | `https://todo.keepware.ru/api/` | JWT |
-| Swagger UI | **[https://todo.keepware.ru/api/swagger-ui.html](https://todo.keepware.ru/api/swagger-ui.html)** | — |
+| REST API | `http://185.244.172.45:8090/api/` | JWT |
 | Android | **[todolist-android](https://github.com/mngerasimenko/todolist-android)** | `testuser@todolist.ru` / `testUser` |
 
 ---
@@ -87,7 +85,7 @@ REST API с JWT-аутентификацией: аутентификация (р
 
 Все эндпоинты (кроме auth и status) требуют JWT-токен.
 
-Интерактивная документация: **[Swagger UI](https://todo.keepware.ru/api/swagger-ui.html)**
+Интерактивная документация: Swagger UI (доступен локально: `http://localhost:8090/api/swagger-ui.html`)
 
 Postman-коллекция: `postman/TodoList_API.postman_collection.json`
 
