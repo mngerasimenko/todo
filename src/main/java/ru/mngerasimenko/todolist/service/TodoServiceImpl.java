@@ -33,6 +33,7 @@ public class TodoServiceImpl implements TodoService {
     private final UserRepository userRepository;
     private final TaskListRepository taskListRepository;
     private final TaskListUserRepository taskListUserRepository;
+    private final PushNotificationService pushNotificationService;
     private final TodoMapper todoMapper;
     private final SubscriptionService subscriptionService;
 
@@ -66,6 +67,12 @@ public class TodoServiceImpl implements TodoService {
         Todo savedTodo = todoRepository.save(todo);
         log.info("Создана задача: id={}, name='{}', userId={}, listId={}, private={}",
                 savedTodo.getId(), savedTodo.getName(), user.getId(), taskList.getId(), savedTodo.getIsPrivate());
+
+        // Push-уведомление участникам списка (не для приватных задач)
+        if (!savedTodo.getIsPrivate()) {
+            pushNotificationService.notifyNewTodo(
+                    taskList.getId(), user.getId(), user.getName(), savedTodo.getName());
+        }
         return todoMapper.toDto(savedTodo);
     }
 
@@ -196,12 +203,19 @@ public class TodoServiceImpl implements TodoService {
         assertCanModifyTodo(todo, completorUserId, true);
         todo.setDone(true);
         todo.setCompletedAt(LocalDateTime.now());
+        User completor = null;
         if (completorUserId != null) {
-            User completor = userRepository.findById(completorUserId)
-                    .orElse(null);
+            completor = userRepository.findById(completorUserId).orElse(null);
             todo.setCompletorUser(completor);
         }
         Todo updatedTodo = todoRepository.save(todo);
+
+        // Push-уведомление автору задачи (если выполнил другой пользователь)
+        if (completor != null && !completorUserId.equals(todo.getUser().getId())) {
+            pushNotificationService.notifyTodoCompleted(
+                    todo.getUser().getId(), completor.getName(), todo.getName());
+        }
+
         return todoMapper.toDto(updatedTodo);
     }
 

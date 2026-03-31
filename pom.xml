@@ -106,6 +106,12 @@
             <artifactId>bucket4j_jdk17-core</artifactId>
             <version>8.14.0</version>
         </dependency>
+        <!-- Firebase Admin SDK (FCM push notifications) -->
+        <dependency>
+            <groupId>com.google.firebase</groupId>
+            <artifactId>firebase-admin</artifactId>
+            <version>9.4.3</version>
+        </dependency>
         <!-- Email -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

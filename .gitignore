@@ -34,6 +34,8 @@ build/
 .env
 .env.production-*
 monitoring/monitor.conf
+firebase-service-account.json
+todolist-*-firebase-adminsdk-*.json
 /marketing/
 /design/
 

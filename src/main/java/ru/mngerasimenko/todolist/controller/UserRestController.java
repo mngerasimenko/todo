@@ -17,6 +17,8 @@ import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.dto.UserRequest;
 import ru.mngerasimenko.todolist.dto.UserResponse;
 import ru.mngerasimenko.todolist.mapper.UserMapper;
+import ru.mngerasimenko.todolist.dto.push.RegisterPushTokenRequest;
+import ru.mngerasimenko.todolist.service.PushNotificationService;
 import ru.mngerasimenko.todolist.service.SubscriptionService;
 import ru.mngerasimenko.todolist.service.UserService;
 
@@ -35,6 +37,7 @@ public class UserRestController {
     private final UserService userService;
     private final UserMapper userMapper;
     private final SubscriptionService subscriptionService;
+    private final PushNotificationService pushNotificationService;
     private final Validator validator;
 
     /** Получение текущего пользователя по JWT-токену */
@@ -130,9 +133,28 @@ public class UserRestController {
         }
     }
 
+    /** Регистрация/обновление FCM push-токена устройства */
+    @PostMapping("/me/push-token")
+    public ResponseEntity<Void> registerPushToken(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @Valid @RequestBody RegisterPushTokenRequest request) {
+        UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
+        pushNotificationService.registerToken(currentUser.getId(), request.getFcmToken(), request.getDeviceId());
+        return ResponseEntity.ok().build();
+    }
+
+    /** Удаление push-токена при logout с устройства (только свой) */
+    @DeleteMapping("/me/push-token/{deviceId}")
+    public ResponseEntity<Void> removePushToken(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable String deviceId) {
+        UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
+        pushNotificationService.removeToken(currentUser.getId(), deviceId);
+        return ResponseEntity.noContent().build();
+    }
+
     /**
      * Проверяет, что текущий пользователь является владельцем аккаунта.
-     * Сравнивает ID из URL с ID текущего пользователя из JWT.
      */
     private void assertOwner(Long targetUserId, UserDetails userDetails) {
         UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());

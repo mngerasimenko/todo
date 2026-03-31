@@ -75,6 +75,9 @@ class TaskListServiceImplTest {
     @Mock
     private EmailProperties emailProperties;
 
+    @Mock
+    private PushNotificationService pushNotificationService;
+
     @InjectMocks
     private TaskListServiceImpl taskListService;
 

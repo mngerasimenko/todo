@@ -54,6 +54,9 @@ public class TodoServiceImplTest {
     @Mock
     private SubscriptionService subscriptionService;
 
+    @Mock
+    private PushNotificationService pushNotificationService;
+
     @InjectMocks
     private TodoServiceImpl todoService;
 

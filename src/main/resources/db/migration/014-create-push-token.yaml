@@ -1,0 +1,70 @@
+databaseChangeLog:
+  - changeSet:
+      id: 014-create-push-token
+      author: mngerasimenko
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: push_token
+      changes:
+        - createTable:
+            tableName: push_token
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: user_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: fcm_token
+                  type: varchar(512)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: device_id
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: created_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: updated_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+
+        - addForeignKeyConstraint:
+            baseTableName: push_token
+            baseColumnNames: user_id
+            referencedTableName: todo_users
+            referencedColumnNames: id
+            constraintName: fk_push_token_user
+            onDelete: CASCADE
+
+        - createIndex:
+            indexName: idx_push_token_user_id
+            tableName: push_token
+            columns:
+              - column:
+                  name: user_id
+
+        - addUniqueConstraint:
+            tableName: push_token
+            columnNames: device_id
+            constraintName: uq_push_token_device_id

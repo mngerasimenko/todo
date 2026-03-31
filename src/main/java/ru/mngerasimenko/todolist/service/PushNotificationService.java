@@ -1,0 +1,32 @@
+package ru.mngerasimenko.todolist.service;
+
+/**
+ * Сервис отправки push-уведомлений через Firebase Cloud Messaging.
+ */
+public interface PushNotificationService {
+
+    /**
+     * Зарегистрировать/обновить FCM-токен устройства.
+     */
+    void registerToken(Long userId, String fcmToken, String deviceId);
+
+    /**
+     * Удалить токен устройства (при logout). Только владелец может удалить свой токен.
+     */
+    void removeToken(Long userId, String deviceId);
+
+    /**
+     * Уведомить участников списка о новой задаче.
+     */
+    void notifyNewTodo(Long listId, Long authorUserId, String authorName, String todoName);
+
+    /**
+     * Уведомить автора задачи о выполнении (если выполнил другой пользователь).
+     */
+    void notifyTodoCompleted(Long todoOwnerUserId, String completorName, String todoName);
+
+    /**
+     * Уведомить участников списка о новом участнике.
+     */
+    void notifyNewMember(Long listId, Long newUserId, String newUserName, String listName);
+}

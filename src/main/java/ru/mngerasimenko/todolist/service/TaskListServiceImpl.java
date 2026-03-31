@@ -49,6 +49,7 @@ public class TaskListServiceImpl implements TaskListService {
     private final InviteTokenRepository inviteTokenRepository;
     private final EmailService emailService;
     private final EmailProperties emailProperties;
+    private final PushNotificationService pushNotificationService;
 
     @Override
     @Transactional(noRollbackFor = DataIntegrityViolationException.class)
@@ -282,6 +283,11 @@ public class TaskListServiceImpl implements TaskListService {
         taskListUserRepository.save(taskListUser);
 
         log.info("Пользователь вступил в список по приглашению: listId={}, userId={}, role={}", taskList.getId(), userId, role);
+
+        // Push-уведомление всем участникам о новом участнике
+        pushNotificationService.notifyNewMember(
+                taskList.getId(), userId, user.getName(), taskList.getName());
+
         return taskListMapper.toResponse(taskList, role);
     }
 }
