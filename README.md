@@ -56,7 +56,7 @@ REST API бэкенд для совместного управления спи�
 - Интерактивная документация API (Swagger UI / OpenAPI 3)
 - Контроль доступа: изменение и удаление аккаунта только владельцем, операции с задачами только для участников списка
 - Каскадное удаление аккаунта: передача ADMIN, удаление пустых списков, сохранение публичных задач через системного пользователя
-- 376 unit-тестов с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
+- 387 unit-тестов с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
 
 ---
 
@@ -83,70 +83,11 @@ REST API бэкенд для совместного управления спи�
 
 ## REST API
 
-### Аутентификация
+REST API с JWT-аутентификацией: аутентификация (регистрация, логин, refresh, email-верификация, сброс пароля), CRUD списков и задач, управление пользователями, приглашения по ссылке.
 
-| Метод | Эндпоинт | Описание |
-|-------|----------|----------|
-| POST | `/api/auth/register` | Регистрация (возвращает JWT) |
-| POST | `/api/auth/login` | Вход (возвращает JWT) |
-| POST | `/api/auth/refresh` | Обновление access токена |
-| POST | `/api/auth/verify-email` | Подтверждение email по токену |
-| POST | `/api/auth/resend-verification` | Повторная отправка верификации (JWT) |
-| POST | `/api/auth/forgot-password` | Запрос сброса пароля |
-| POST | `/api/auth/reset-password` | Установка нового пароля |
-| POST | `/api/auth/change-email` | Смена email (JWT) |
-| POST | `/api/auth/logout` | Выход: blacklist access + revoke refresh (JWT) |
+Все эндпоинты (кроме auth и status) требуют JWT-токен.
 
-### Списки задач
-
-| Метод | Эндпоинт | Описание |
-|-------|----------|----------|
-| POST | `/api/lists` | Создать список (роль ADMIN) |
-| POST | `/api/lists/join` | Вступить в список по паролю |
-| GET | `/api/lists` | Мои списки |
-| GET | `/api/lists/{id}/members` | Участники списка |
-| GET | `/api/lists/{id}/todos` | Задачи списка (с учётом приватности) |
-| POST | `/api/lists/{id}/invite` | Создать приглашение (только ADMIN) |
-| GET | `/api/lists/invite/{token}` | Информация о приглашении (публичный) |
-| POST | `/api/lists/invite/accept` | Принять приглашение |
-| DELETE | `/api/lists/{id}` | Удалить список (только ADMIN) |
-| DELETE | `/api/lists/{id}/leave` | Покинуть список |
-
-### Задачи
-
-| Метод | Эндпоинт | Описание |
-|-------|----------|----------|
-| POST | `/api/todos/create` | Создать задачу |
-| GET | `/api/todos/all` | Все задачи |
-| GET | `/api/todos/{id}` | Задача по ID |
-| GET | `/api/todos/user/{userId}` | Задачи пользователя |
-| PUT | `/api/todos/{id}` | Обновить задачу |
-| PATCH | `/api/todos/{id}/done` | Отметить задачу выполненной |
-| PATCH | `/api/todos/{id}/undone` | Снять отметку выполнения |
-| DELETE | `/api/todos/{id}` | Удалить задачу |
-
-### Пользователи
-
-| Метод | Эндпоинт | Описание |
-|-------|----------|----------|
-| POST | `/api/users/create` | Создать пользователя |
-| GET | `/api/users/all` | Все пользователи |
-| GET | `/api/users/me` | Текущий пользователь (по JWT) |
-| GET | `/api/users/{id}` | Пользователь по ID |
-| PUT | `/api/users/{id}` | Обновить пользователя (только свой) |
-| PUT | `/api/users/{id}/colors` | Обновить цвета задач (только свой) |
-| DELETE | `/api/users/{id}` | Удалить пользователя (только свой) |
-
-### Служебные
-
-| Метод | Эндпоинт | Описание |
-|-------|----------|----------|
-| GET | `/api/status` | Статус, версия, min_android_version |
-| GET | `/api/appName` | Название приложения |
-
-Все эндпоинты (кроме auth, status, appName) требуют заголовок `Authorization: Bearer <token>`.
-
-Интерактивная документация: **[Swagger UI](https://todo.keepware.ru/api/swagger-ui.html)** (локально: `http://localhost:8090/api/swagger-ui.html`)
+Интерактивная документация: **[Swagger UI](https://todo.keepware.ru/api/swagger-ui.html)**
 
 Postman-коллекция: `postman/TodoList_API.postman_collection.json`
 
@@ -184,7 +125,7 @@ docker compose down
 ### Тесты
 
 ```bash
-# Unit-тесты (352 теста, без Docker)
+# Unit-тесты (387 тестов, без Docker)
 mvn test
 
 # С отчётом покрытия
@@ -204,7 +145,7 @@ mvn test -Pintegration
 Проект использует пайплайн `.github/workflows/deploy.yml`:
 
 **Этап 1 — Тесты** (все PR и push в master):
-- 376 unit-тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
+- 387 unit-тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
 - Нагрузочные тесты (3 шт.) запускаются отдельно: `mvn test -Pintegration` (требуют Docker)
 
 **Этап 2 — Деплой** (только push в master):
@@ -245,8 +186,7 @@ Telegram-бот для мониторинга состояния сервера.
 Конфигурация: `monitoring/monitor.conf` (Telegram Bot Token + Chat ID, не коммитится). Шаблон: `monitoring/monitor.conf.example`.
 
 **Автоматический backup PostgreSQL** (cron, ежедневно в 3:00):
-- `monitoring/backup.sh` — дамп БД в `/root/backups/`, хранение 7 дней
-- Восстановление: `docker exec -i postgres-db pg_restore -U postgres -d todo --clean --if-exists < backup.dump`
+- `monitoring/backup.sh` — дамп БД, хранение 7 дней
 
 ---
 
@@ -281,7 +221,7 @@ src/main/java/ru/mngerasimenko/todolist/
 
 src/main/resources/db/migration/   Liquibase-миграции (master + 13 changeset-файлов)
 src/main/resources/templates/      HTML-шаблоны email (верификация, сброс пароля, приглашение)
-src/test/java/        376 тестов (controller, service, repository, mapper, security, concurrency)
+src/test/java/        387 тестов (controller, service, repository, mapper, security, concurrency)
 postman/             Postman-коллекция + окружения
 monitoring/          VK-мониторинг (скрипты, systemd-сервис, конфиг) + backup PostgreSQL
 ```

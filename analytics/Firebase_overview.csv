@@ -1,0 +1,128 @@
+# ----------------------------------------
+# Firebase overview
+# Account: todo.keepware
+# Property: todolist-79e51
+# ----------------------------------------
+# How are active users trending?
+# Start date: 20260302
+# End date: 20260329
+Nth day,30 days,7 days,1 day
+
+
+#  
+# Start date: 20260302
+# End date: 20260329
+Nth day
+
+
+#  
+# Start date: 20260302
+# End date: 20260329
+App,Version,Status
+14280119572,1.0.2-beta,Successful
+
+#  
+# Start date: 20260329
+# End date: 20260329
+App,Crash-free users
+
+
+# Start date: 20260328
+# End date: 20260328
+App,Crash-free users
+
+
+#  
+# Start date: 20260302
+# End date: 20260329
+Nth day,Average engagement time per active user
+
+
+# Start date: 20260302
+# End date: 20260329
+Nth day,Engaged sessions per active user
+
+
+# Start date: 20260302
+# End date: 20260329
+Nth day,Average engagement time per session
+
+
+#  
+# Start date: 20260216
+# End date: 20260329
+Cohort,Active users
+
+
+# How well do you retain your users?
+# Start date: 20260215
+# End date: 20260328
+Date,Week 0,Week 1,Week 2,Week 3,Week 4,Week 5
+Feb 15 - Feb 21,0,0,0,0,0,0
+Feb 22 - Feb 28,0,0,0,0,0,-1
+Mar 1 - Mar 7,0,0,0,0,-1,-1
+Mar 8 - Mar 14,0,0,0,-1,-1,-1
+Mar 15 - Mar 21,0,0,-1,-1,-1,-1
+Mar 22 - Mar 28,0,-1,-1,-1,-1,-1
+
+# Where does your average 120d value come from?
+# Start date: 20260302
+# End date: 20260329
+First user primary channel group (Default Channel Group),Average 120d value
+
+
+#  
+# Start date: 20260302
+# End date: 20260329
+Page title and screen class,Views
+
+
+#  
+# Start date: 20260302
+# End date: 20260329
+Event name,Event count
+
+
+# What are your top performing key events?
+# Start date: 20260302
+# End date: 20260329
+Event name,Key events
+
+
+#  
+# Start date: 20260302
+# End date: 20260329
+Nth day,Total revenue
+
+
+# Start date: 20260302
+# End date: 20260329
+Nth day,Purchase revenue
+
+
+# Start date: 20260302
+# End date: 20260329
+Nth day,Total ad revenue
+
+
+#  
+# Start date: 20260302
+# End date: 20260329
+Nth day,Average purchase revenue per active user
+
+
+#  
+# Start date: 20260302
+# End date: 20260329
+Country ID,Active users
+
+
+# Start date: 20260302
+# End date: 20260329
+Country,Active users
+
+
+#  
+# Start date: 20260302
+# End date: 20260329
+Device model,Active users
