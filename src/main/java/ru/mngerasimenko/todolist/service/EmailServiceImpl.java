@@ -30,6 +30,9 @@ public class EmailServiceImpl implements EmailService {
     private final JavaMailSender mailSender;
     private final EmailProperties emailProperties;
 
+    /** Кешированный результат SMTP health check (обновляется раз в 15 минут через SmtpHealthScheduler) */
+    private volatile boolean smtpHealthyCache = false;
+
     @Override
     @Async
     public void sendVerificationEmail(String email, String token) {
@@ -86,6 +89,14 @@ public class EmailServiceImpl implements EmailService {
 
     @Override
     public boolean isSmtpHealthy() {
+        return smtpHealthyCache;
+    }
+
+    /**
+     * Выполняет SMTP health check и обновляет кеш.
+     * Вызывается из SmtpHealthScheduler (раз в 15 минут).
+     */
+    public void checkSmtpHealth() {
         try {
             if (mailSender instanceof JavaMailSenderImpl impl) {
                 Transport transport = impl.getSession().getTransport("smtps");
@@ -93,12 +104,11 @@ public class EmailServiceImpl implements EmailService {
                         impl.getUsername(), impl.getPassword());
                 boolean connected = transport.isConnected();
                 transport.close();
-                return connected;
+                smtpHealthyCache = connected;
             }
-            return false;
         } catch (Exception e) {
+            smtpHealthyCache = false;
             log.warn("SMTP health check failed: {}", e.getMessage());
-            return false;
         }
     }
 

@@ -21,8 +21,14 @@ public interface EmailService {
     void sendInviteEmail(String email, String inviteLink, String listName, String inviterName);
 
     /**
-     * Проверить доступность SMTP-сервера.
-     * @return true если подключение и аутентификация успешны
+     * Проверить доступность SMTP-сервера (кешированный результат).
+     * @return true если последняя проверка была успешной
      */
     boolean isSmtpHealthy();
+
+    /**
+     * Выполнить SMTP health check и обновить кеш.
+     * Вызывается из SmtpHealthScheduler.
+     */
+    void checkSmtpHealth();
 }
