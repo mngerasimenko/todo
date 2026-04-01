@@ -80,7 +80,9 @@ public class PushNotificationServiceImpl implements PushNotificationService {
     @Override
     @Async
     public void notifyTodoCompleted(Long todoOwnerUserId, Long listId, String completorName, String todoName) {
+        log.info("Отправка push: задача '{}' выполнена пользователем '{}', владелец userId={}", todoName, completorName, todoOwnerUserId);
         List<String> tokens = pushTokenRepository.findFcmTokensByUserId(todoOwnerUserId);
+        log.info("Найдено {} push-токенов для уведомления", tokens.size());
         if (tokens.isEmpty()) return;
 
         sendToMultiple(tokens, "Задача выполнена", completorName + " выполнил: \"" + todoName + "\"", listId);
@@ -89,7 +91,9 @@ public class PushNotificationServiceImpl implements PushNotificationService {
     @Override
     @Async
     public void notifyNewMember(Long listId, Long newUserId, String newUserName, String listName) {
+        log.info("Отправка push: новый участник '{}' в списке {} ('{}')", newUserName, listId, listName);
         List<String> tokens = pushTokenRepository.findFcmTokensByListIdExcludingUser(listId, newUserId);
+        log.info("Найдено {} push-токенов для уведомления", tokens.size());
         if (tokens.isEmpty()) return;
 
         sendToMultiple(tokens, "Новый участник", newUserName + " присоединился к списку \"" + listName + "\"", listId);
