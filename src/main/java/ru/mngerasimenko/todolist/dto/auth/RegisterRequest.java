@@ -26,6 +26,10 @@ public class RegisterRequest {
     @Size(max = 128, message = "Email не должен превышать 128 символов")
     private String email;
 
+    public void setEmail(String email) {
+        this.email = email != null ? email.trim().toLowerCase() : null;
+    }
+
     /**
      * Имя пользователя
      */

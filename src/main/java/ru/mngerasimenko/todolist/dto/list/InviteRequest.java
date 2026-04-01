@@ -19,4 +19,8 @@ public class InviteRequest {
 
     @Email(message = "Некорректный формат email")
     private String email;
+
+    public void setEmail(String email) {
+        this.email = email != null ? email.trim().toLowerCase() : null;
+    }
 }

@@ -17,4 +17,8 @@ public class ForgotPasswordRequest {
     @NotBlank(message = "Email обязателен")
     @Email(message = "Некорректный email")
     private String email;
+
+    public void setEmail(String email) {
+        this.email = email != null ? email.trim().toLowerCase() : null;
+    }
 }
