@@ -73,16 +73,16 @@ public class PushNotificationServiceImpl implements PushNotificationService {
         log.info("Найдено {} push-токенов для уведомления", tokens.size());
         if (tokens.isEmpty()) return;
 
-        sendToMultiple(tokens, "Новая задача", authorName + " добавил: \"" + todoName + "\"");
+        sendToMultiple(tokens, "Новая задача", authorName + " добавил: \"" + todoName + "\"", listId);
     }
 
     @Override
     @Async
-    public void notifyTodoCompleted(Long todoOwnerUserId, String completorName, String todoName) {
+    public void notifyTodoCompleted(Long todoOwnerUserId, Long listId, String completorName, String todoName) {
         List<String> tokens = pushTokenRepository.findFcmTokensByUserId(todoOwnerUserId);
         if (tokens.isEmpty()) return;
 
-        sendToMultiple(tokens, "Задача выполнена", completorName + " выполнил: \"" + todoName + "\"");
+        sendToMultiple(tokens, "Задача выполнена", completorName + " выполнил: \"" + todoName + "\"", listId);
     }
 
     @Override
@@ -91,14 +91,14 @@ public class PushNotificationServiceImpl implements PushNotificationService {
         List<String> tokens = pushTokenRepository.findFcmTokensByListIdExcludingUser(listId, newUserId);
         if (tokens.isEmpty()) return;
 
-        sendToMultiple(tokens, "Новый участник", newUserName + " присоединился к списку \"" + listName + "\"");
+        sendToMultiple(tokens, "Новый участник", newUserName + " присоединился к списку \"" + listName + "\"", listId);
     }
 
     /**
-     * Отправить push на несколько устройств.
+     * Отправить push на несколько устройств с данными о списке.
      * Невалидные токены (UNREGISTERED) автоматически удаляются.
      */
-    private void sendToMultiple(List<String> fcmTokens, String title, String body) {
+    private void sendToMultiple(List<String> fcmTokens, String title, String body, Long listId) {
         for (String token : fcmTokens) {
             try {
                 Message message = Message.builder()
@@ -107,6 +107,7 @@ public class PushNotificationServiceImpl implements PushNotificationService {
                                 .setTitle(title)
                                 .setBody(body)
                                 .build())
+                        .putData("list_id", String.valueOf(listId))
                         .build();
 
                 FirebaseMessaging.getInstance().send(message);
