@@ -29,6 +29,7 @@ public class PushNotificationServiceImpl implements PushNotificationService {
 
     private final PushTokenRepository pushTokenRepository;
     private final UserRepository userRepository;
+    private final ru.mngerasimenko.todolist.repository.TaskListRepository taskListRepository;
 
     @Override
     @Transactional
@@ -99,6 +100,9 @@ public class PushNotificationServiceImpl implements PushNotificationService {
      * Невалидные токены (UNREGISTERED) автоматически удаляются.
      */
     private void sendToMultiple(List<String> fcmTokens, String title, String body, Long listId) {
+        String listName = taskListRepository.findById(listId)
+                .map(list -> list.getName()).orElse("");
+
         for (String token : fcmTokens) {
             try {
                 Message message = Message.builder()
@@ -108,6 +112,7 @@ public class PushNotificationServiceImpl implements PushNotificationService {
                                 .setBody(body)
                                 .build())
                         .putData("list_id", String.valueOf(listId))
+                        .putData("list_name", listName)
                         .build();
 
                 FirebaseMessaging.getInstance().send(message);
