@@ -59,8 +59,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       APP_VERSION_MAJOR: 0
-      APP_VERSION_MINOR: 1
-      APP_VERSION_PATCH_OFFSET: 60
+      APP_VERSION_MINOR: 2
+      APP_VERSION_PATCH_OFFSET: 251
 
     steps:
       - name: Checkout code
@@ -141,8 +141,8 @@ jobs:
     env:
       MIN_ANDROID_VERSION: 3
       APP_VERSION_MAJOR: 0
-      APP_VERSION_MINOR: 1
-      APP_VERSION_PATCH_OFFSET: 60
+      APP_VERSION_MINOR: 2
+      APP_VERSION_PATCH_OFFSET: 251
       DEPLOY_DIR: ${{ secrets.DEPLOY_DIR || '/home/deploy/todo' }}
 
     steps:
