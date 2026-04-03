@@ -9,6 +9,7 @@ import ru.mngerasimenko.todolist.dto.admin.UsageStatisticsResponse;
 import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.repository.InviteTokenRepository;
 import ru.mngerasimenko.todolist.repository.TaskListRepository;
+import ru.mngerasimenko.todolist.repository.TaskListUserRepository;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 
@@ -32,6 +33,9 @@ class StatisticsServiceImplTest {
     private TaskListRepository taskListRepository;
 
     @Mock
+    private TaskListUserRepository taskListUserRepository;
+
+    @Mock
     private InviteTokenRepository inviteTokenRepository;
 
     @InjectMocks
@@ -45,7 +49,10 @@ class StatisticsServiceImplTest {
         when(userRepository.countByEmailVerifiedTrue()).thenReturn(8L);
         when(taskListRepository.count()).thenReturn(5L);
         when(taskListRepository.countByCreatedAtAfter(any())).thenReturn(1L);
+        when(taskListUserRepository.countSharedLists()).thenReturn(2L);
+        when(taskListUserRepository.avgMembersPerList()).thenReturn(2.4);
         when(todoRepository.count()).thenReturn(100L);
+        when(todoRepository.countByIsPrivateTrue()).thenReturn(5L);
         when(todoRepository.countByCreatedAtAfter(any())).thenReturn(15L);
         when(todoRepository.countByDoneTrue()).thenReturn(60L);
         when(todoRepository.countByCompletedAtAfter(any())).thenReturn(8L);
@@ -59,11 +66,14 @@ class StatisticsServiceImplTest {
         assertThat(result.getUsers().getEmailVerified()).isEqualTo(8);
         assertThat(result.getLists().getTotal()).isEqualTo(5);
         assertThat(result.getLists().getNewInPeriod()).isEqualTo(1);
+        assertThat(result.getLists().getSharedLists()).isEqualTo(2);
+        assertThat(result.getLists().getAvgMembersPerList()).isEqualTo(2.4);
         assertThat(result.getTasks().getTotal()).isEqualTo(100);
         assertThat(result.getTasks().getNewInPeriod()).isEqualTo(15);
         assertThat(result.getTasks().getCompletedTotal()).isEqualTo(60);
         assertThat(result.getTasks().getCompletedInPeriod()).isEqualTo(8);
         assertThat(result.getTasks().getPendingTotal()).isEqualTo(40);
+        assertThat(result.getTasks().getPrivateTasks()).isEqualTo(5);
         assertThat(result.getActivity().getActiveInviteTokens()).isEqualTo(2);
     }
 
@@ -80,7 +90,10 @@ class StatisticsServiceImplTest {
         when(userRepository.countByEmailVerifiedTrue()).thenReturn(5L);
         when(taskListRepository.count()).thenReturn(3L);
         when(taskListRepository.countByCreatedAtAfter(any())).thenReturn(0L);
+        when(taskListUserRepository.countSharedLists()).thenReturn(0L);
+        when(taskListUserRepository.avgMembersPerList()).thenReturn(1.0);
         when(todoRepository.count()).thenReturn(50L);
+        when(todoRepository.countByIsPrivateTrue()).thenReturn(0L);
         when(todoRepository.countByCreatedAtAfter(any())).thenReturn(0L);
         when(todoRepository.countByDoneTrue()).thenReturn(20L);
         when(todoRepository.countByCompletedAtAfter(any())).thenReturn(0L);
@@ -100,7 +113,9 @@ class StatisticsServiceImplTest {
         when(userRepository.countByEmailVerifiedTrue()).thenReturn(0L);
         when(taskListRepository.count()).thenReturn(0L);
         when(taskListRepository.countByCreatedAtAfter(any())).thenReturn(0L);
+        when(taskListUserRepository.countSharedLists()).thenReturn(0L);
         when(todoRepository.count()).thenReturn(0L);
+        when(todoRepository.countByIsPrivateTrue()).thenReturn(0L);
         when(todoRepository.countByCreatedAtAfter(any())).thenReturn(0L);
         when(todoRepository.countByDoneTrue()).thenReturn(0L);
         when(todoRepository.countByCompletedAtAfter(any())).thenReturn(0L);
@@ -112,6 +127,7 @@ class StatisticsServiceImplTest {
         assertThat(result.getUsers().getTotal()).isZero();
         assertThat(result.getUsers().getEmailVerificationRate()).isZero();
         assertThat(result.getLists().getAvgListsPerUser()).isZero();
+        assertThat(result.getLists().getAvgMembersPerList()).isZero();
         assertThat(result.getTasks().getAvgTasksPerUser()).isZero();
         assertThat(result.getTasks().getAvgTasksPerList()).isZero();
         assertThat(result.getTasks().getCompletionRate()).isZero();
@@ -125,7 +141,10 @@ class StatisticsServiceImplTest {
         when(userRepository.countByEmailVerifiedTrue()).thenReturn(5L);
         when(taskListRepository.count()).thenReturn(2L);
         when(taskListRepository.countByCreatedAtAfter(any())).thenReturn(0L);
+        when(taskListUserRepository.countSharedLists()).thenReturn(0L);
+        when(taskListUserRepository.avgMembersPerList()).thenReturn(1.0);
         when(todoRepository.count()).thenReturn(200L);
+        when(todoRepository.countByIsPrivateTrue()).thenReturn(0L);
         when(todoRepository.countByCreatedAtAfter(any())).thenReturn(0L);
         when(todoRepository.countByDoneTrue()).thenReturn(150L);
         when(todoRepository.countByCompletedAtAfter(any())).thenReturn(0L);
@@ -146,7 +165,10 @@ class StatisticsServiceImplTest {
         when(userRepository.countByEmailVerifiedTrue()).thenReturn(2L);
         when(taskListRepository.count()).thenReturn(3L);
         when(taskListRepository.countByCreatedAtAfter(any())).thenReturn(0L);
+        when(taskListUserRepository.countSharedLists()).thenReturn(1L);
+        when(taskListUserRepository.avgMembersPerList()).thenReturn(1.7);
         when(todoRepository.count()).thenReturn(12L);
+        when(todoRepository.countByIsPrivateTrue()).thenReturn(2L);
         when(todoRepository.countByCreatedAtAfter(any())).thenReturn(0L);
         when(todoRepository.countByDoneTrue()).thenReturn(6L);
         when(todoRepository.countByCompletedAtAfter(any())).thenReturn(0L);
@@ -169,7 +191,9 @@ class StatisticsServiceImplTest {
         when(userRepository.countByEmailVerifiedTrue()).thenReturn(1L);
         when(taskListRepository.count()).thenReturn(0L);
         when(taskListRepository.countByCreatedAtAfter(any())).thenReturn(0L);
+        when(taskListUserRepository.countSharedLists()).thenReturn(0L);
         when(todoRepository.count()).thenReturn(0L);
+        when(todoRepository.countByIsPrivateTrue()).thenReturn(0L);
         when(todoRepository.countByCreatedAtAfter(any())).thenReturn(0L);
         when(todoRepository.countByDoneTrue()).thenReturn(0L);
         when(todoRepository.countByCompletedAtAfter(any())).thenReturn(0L);
@@ -189,7 +213,9 @@ class StatisticsServiceImplTest {
         when(userRepository.countByEmailVerifiedTrue()).thenReturn(0L);
         when(taskListRepository.count()).thenReturn(0L);
         when(taskListRepository.countByCreatedAtAfter(any())).thenReturn(0L);
+        when(taskListUserRepository.countSharedLists()).thenReturn(0L);
         when(todoRepository.count()).thenReturn(0L);
+        when(todoRepository.countByIsPrivateTrue()).thenReturn(0L);
         when(todoRepository.countByCreatedAtAfter(any())).thenReturn(0L);
         when(todoRepository.countByDoneTrue()).thenReturn(0L);
         when(todoRepository.countByCompletedAtAfter(any())).thenReturn(0L);
@@ -212,7 +238,9 @@ class StatisticsServiceImplTest {
         when(userRepository.countByEmailVerifiedTrue()).thenReturn(0L);
         when(taskListRepository.count()).thenReturn(0L);
         when(taskListRepository.countByCreatedAtAfter(any())).thenReturn(0L);
+        when(taskListUserRepository.countSharedLists()).thenReturn(0L);
         when(todoRepository.count()).thenReturn(0L);
+        when(todoRepository.countByIsPrivateTrue()).thenReturn(0L);
         when(todoRepository.countByCreatedAtAfter(any())).thenReturn(0L);
         when(todoRepository.countByDoneTrue()).thenReturn(0L);
         when(todoRepository.countByCompletedAtAfter(any())).thenReturn(0L);
@@ -234,7 +262,9 @@ class StatisticsServiceImplTest {
         when(userRepository.countByEmailVerifiedTrue()).thenReturn(0L);
         when(taskListRepository.count()).thenReturn(0L);
         when(taskListRepository.countByCreatedAtAfter(any())).thenReturn(0L);
+        when(taskListUserRepository.countSharedLists()).thenReturn(0L);
         when(todoRepository.count()).thenReturn(10L);
+        when(todoRepository.countByIsPrivateTrue()).thenReturn(0L);
         when(todoRepository.countByCreatedAtAfter(any())).thenReturn(0L);
         when(todoRepository.countByDoneTrue()).thenReturn(0L);
         when(todoRepository.countByCompletedAtAfter(any())).thenReturn(0L);

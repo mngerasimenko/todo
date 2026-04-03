@@ -8,6 +8,7 @@ import ru.mngerasimenko.todolist.dto.admin.UsageStatisticsResponse;
 import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.repository.InviteTokenRepository;
 import ru.mngerasimenko.todolist.repository.TaskListRepository;
+import ru.mngerasimenko.todolist.repository.TaskListUserRepository;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 
@@ -29,6 +30,7 @@ public class StatisticsServiceImpl implements StatisticsService {
     private final UserRepository userRepository;
     private final TodoRepository todoRepository;
     private final TaskListRepository taskListRepository;
+    private final TaskListUserRepository taskListUserRepository;
     private final InviteTokenRepository inviteTokenRepository;
 
     @Override
@@ -55,10 +57,15 @@ public class StatisticsServiceImpl implements StatisticsService {
         double avgListsPerUser = totalUsers > 0
                 ? Math.round((double) totalLists / totalUsers * 10.0) / 10.0
                 : 0.0;
+        long sharedLists = taskListUserRepository.countSharedLists();
+        double avgMembersPerList = totalLists > 0
+                ? Math.round(taskListUserRepository.avgMembersPerList() * 10.0) / 10.0
+                : 0.0;
 
         // Задачи
         long totalTasks = todoRepository.count();
         long newTasks = todoRepository.countByCreatedAtAfter(since);
+        long privateTasks = todoRepository.countByIsPrivateTrue();
         long completedTotal = todoRepository.countByDoneTrue();
         long completedInPeriod = todoRepository.countByCompletedAtAfter(since);
         long pendingTotal = totalTasks - completedTotal;
@@ -91,6 +98,8 @@ public class StatisticsServiceImpl implements StatisticsService {
                         .total(totalLists)
                         .newInPeriod(newLists)
                         .avgListsPerUser(avgListsPerUser)
+                        .sharedLists(sharedLists)
+                        .avgMembersPerList(avgMembersPerList)
                         .build())
                 .tasks(UsageStatisticsResponse.TaskStats.builder()
                         .total(totalTasks)
@@ -101,6 +110,7 @@ public class StatisticsServiceImpl implements StatisticsService {
                         .completionRate(completionRate)
                         .avgTasksPerUser(avgTasksPerUser)
                         .avgTasksPerList(avgTasksPerList)
+                        .privateTasks(privateTasks)
                         .build())
                 .activity(UsageStatisticsResponse.ActivityStats.builder()
                         .activeUsersLast24h(activeUsersLast24h)

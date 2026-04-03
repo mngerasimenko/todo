@@ -95,6 +95,11 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
     @Query("UPDATE Todo t SET t.completorUser.id = :newUserId WHERE t.completorUser.id = :oldUserId")
     void reassignCompletorUser(@Param("oldUserId") Long oldUserId, @Param("newUserId") Long newUserId);
 
+    /**
+     * Количество приватных задач.
+     */
+    long countByIsPrivateTrue();
+
     long countByCreatedAtAfter(LocalDateTime since);
 
     long countByDoneTrue();

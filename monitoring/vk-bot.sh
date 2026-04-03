@@ -235,11 +235,14 @@ print(f'''📈 Статистика (за {period}ч)
    Email подтверждён: {u.get('email_verified', '?')} ({u.get('email_verification_rate', 0):.0f}%)
 
 📋 Списки: {l.get('total', '?')} (новых: {l.get('new_in_period', '?')})
+   Совместных: {l.get('shared_lists', '?')}
    Среднее на пользователя: {l.get('avg_lists_per_user', 0):.1f}
+   Среднее участников: {l.get('avg_members_per_list', 0):.1f}
 
 ✅ Задачи: {t.get('total', '?')} (новых: {t.get('new_in_period', '?')})
    Выполнено: {t.get('completed_total', '?')} ({t.get('completion_rate', 0):.0f}%), за период: {t.get('completed_in_period', '?')}
    В ожидании: {t.get('pending_total', '?')}
+   Приватных: {t.get('private_tasks', '?')}
    Среднее на пользователя: {t.get('avg_tasks_per_user', 0):.1f}
    Среднее на список: {t.get('avg_tasks_per_list', 0):.1f}
 

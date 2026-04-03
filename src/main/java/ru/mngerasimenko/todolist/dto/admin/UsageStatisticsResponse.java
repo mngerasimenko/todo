@@ -62,6 +62,12 @@ public class UsageStatisticsResponse {
 
         @JsonProperty("avg_lists_per_user")
         private double avgListsPerUser;
+
+        @JsonProperty("shared_lists")
+        private long sharedLists;
+
+        @JsonProperty("avg_members_per_list")
+        private double avgMembersPerList;
     }
 
     @Data
@@ -91,6 +97,9 @@ public class UsageStatisticsResponse {
 
         @JsonProperty("avg_tasks_per_list")
         private double avgTasksPerList;
+
+        @JsonProperty("private_tasks")
+        private long privateTasks;
     }
 
     @Data

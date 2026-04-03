@@ -63,6 +63,18 @@ public interface TaskListUserRepository extends JpaRepository<TaskListUser, Task
     long countByListId(@Param("listId") Long listId);
 
     /**
+     * Среднее количество участников в списке.
+     */
+    @Query(value = "SELECT COALESCE(AVG(cnt), 0) FROM (SELECT COUNT(*) AS cnt FROM task_list_user GROUP BY list_id) sub", nativeQuery = true)
+    double avgMembersPerList();
+
+    /**
+     * Количество совместных списков (больше 1 участника).
+     */
+    @Query(value = "SELECT COUNT(*) FROM (SELECT list_id FROM task_list_user GROUP BY list_id HAVING COUNT(*) > 1) sub", nativeQuery = true)
+    long countSharedLists();
+
+    /**
      * Удалить запись участия пользователя в списке.
      */
     @Modifying
