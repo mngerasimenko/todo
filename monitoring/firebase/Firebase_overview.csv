@@ -1,0 +1,331 @@
+# ----------------------------------------
+# Firebase overview
+# Account: todo.keepware
+# Property: todolist-79e51
+# ----------------------------------------
+# How are active users trending?
+# Start date: 20260306
+# End date: 20260402
+Nth day,30 days,7 days,1 day
+0000,0,0,0
+0001,0,0,0
+0002,0,0,0
+0003,0,0,0
+0004,0,0,0
+0005,0,0,0
+0006,0,0,0
+0007,0,0,0
+0008,0,0,0
+0009,0,0,0
+0010,0,0,0
+0011,0,0,0
+0012,0,0,0
+0013,0,0,0
+0014,0,0,0
+0015,0,0,0
+0016,0,0,0
+0017,0,0,0
+0018,0,0,0
+0019,0,0,0
+0020,0,0,0
+0021,0,0,0
+0022,0,0,0
+0023,0,0,0
+0024,1,1,1
+0025,4,4,4
+0026,8,8,7
+0027,9,9,4
+
+#  
+# Start date: 20260306
+# End date: 20260402
+Nth day,1.0.4-beta,1.0.3-beta,1.0.2-beta
+0000,0,0,0
+0001,0,0,0
+0002,0,0,0
+0003,0,0,0
+0004,0,0,0
+0005,0,0,0
+0006,0,0,0
+0007,0,0,0
+0008,0,0,0
+0009,0,0,0
+0010,0,0,0
+0011,0,0,0
+0012,0,0,0
+0013,0,0,0
+0014,0,0,0
+0015,0,0,0
+0016,0,0,0
+0017,0,0,0
+0018,0,0,0
+0019,0,0,0
+0020,0,0,0
+0021,0,0,0
+0022,0,0,0
+0023,0,0,0
+0024,0,0,1
+0025,1,3,2
+0026,3,4,0
+0027,4,0,0
+
+#  
+# Start date: 20260306
+# End date: 20260402
+App,Version,Status
+14280119572,1.0.4-beta,Successful
+
+#  
+# Start date: 20260402
+# End date: 20260402
+App,Crash-free users
+14280119572,1
+
+# Start date: 20260401
+# End date: 20260401
+App,Crash-free users
+14280119572,1
+
+#  
+# Start date: 20260306
+# End date: 20260402
+Nth day,Average engagement time per active user
+0000,0
+0001,0
+0002,0
+0003,0
+0004,0
+0005,0
+0006,0
+0007,0
+0008,0
+0009,0
+0010,0
+0011,0
+0012,0
+0013,0
+0014,0
+0015,0
+0016,0
+0017,0
+0018,0
+0019,0
+0020,0
+0021,0
+0022,0
+0023,0
+0024,574
+0025,1728
+0026,1146.4285714285713
+0027,157.25
+
+# Start date: 20260306
+# End date: 20260402
+Nth day,Engaged sessions per active user
+0000,0
+0001,0
+0002,0
+0003,0
+0004,0
+0005,0
+0006,0
+0007,0
+0008,0
+0009,0
+0010,0
+0011,0
+0012,0
+0013,0
+0014,0
+0015,0
+0016,0
+0017,0
+0018,0
+0019,0
+0020,0
+0021,0
+0022,0
+0023,0
+0024,2
+0025,3.25
+0026,2.2857142857142856
+0027,2.5
+
+# Start date: 20260306
+# End date: 20260402
+Nth day,Average engagement time per session
+0000,0
+0001,0
+0002,0
+0003,0
+0004,0
+0005,0
+0006,0
+0007,0
+0008,0
+0009,0
+0010,0
+0011,0
+0012,0
+0013,0
+0014,0
+0015,0
+0016,0
+0017,0
+0018,0
+0019,0
+0020,0
+0021,0
+0022,0
+0023,0
+0024,191.33333333333334
+0025,493.7142857142857
+0026,445.8333333333333
+0027,52.416666666666664
+
+#  
+# Start date: 20260220
+# End date: 20260402
+Cohort,Active users
+0000,1
+0001,0.5555555555555556
+0002,0.375
+0003,0.25
+0004,0
+0005,NaN
+0006,NaN
+0007,NaN
+0008,NaN
+0009,NaN
+0010,NaN
+0011,NaN
+0012,NaN
+0013,NaN
+0014,NaN
+0015,NaN
+0016,NaN
+0017,NaN
+0018,NaN
+0019,NaN
+0020,NaN
+0021,NaN
+0022,NaN
+0023,NaN
+0024,NaN
+0025,NaN
+0026,NaN
+0027,NaN
+0028,NaN
+0029,NaN
+0030,NaN
+0031,NaN
+0032,NaN
+0033,NaN
+0034,NaN
+0035,NaN
+0036,NaN
+0037,NaN
+0038,NaN
+0039,NaN
+0040,NaN
+0041,NaN
+
+# How well do you retain your users?
+# Start date: 20260215
+# End date: 20260328
+Date,Week 0,Week 1,Week 2,Week 3,Week 4,Week 5
+Feb 15 - Feb 21,0,0,0,0,0,0
+Feb 22 - Feb 28,0,0,0,0,0,-1
+Mar 1 - Mar 7,0,0,0,0,-1,-1
+Mar 8 - Mar 14,0,0,0,-1,-1,-1
+Mar 15 - Mar 21,0,0,-1,-1,-1,-1
+Mar 22 - Mar 28,0,-1,-1,-1,-1,-1
+
+# Where does your average 120d value come from?
+# Start date: 20260306
+# End date: 20260402
+First user primary channel group (Default Channel Group),Average 120d value
+
+
+#  
+# Start date: 20260306
+# End date: 20260402
+Page title and screen class,Views
+MainActivity,85
+
+#  
+# Start date: 20260306
+# End date: 20260402
+Event name,Event count
+user_engagement,160
+screen_view,85
+notification_receive,48
+session_start,45
+color_changed,33
+notification_open,23
+todo_completed,18
+todo_created,15
+notification_dismiss,13
+notification_foreground,12
+first_open,9
+app_remove,4
+invite_sent,4
+app_clear_data,2
+app_update,2
+list_created,1
+sign_up,1
+
+# What are your top performing key events?
+# Start date: 20260306
+# End date: 20260402
+Event name,Key events
+first_open,9
+
+#  
+# Start date: 20260306
+# End date: 20260402
+Nth day,Total revenue
+
+
+# Start date: 20260306
+# End date: 20260402
+Nth day,Purchase revenue
+
+
+# Start date: 20260306
+# End date: 20260402
+Nth day,Total ad revenue
+
+
+#  
+# Start date: 20260306
+# End date: 20260402
+Nth day,Average purchase revenue per active user
+
+
+#  
+# Start date: 20260306
+# End date: 20260402
+Country ID,Active users
+DE,1
+FI,3
+NL,1
+RU,9
+
+# Start date: 20260306
+# End date: 20260402
+Country,Active users
+RU,9
+FI,3
+DE,1
+NL,1
+
+#  
+# Start date: 20260306
+# End date: 20260402
+Device model,Active users
+REA-NX9,3
+SM-A155F,3
+KM6,1
+NTH-NX9,1
+STF-L09,1
