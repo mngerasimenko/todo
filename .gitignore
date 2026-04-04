@@ -42,3 +42,7 @@ todolist-*-firebase-adminsdk-*.json
 # JVM crash logs
 hs_err_pid*.log
 check/
+$null
+/scripts/
+*.png
+monitoring/rustore-position.md
