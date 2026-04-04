@@ -8,6 +8,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -176,6 +177,17 @@ public class GlobalExceptionHandler {
     /**
      * Обрабатывает ошибки аутентификации (HTTP 401).
      */
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<Map<String, Object>> handleBadCredentials(BadCredentialsException ex) {
+        log.warn("Bad credentials: {}", ex.getMessage());
+        // Для логина — не раскрываем существование аккаунта
+        String message = ex.getMessage();
+        if (message != null && (message.contains("Bad credentials") || message.contains("bad credentials"))) {
+            message = "Неверный email или пароль";
+        }
+        return createErrorResponse(HttpStatus.UNAUTHORIZED, "Unauthorized", message);
+    }
+
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<Map<String, Object>> handleAuthenticationException(AuthenticationException ex) {
         log.warn("Authentication failed: {}", ex.getMessage());

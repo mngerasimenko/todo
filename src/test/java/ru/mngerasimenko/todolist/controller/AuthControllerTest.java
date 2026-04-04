@@ -152,7 +152,7 @@ class AuthControllerTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.status").value(401))
                 .andExpect(jsonPath("$.error").value("Unauthorized"))
-                .andExpect(jsonPath("$.message").value("Bad credentials"));
+                .andExpect(jsonPath("$.message").value("Неверный email или пароль"));
     }
 
     @Test
