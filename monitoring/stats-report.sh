@@ -1,6 +1,6 @@
 #!/bin/bash
 # Автоматическая отправка статистики использования в VK
-# Cron: 0 */2 * * * /root/monitoring/stats-report.sh
+# Cron: 0 */4 * * * /root/monitoring/stats-report.sh
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/monitor.conf"
@@ -17,7 +17,7 @@ send_vk_message() {
 }
 
 # Получаем статистику из Actuator
-stats_json=$(docker exec todo-app wget -qO- "http://localhost:8091/actuator/usagestats" 2>/dev/null)
+stats_json=$(docker exec todo-app wget -qO- "http://localhost:8091/actuator/usagestats/4" 2>/dev/null)
 
 if [ -z "$stats_json" ]; then
     exit 0
@@ -35,17 +35,20 @@ period = d.get('period_hours', '?')
 generated = d.get('generated_at', '?')
 names = ', '.join(u.get('new_user_names', [])) or 'нет'
 
-print(f'''📈 Статистика ({generated})
+print(f'''📈 Статистика (за {period}ч)
 
-👥 Пользователи: {u.get('total', '?')} (новых за {period}ч: {u.get('new_in_period', '?')} — {names})
+👥 Пользователи: {u.get('total', '?')} (новых: {u.get('new_in_period', '?')} — {names})
    Email подтверждён: {u.get('email_verified', '?')} ({u.get('email_verification_rate', 0):.0f}%)
 
 📋 Списки: {l.get('total', '?')} (новых: {l.get('new_in_period', '?')})
+   Совместных: {l.get('shared_lists', '?')}
    Среднее на пользователя: {l.get('avg_lists_per_user', 0):.1f}
+   Среднее участников: {l.get('avg_members_per_list', 0):.1f}
 
 ✅ Задачи: {t.get('total', '?')} (новых: {t.get('new_in_period', '?')})
    Выполнено: {t.get('completed_total', '?')} ({t.get('completion_rate', 0):.0f}%), за период: {t.get('completed_in_period', '?')}
    В ожидании: {t.get('pending_total', '?')}
+   Приватных: {t.get('private_tasks', '?')}
    Среднее на пользователя: {t.get('avg_tasks_per_user', 0):.1f}
    Среднее на список: {t.get('avg_tasks_per_list', 0):.1f}
 

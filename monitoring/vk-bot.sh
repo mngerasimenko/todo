@@ -56,7 +56,7 @@ cmd_status() {
         fi
     done
 
-    local docker_mem=$(docker stats --no-stream --format "  {{.Name}}: {{.MemUsage}}" 2>/dev/null | head -7)
+    local docker_mem=$(docker stats --no-stream --format "  {{.Name}}: {{.MemUsage}}" 2>/dev/null | sed 's| / [^ ]*||g' | head -7)
 
     local http_code=$(curl -s -o /dev/null -w "%{http_code}" -Lk --max-time 10 http://localhost/api/status 2>/dev/null)
     if [ "$http_code" = "200" ]; then

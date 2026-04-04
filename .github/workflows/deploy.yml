@@ -205,6 +205,9 @@ jobs:
             sed -i 's/\r$//' /root/monitoring/*.sh 2>/dev/null || true
             chmod +x /root/monitoring/*.sh 2>/dev/null || true
 
+            # Update cron schedule for stats-report (every 4 hours)
+            (crontab -l 2>/dev/null | grep -v stats-report; echo "0 */4 * * * /root/monitoring/stats-report.sh >> /var/log/stats-report.log 2>&1") | crontab -
+
             # Restart VK bot
             systemctl restart server-monitor-bot 2>/dev/null || true
 
