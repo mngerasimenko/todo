@@ -27,6 +27,18 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     void revokeFamily(@Param("familyId") UUID familyId);
 
     /**
+     * Находит активный (не отозванный, не истёкший) токен в семье.
+     * Используется для обработки конкурентных refresh-запросов:
+     * если клиент повторно отправил старый токен, но ротация уже прошла —
+     * ротируем активный токен вместо блокировки всей семьи.
+     */
+    @Query("SELECT r FROM RefreshToken r WHERE r.familyId = :familyId " +
+            "AND r.revoked = false AND r.expiresAt > :now")
+    Optional<RefreshToken> findActiveFamilyToken(
+            @Param("familyId") UUID familyId,
+            @Param("now") LocalDateTime now);
+
+    /**
      * Удаляет все истёкшие токены.
      */
     @Modifying

@@ -14,6 +14,7 @@ import ru.mngerasimenko.todolist.util.TokenUtils;
 import static ru.mngerasimenko.todolist.util.LogUtils.maskEmail;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -65,8 +66,38 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
             throw new BadCredentialsException("Refresh-токен истёк");
         }
 
-        // Reuse detection: если токен уже отозван — компрометация семьи
+        // Reuse detection: токен уже отозван
         if (existing.isRevoked()) {
+            // Проверяем: есть ли активный токен в этой семье?
+            // Если да — это конкурентный запрос (клиент отправил старый токен,
+            // пока другой поток уже выполнил ротацию). Ротируем активный токен.
+            Optional<RefreshToken> activeToken = refreshTokenRepository
+                    .findActiveFamilyToken(existing.getFamilyId(), LocalDateTime.now());
+
+            if (activeToken.isPresent()) {
+                log.info("Конкурентный refresh-запрос для пользователя: {}, familyId: {}. " +
+                        "Ротируем активный токен вместо блокировки семьи.",
+                        maskEmail(existing.getUser().getEmail()), existing.getFamilyId());
+                // Ротируем активный токен (как обычный refresh)
+                RefreshToken active = activeToken.get();
+                active.setRevoked(true);
+                refreshTokenRepository.saveAndFlush(active);
+
+                String newRawToken = UUID.randomUUID().toString();
+                String newTokenHash = TokenUtils.sha256(newRawToken);
+                LocalDateTime expiresAt = LocalDateTime.now()
+                        .plusSeconds(jwtProperties.getRefreshTokenExpiration() / 1000);
+
+                RefreshToken newToken = new RefreshToken(
+                        newTokenHash, existing.getUser(), existing.getFamilyId(), expiresAt);
+                refreshTokenRepository.saveAndFlush(newToken);
+
+                log.info("Ротация refresh-токена (конкурентный) для пользователя: {}",
+                        maskEmail(existing.getUser().getEmail()));
+                return new RefreshTokenRotationResult(newRawToken, existing.getUser().getEmail());
+            }
+
+            // Нет активного токена — настоящая компрометация
             log.warn("REUSE DETECTION: повторное использование отозванного refresh-токена! " +
                     "Пользователь: {}, familyId: {}. Отзываем всю семью.",
                     maskEmail(existing.getUser().getEmail()), existing.getFamilyId());

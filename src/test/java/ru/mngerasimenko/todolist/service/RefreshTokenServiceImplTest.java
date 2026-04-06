@@ -21,6 +21,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
@@ -123,7 +124,7 @@ class RefreshTokenServiceImplTest {
     }
 
     @Test
-    void rotateRefreshToken_RevokedToken_RevokesEntireFamilyAndThrows() {
+    void rotateRefreshToken_RevokedToken_NoActiveToken_RevokesEntireFamilyAndThrows() {
         String rawToken = UUID.randomUUID().toString();
         String tokenHash = TokenUtils.sha256(rawToken);
         UUID familyId = UUID.randomUUID();
@@ -134,12 +135,51 @@ class RefreshTokenServiceImplTest {
         revoked.setRevoked(true);
 
         when(refreshTokenRepository.findByTokenHash(tokenHash)).thenReturn(Optional.of(revoked));
+        when(refreshTokenRepository.findActiveFamilyToken(eq(familyId), any(LocalDateTime.class)))
+                .thenReturn(Optional.empty());
 
         assertThrows(BadCredentialsException.class,
                 () -> refreshTokenService.rotateRefreshToken(rawToken));
 
-        // Reuse detection: вся семья отозвана
+        // Reuse detection: нет активного токена — вся семья отозвана
         verify(refreshTokenRepository).revokeFamily(familyId);
+    }
+
+    @Test
+    void rotateRefreshToken_RevokedToken_WithActiveToken_RotatesActiveInstead() {
+        String rawToken = UUID.randomUUID().toString();
+        String tokenHash = TokenUtils.sha256(rawToken);
+        UUID familyId = UUID.randomUUID();
+
+        // Отозванный токен (старый, использованный конкурентным запросом)
+        RefreshToken revoked = new RefreshToken(tokenHash, testUser, familyId,
+                LocalDateTime.now().plusDays(7));
+        revoked.setId(1L);
+        revoked.setRevoked(true);
+
+        // Активный токен (создан предыдущей ротацией)
+        RefreshToken active = new RefreshToken("activeHash", testUser, familyId,
+                LocalDateTime.now().plusDays(7));
+        active.setId(2L);
+
+        when(refreshTokenRepository.findByTokenHash(tokenHash)).thenReturn(Optional.of(revoked));
+        when(refreshTokenRepository.findActiveFamilyToken(eq(familyId), any(LocalDateTime.class)))
+                .thenReturn(Optional.of(active));
+        when(jwtProperties.getRefreshTokenExpiration()).thenReturn(604800000L);
+
+        RefreshTokenService.RefreshTokenRotationResult result =
+                refreshTokenService.rotateRefreshToken(rawToken);
+
+        // Конкурентный запрос обработан: ротирован активный токен вместо блокировки
+        assertNotNull(result.newRawToken());
+        assertEquals("test@example.com", result.email());
+        assertTrue(active.isRevoked());
+
+        // Семья НЕ заблокирована
+        verify(refreshTokenRepository, never()).revokeFamily(any());
+
+        // Сохранено 2 раза: обновление активного + создание нового
+        verify(refreshTokenRepository, times(2)).saveAndFlush(any(RefreshToken.class));
     }
 
     @Test
