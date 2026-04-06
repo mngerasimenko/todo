@@ -75,26 +75,10 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
                     .findActiveFamilyToken(existing.getFamilyId(), LocalDateTime.now());
 
             if (activeToken.isPresent()) {
-                log.info("Конкурентный refresh-запрос для пользователя: {}, familyId: {}. " +
+                log.warn("Конкурентный refresh-запрос для пользователя: {}, familyId: {}. " +
                         "Ротируем активный токен вместо блокировки семьи.",
                         maskEmail(existing.getUser().getEmail()), existing.getFamilyId());
-                // Ротируем активный токен (как обычный refresh)
-                RefreshToken active = activeToken.get();
-                active.setRevoked(true);
-                refreshTokenRepository.saveAndFlush(active);
-
-                String newRawToken = UUID.randomUUID().toString();
-                String newTokenHash = TokenUtils.sha256(newRawToken);
-                LocalDateTime expiresAt = LocalDateTime.now()
-                        .plusSeconds(jwtProperties.getRefreshTokenExpiration() / 1000);
-
-                RefreshToken newToken = new RefreshToken(
-                        newTokenHash, existing.getUser(), existing.getFamilyId(), expiresAt);
-                refreshTokenRepository.saveAndFlush(newToken);
-
-                log.info("Ротация refresh-токена (конкурентный) для пользователя: {}",
-                        maskEmail(existing.getUser().getEmail()));
-                return new RefreshTokenRotationResult(newRawToken, existing.getUser().getEmail());
+                return performRotation(activeToken.get(), "конкурентный");
             }
 
             // Нет активного токена — настоящая компрометация
@@ -105,9 +89,20 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
             throw new BadCredentialsException("Refresh-токен отозван. Войдите заново.");
         }
 
+        return performRotation(existing, "обычный");
+    }
+
+    /**
+     * Выполняет ротацию refresh-токена: отзывает переданный токен и создаёт новый в той же семье.
+     * Используется как для обычного refresh, так и для обработки конкурентных запросов.
+     *
+     * @param tokenToRevoke активный токен, подлежащий ротации
+     * @param rotationType  тип ротации для логирования ("обычный" или "конкурентный")
+     */
+    private RefreshTokenRotationResult performRotation(RefreshToken tokenToRevoke, String rotationType) {
         // Отзываем старый токен
-        existing.setRevoked(true);
-        refreshTokenRepository.saveAndFlush(existing);
+        tokenToRevoke.setRevoked(true);
+        refreshTokenRepository.saveAndFlush(tokenToRevoke);
 
         // Создаём новый токен с тем же family_id
         String newRawToken = UUID.randomUUID().toString();
@@ -116,11 +111,11 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
                 .plusSeconds(jwtProperties.getRefreshTokenExpiration() / 1000);
 
         RefreshToken newToken = new RefreshToken(
-                newTokenHash, existing.getUser(), existing.getFamilyId(), expiresAt);
+                newTokenHash, tokenToRevoke.getUser(), tokenToRevoke.getFamilyId(), expiresAt);
         refreshTokenRepository.saveAndFlush(newToken);
 
-        String email = existing.getUser().getEmail();
-        log.info("Ротация refresh-токена для пользователя: {}", maskEmail(email));
+        String email = tokenToRevoke.getUser().getEmail();
+        log.info("Ротация refresh-токена ({}) для пользователя: {}", rotationType, maskEmail(email));
 
         return new RefreshTokenRotationResult(newRawToken, email);
     }
