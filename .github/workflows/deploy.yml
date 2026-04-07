@@ -181,15 +181,22 @@ jobs:
             docker volume create certbot-conf 2>/dev/null || true
             docker volume create certbot-www 2>/dev/null || true
 
+            # Записываем .env рядом с docker-compose.yml — чтобы любой
+            # последующий `docker compose up` (в т.ч. от других проектов
+            # на этом же хосте) подхватывал актуальные значения, а не падал
+            # на фоллбеки `0.0.1` / `MIN_ANDROID_VERSION=1`.
+            cat > .env <<EOF
+            APP_VERSION=${{ env.APP_VERSION_MAJOR }}.${{ env.APP_VERSION_MINOR }}.${{ env.APP_PATCH }}
+            MIN_ANDROID_VERSION=${{ env.MIN_ANDROID_VERSION }}
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            MAIL_USERNAME=${{ secrets.MAIL_USERNAME }}
+            MAIL_PASSWORD=${{ secrets.MAIL_PASSWORD }}
+            EOF
+            chmod 600 .env
+
             # Pull and restart app
             docker compose pull todo-app
-
-            APP_VERSION=${{ env.APP_VERSION_MAJOR }}.${{ env.APP_VERSION_MINOR }}.${{ env.APP_PATCH }} \
-              MIN_ANDROID_VERSION=${{ env.MIN_ANDROID_VERSION }} \
-              POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} \
-              MAIL_USERNAME=${{ secrets.MAIL_USERNAME }} \
-              MAIL_PASSWORD=${{ secrets.MAIL_PASSWORD }} \
-              docker compose up -d todo-app
+            docker compose up -d todo-app
 
             # Reload nginx for static file updates
             docker exec nginx-proxy nginx -s reload 2>/dev/null || \
