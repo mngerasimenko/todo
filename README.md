@@ -8,7 +8,17 @@
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?logo=github-actions)
 ![Swagger](https://img.shields.io/badge/Swagger-OpenAPI_3-85EA2D?logo=swagger)
 
-REST API бэкенд для совместного управления списком задач. Система списков позволяет нескольким пользователям работать в общем пространстве, видеть задачи друг друга и отмечать их выполнение. Клиенты: React SPA и нативное Android-приложение.
+REST API бэкенд для совместного управления списком задач. Система списков позволяет нескольким пользователям работать в общем пространстве, видеть задачи друг друга и отмечать их выполнение.
+
+## 📱 Приложения
+
+| Платформа | Ссылка | Технологии |
+|-----------|--------|------------|
+| 🌐 **Web** | **[todo.keepware.ru](https://todo.keepware.ru)** | React 18 + TypeScript + Vite + Tailwind CSS — [todolist-web](https://github.com/mngerasimenko/todolist-web) |
+| 📱 **Android** | **[Скачать в RuStore](https://www.rustore.ru/catalog/app/ru.mngerasimenko.todolist)** | Kotlin + Jetpack Compose + Room + Hilt + Retrofit — [todolist-android](https://github.com/mngerasimenko/todolist-android) |
+| ⚙️ **Backend** | `https://todo.keepware.ru/api` (Swagger UI закрыт, доступ только по запросу) | Java 17 + Spring Boot 3.5 + PostgreSQL + JWT (этот репозиторий) |
+
+Все клиенты работают с единым REST API и используют JWT-аутентификацию.
 
 ---
 <a href="https://github.com/devxb/gitanimals">
