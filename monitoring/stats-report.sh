@@ -1,6 +1,6 @@
 #!/bin/bash
 # Автоматическая отправка статистики использования в VK
-# Cron: 0 */4 * * * /root/monitoring/stats-report.sh
+# Cron: 0 9 * * * /root/monitoring/stats-report.sh  (daily at 09:00)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/monitor.conf"
@@ -17,7 +17,7 @@ send_vk_message() {
 }
 
 # Получаем статистику из Actuator
-stats_json=$(docker exec todo-app wget -qO- "http://localhost:8091/actuator/usagestats/4" 2>/dev/null)
+stats_json=$(docker exec todo-app wget -qO- "http://localhost:8091/actuator/usagestats/24" 2>/dev/null)
 
 if [ -z "$stats_json" ]; then
     exit 0
