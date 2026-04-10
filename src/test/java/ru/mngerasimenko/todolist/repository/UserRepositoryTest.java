@@ -274,15 +274,13 @@ class UserRepositoryTest {
 
     @Test
     void findInactiveUsersForReminder_FindsInactiveUsers() {
-        // Пользователь с lastActiveAt 5 дней назад, без напоминаний
         testUser.setLastActiveAt(LocalDateTime.now().minusDays(5));
-        testUser.setLastReminderSentAt(null);
+        testUser.setReminderCount(0);
         userRepository.saveAndFlush(testUser);
 
         LocalDateTime inactiveSince = LocalDateTime.now().minusDays(3);
-        LocalDateTime reminderCutoff = inactiveSince;
 
-        List<User> result = userRepository.findInactiveUsersForReminder(inactiveSince, reminderCutoff);
+        List<User> result = userRepository.findInactiveUsersForReminder(inactiveSince, 3);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getEmail()).isEqualTo(TEST_EMAIL);
@@ -290,50 +288,43 @@ class UserRepositoryTest {
 
     @Test
     void findInactiveUsersForReminder_ExcludesRecentlyActiveUsers() {
-        // Пользователь активен — был 1 день назад
         testUser.setLastActiveAt(LocalDateTime.now().minusDays(1));
-        testUser.setLastReminderSentAt(null);
+        testUser.setReminderCount(0);
         userRepository.saveAndFlush(testUser);
 
         LocalDateTime inactiveSince = LocalDateTime.now().minusDays(3);
-        LocalDateTime reminderCutoff = inactiveSince;
 
-        List<User> result = userRepository.findInactiveUsersForReminder(inactiveSince, reminderCutoff);
+        List<User> result = userRepository.findInactiveUsersForReminder(inactiveSince, 3);
 
         assertThat(result).isEmpty();
     }
 
     @Test
-    void findInactiveUsersForReminder_ExcludesRecentlyRemindedUsers() {
-        // Пользователь неактивен 5 дней, но напоминание отправлено только что
+    void findInactiveUsersForReminder_ExcludesMaxRemindedUsers() {
+        // Пользователь неактивен, но уже получил 3 напоминания — исключён
         testUser.setLastActiveAt(LocalDateTime.now().minusDays(5));
-        testUser.setLastReminderSentAt(LocalDateTime.now());
+        testUser.setReminderCount(3);
         userRepository.saveAndFlush(testUser);
 
         LocalDateTime inactiveSince = LocalDateTime.now().minusDays(3);
-        LocalDateTime reminderCutoff = inactiveSince;
 
-        List<User> result = userRepository.findInactiveUsersForReminder(inactiveSince, reminderCutoff);
+        List<User> result = userRepository.findInactiveUsersForReminder(inactiveSince, 3);
 
         assertThat(result).isEmpty();
     }
 
     @Test
     void findInactiveUsersForReminder_ExcludesSystemUser() {
-        // Обычный пользователь (id > 0) — должен быть найден
         testUser.setLastActiveAt(LocalDateTime.now().minusDays(5));
-        testUser.setLastReminderSentAt(null);
+        testUser.setReminderCount(0);
         User savedUser = userRepository.saveAndFlush(testUser);
 
-        // Убеждаемся что id > 0 (автогенерация)
         assertThat(savedUser.getId()).isGreaterThan(0L);
 
         LocalDateTime inactiveSince = LocalDateTime.now().minusDays(3);
-        LocalDateTime reminderCutoff = inactiveSince;
 
-        List<User> result = userRepository.findInactiveUsersForReminder(inactiveSince, reminderCutoff);
+        List<User> result = userRepository.findInactiveUsersForReminder(inactiveSince, 3);
 
-        // Только обычные пользователи (id > 0) — системный пользователь (id=0 из миграции) исключён
         assertThat(result).allMatch(u -> u.getId() > 0);
         assertThat(result).extracting(User::getEmail).contains(TEST_EMAIL);
     }

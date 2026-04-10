@@ -29,3 +29,5 @@ databaseChangeLog:
       file: db/migration/014-create-push-token.yaml
   - include:
       file: db/migration/015-add-last-active-at.yaml
+  - include:
+      file: db/migration/016-add-reminder-count.yaml

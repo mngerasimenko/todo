@@ -937,4 +937,77 @@ class UserServiceImplTest {
 
         verify(repository, times(1)).updateLastActiveAt(eq(1L), any(LocalDateTime.class));
     }
+
+    // ===== findInactiveUsersForReminder =====
+
+    @Test
+    void findInactiveUsersForReminder_ReturnsFirstReminder() {
+        user.setReminderCount(0);
+        when(repository.findInactiveUsersForReminder(any(LocalDateTime.class), eq(3)))
+                .thenReturn(List.of(user));
+
+        List<User> result = userService.findInactiveUsersForReminder(3);
+
+        assertThat(result).hasSize(1);
+    }
+
+    @Test
+    void findInactiveUsersForReminder_FiltersSecondReminderByInterval() {
+        // Второе напоминание — через 7 дней после первого. Отправлено 2 дня назад — рано.
+        user.setReminderCount(1);
+        user.setLastReminderSentAt(LocalDateTime.now().minusDays(2));
+        when(repository.findInactiveUsersForReminder(any(LocalDateTime.class), eq(3)))
+                .thenReturn(List.of(user));
+
+        List<User> result = userService.findInactiveUsersForReminder(3);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void findInactiveUsersForReminder_AllowsSecondReminderAfterInterval() {
+        // Второе напоминание — через 7 дней. Отправлено 8 дней назад — пора.
+        user.setReminderCount(1);
+        user.setLastReminderSentAt(LocalDateTime.now().minusDays(8));
+        when(repository.findInactiveUsersForReminder(any(LocalDateTime.class), eq(3)))
+                .thenReturn(List.of(user));
+
+        List<User> result = userService.findInactiveUsersForReminder(3);
+
+        assertThat(result).hasSize(1);
+    }
+
+    @Test
+    void findInactiveUsersForReminder_AllowsThirdReminderAfter30Days() {
+        // Третье напоминание — через 30 дней. Отправлено 31 день назад — пора.
+        user.setReminderCount(2);
+        user.setLastReminderSentAt(LocalDateTime.now().minusDays(31));
+        when(repository.findInactiveUsersForReminder(any(LocalDateTime.class), eq(3)))
+                .thenReturn(List.of(user));
+
+        List<User> result = userService.findInactiveUsersForReminder(3);
+
+        assertThat(result).hasSize(1);
+    }
+
+    // ===== markReminderSent =====
+
+    @Test
+    void markReminderSent_IncrementsCountAndSetsTimestamp() {
+        user.setReminderCount(0);
+        when(repository.findById(1L)).thenReturn(Optional.of(user));
+
+        userService.markReminderSent(1L);
+
+        assertThat(user.getLastReminderSentAt()).isNotNull();
+        assertThat(user.getReminderCount()).isEqualTo(1);
+    }
+
+    @Test
+    void markReminderSent_UserNotFound_ThrowsException() {
+        when(repository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.markReminderSent(99L))
+                .isInstanceOf(UserNotFoundException.class);
+    }
 }

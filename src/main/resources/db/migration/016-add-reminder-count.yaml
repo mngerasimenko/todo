@@ -1,0 +1,16 @@
+databaseChangeLog:
+  - changeSet:
+      id: 016-add-reminder-count
+      author: mngerasimenko
+      comment: "Add reminder_count to todo_users for escalating reminder intervals"
+      changes:
+        - addColumn:
+            tableName: todo_users
+            columns:
+              - column:
+                  name: reminder_count
+                  type: int
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+                  remarks: "Number of inactive reminders sent (0=none, max 3)"

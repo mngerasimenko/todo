@@ -4,13 +4,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 import ru.mngerasimenko.todolist.model.User;
-import ru.mngerasimenko.todolist.repository.UserRepository;
 import ru.mngerasimenko.todolist.service.EmailService;
 import ru.mngerasimenko.todolist.service.PushNotificationService;
+import ru.mngerasimenko.todolist.service.UserService;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -26,7 +24,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class InactiveReminderScheduler {
 
-    private final UserRepository userRepository;
+    private static final int INACTIVE_DAYS = 3;
+
+    private final UserService userService;
     private final EmailService emailService;
     private final PushNotificationService pushNotificationService;
 
@@ -34,13 +34,8 @@ public class InactiveReminderScheduler {
      * Запускается каждый день в 10:00 по серверному времени.
      */
     @Scheduled(cron = "0 0 10 * * *")
-    @Transactional
     public void sendReminders() {
-        LocalDateTime inactiveSince = LocalDateTime.now().minusDays(3);
-        // Не отправлять повторно тем, кому уже отправляли после их последней активности
-        LocalDateTime reminderCutoff = inactiveSince;
-
-        List<User> inactiveUsers = userRepository.findInactiveUsersForReminder(inactiveSince, reminderCutoff);
+        List<User> inactiveUsers = userService.findInactiveUsersForReminder(INACTIVE_DAYS);
 
         if (inactiveUsers.isEmpty()) {
             log.info("[inactive-reminder] Нет неактивных пользователей для напоминания");
@@ -70,7 +65,11 @@ public class InactiveReminderScheduler {
             }
 
             // Отметить что напоминание отправлено
-            user.setLastReminderSentAt(LocalDateTime.now());
+            try {
+                userService.markReminderSent(user.getId());
+            } catch (Exception e) {
+                log.warn("[inactive-reminder] Ошибка отметки напоминания userId={}: {}", user.getId(), e.getMessage());
+            }
         }
 
         log.info("[inactive-reminder] Напоминание отправлено: push={}, email={}, всего пользователей={}",

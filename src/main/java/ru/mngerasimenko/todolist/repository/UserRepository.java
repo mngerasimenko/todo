@@ -38,18 +38,20 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * Обновить время последней активности пользователя.
      * Прямой UPDATE без загрузки Entity, не инкрементирует @Version.
      */
+    /**
+     * Обновить время последней активности и сбросить счётчик напоминаний.
+     */
     @Modifying
-    @Query("UPDATE User u SET u.lastActiveAt = :time WHERE u.id = :userId")
+    @Query("UPDATE User u SET u.lastActiveAt = :time, u.reminderCount = 0, u.lastReminderSentAt = NULL WHERE u.id = :userId")
     void updateLastActiveAt(@Param("userId") Long userId, @Param("time") LocalDateTime time);
 
     /**
-     * Найти пользователей, неактивных с указанной даты, которым не отправляли напоминание
-     * (или отправляли раньше cutoff).
+     * Найти пользователей, неактивных с указанной даты, которым отправлено менее maxReminders напоминаний.
      */
     @Query("SELECT u FROM User u WHERE u.id > 0 " +
             "AND (u.lastActiveAt IS NULL OR u.lastActiveAt < :inactiveSince) " +
-            "AND (u.lastReminderSentAt IS NULL OR u.lastReminderSentAt < :reminderCutoff)")
+            "AND u.reminderCount < :maxReminders")
     List<User> findInactiveUsersForReminder(
             @Param("inactiveSince") LocalDateTime inactiveSince,
-            @Param("reminderCutoff") LocalDateTime reminderCutoff);
+            @Param("maxReminders") int maxReminders);
 }

@@ -142,6 +142,13 @@ public class User {
     private LocalDateTime lastReminderSentAt;
 
     /**
+     * Количество отправленных напоминаний о неактивности (макс. 3).
+     * Сбрасывается при повторной активности.
+     */
+    @Column(name = "reminder_count", nullable = false)
+    private int reminderCount = 0;
+
+    /**
      * Версия записи для оптимистичной блокировки.
      * Hibernate автоматически инкрементирует при каждом UPDATE.
      */
@@ -335,5 +342,13 @@ public class User {
 
     public void setLastReminderSentAt(LocalDateTime lastReminderSentAt) {
         this.lastReminderSentAt = lastReminderSentAt;
+    }
+
+    public int getReminderCount() {
+        return reminderCount;
+    }
+
+    public void setReminderCount(int reminderCount) {
+        this.reminderCount = reminderCount;
     }
 }

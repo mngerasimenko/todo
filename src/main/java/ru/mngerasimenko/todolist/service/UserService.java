@@ -1,6 +1,7 @@
 package ru.mngerasimenko.todolist.service;
 
 import ru.mngerasimenko.todolist.dto.UserDto;
+import ru.mngerasimenko.todolist.model.User;
 
 import java.util.List;
 
@@ -54,4 +55,10 @@ public interface UserService {
 
     /** Обновить время последней активности пользователя */
     void updateLastActiveAt(Long userId);
+
+    /** Найти неактивных пользователей для отправки напоминания */
+    List<User> findInactiveUsersForReminder(int inactiveDays);
+
+    /** Отметить что напоминание отправлено */
+    void markReminderSent(Long userId);
 }

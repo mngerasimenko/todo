@@ -326,6 +326,49 @@ public class UserServiceImpl implements UserService {
         repository.updateLastActiveAt(userId, LocalDateTime.now());
     }
 
+    /** Нарастающие интервалы напоминаний: 3 дня, +7 дней, +30 дней */
+    private static final int MAX_REMINDERS = 3;
+    private static final int[] REMINDER_INTERVALS_DAYS = {0, 7, 30};
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<User> findInactiveUsersForReminder(int inactiveDays) {
+        LocalDateTime inactiveSince = LocalDateTime.now().minusDays(inactiveDays);
+        List<User> candidates = repository.findInactiveUsersForReminder(inactiveSince, MAX_REMINDERS);
+
+        // Фильтруем по нарастающему интервалу
+        LocalDateTime now = LocalDateTime.now();
+        return candidates.stream()
+                .filter(user -> isReadyForNextReminder(user, now))
+                .toList();
+    }
+
+    /**
+     * Проверяет, прошёл ли нужный интервал с последнего напоминания.
+     * count=0: первое напоминание — сразу (интервал 0 после определения неактивности)
+     * count=1: второе — через 7 дней после первого
+     * count=2: третье — через 30 дней после второго
+     */
+    private boolean isReadyForNextReminder(User user, LocalDateTime now) {
+        if (user.getReminderCount() == 0) {
+            return true; // Первое напоминание — сразу
+        }
+        if (user.getLastReminderSentAt() == null) {
+            return true;
+        }
+        int intervalDays = REMINDER_INTERVALS_DAYS[Math.min(user.getReminderCount(), REMINDER_INTERVALS_DAYS.length) - 1];
+        return user.getLastReminderSentAt().plusDays(intervalDays).isBefore(now);
+    }
+
+    @Override
+    @Transactional
+    public void markReminderSent(Long userId) {
+        User user = repository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + userId));
+        user.setLastReminderSentAt(LocalDateTime.now());
+        user.setReminderCount(user.getReminderCount() + 1);
+    }
+
     /**
      * SHA-256 хеш строки (делегирует в TokenUtils для переиспользования).
      */
