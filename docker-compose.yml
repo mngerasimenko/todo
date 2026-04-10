@@ -14,6 +14,7 @@ services:
       - ./nginx/legal:/usr/share/nginx/legal:ro
       - ./nginx/help:/usr/share/nginx/help:ro
       - ./nginx/well-known:/usr/share/nginx/well-known:ro
+      - ./icon-512-rustore.png:/todo/icon-512-rustore.png:ro
       - certbot-conf:/etc/letsencrypt:ro
       - certbot-www:/var/www/certbot:ro
 

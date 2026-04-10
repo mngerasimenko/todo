@@ -45,6 +45,7 @@ check/
 $null
 /scripts/
 *.png
+!/icon-512-rustore.png
 monitoring/rustore-position.md
 /monitoring/user-stats.md
 /monitoring/user-stats.html
