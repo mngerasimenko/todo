@@ -125,8 +125,9 @@ jobs:
             docker pull mngerasimenko/todo-app:latest
             docker compose -f docker-compose.staging.yml up -d --force-recreate todo-app
 
-            # Cleanup
-            docker image prune -f 2>/dev/null || true
+            # Cleanup: remove all unused images and build cache to prevent disk fill
+            docker image prune -a -f 2>/dev/null || true
+            docker builder prune -a -f 2>/dev/null || true
 
             echo "Staging deployed successfully"
 
@@ -204,8 +205,9 @@ jobs:
             docker exec nginx-proxy nginx -s reload 2>/dev/null || \
               docker compose up -d --force-recreate nginx-proxy 2>/dev/null || true
 
-            # Cleanup
-            docker image prune -f 2>/dev/null || true
+            # Cleanup: remove all unused images and build cache to prevent disk fill
+            docker image prune -a -f 2>/dev/null || true
+            docker builder prune -a -f 2>/dev/null || true
 
             # Fix monitoring scripts (CRLF → LF, +x)
             sed -i 's/\r$//' /home/deploy/todo/monitoring/*.sh 2>/dev/null || true
