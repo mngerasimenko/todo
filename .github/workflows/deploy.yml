@@ -141,6 +141,7 @@ jobs:
     environment: production
     env:
       MIN_ANDROID_VERSION: 3
+      LATEST_ANDROID_VERSION: 11
       APP_VERSION_MAJOR: 0
       APP_VERSION_MINOR: 2
       APP_VERSION_PATCH_OFFSET: 251
@@ -189,6 +190,7 @@ jobs:
             cat > .env <<EOF
             APP_VERSION=${{ env.APP_VERSION_MAJOR }}.${{ env.APP_VERSION_MINOR }}.${{ env.APP_PATCH }}
             MIN_ANDROID_VERSION=${{ env.MIN_ANDROID_VERSION }}
+            LATEST_ANDROID_VERSION=${{ env.LATEST_ANDROID_VERSION }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
             JWT_SECRET=${{ secrets.JWT_SECRET }}
             MAIL_USERNAME=${{ secrets.MAIL_USERNAME }}

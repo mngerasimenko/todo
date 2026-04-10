@@ -15,6 +15,7 @@ import java.util.List;
 public class AppProperties {
     private String version = "0.0.1";
     private int minAndroidVersion = 1;
+    private int latestAndroidVersion = 1;
     private List<String> corsOrigins = List.of();
 
     /**

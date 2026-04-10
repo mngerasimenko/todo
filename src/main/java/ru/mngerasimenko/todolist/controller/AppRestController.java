@@ -31,6 +31,7 @@ public class AppRestController {
                 .status(true)
                 .version(appProperties.getVersion())
                 .minAndroidVersion(appProperties.getMinAndroidVersion())
+                .latestAndroidVersion(appProperties.getLatestAndroidVersion())
                 .smtpHealthy(emailService.isSmtpHealthy())
                 .firebaseHealthy(pushNotificationService.isFirebaseHealthy())
                 .build();
