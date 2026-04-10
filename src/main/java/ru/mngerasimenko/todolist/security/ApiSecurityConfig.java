@@ -58,7 +58,8 @@ public class ApiSecurityConfig {
                                 "/api/auth/reset-password",
                                 "/api/v3/api-docs/**",
                                 "/api/swagger-ui/**",
-                                "/api/swagger-ui.html"
+                                "/api/swagger-ui.html",
+                                "/api/track/**"
                         ).permitAll()
                         // Публичный GET для информации о приглашении
                         .requestMatchers(HttpMethod.GET, "/api/lists/invite/*").permitAll()

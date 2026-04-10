@@ -326,9 +326,9 @@ public class UserServiceImpl implements UserService {
         repository.updateLastActiveAt(userId, LocalDateTime.now());
     }
 
-    /** Нарастающие интервалы напоминаний: 3 дня, +7 дней, +30 дней */
+    /** Нарастающие интервалы напоминаний: 7 дней, +14 дней, +30 дней */
     private static final int MAX_REMINDERS = 3;
-    private static final int[] REMINDER_INTERVALS_DAYS = {0, 7, 30};
+    private static final int[] REMINDER_INTERVALS_DAYS = {0, 14, 30};
 
     @Override
     @Transactional(readOnly = true)

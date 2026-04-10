@@ -24,7 +24,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class InactiveReminderScheduler {
 
-    private static final int INACTIVE_DAYS = 3;
+    private static final int INACTIVE_DAYS = 7;
 
     private final UserService userService;
     private final EmailService emailService;
@@ -57,7 +57,7 @@ public class InactiveReminderScheduler {
             // Email — только если email подтверждён
             if (user.isEmailVerified()) {
                 try {
-                    emailService.sendInactiveReminderEmail(user.getEmail(), user.getName());
+                    emailService.sendInactiveReminderEmail(user.getEmail(), user.getName(), user.getId());
                     sentEmails++;
                 } catch (Exception e) {
                     log.warn("[inactive-reminder] Ошибка отправки email userId={}: {}", user.getId(), e.getMessage());

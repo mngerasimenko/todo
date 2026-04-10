@@ -57,7 +57,7 @@ class InactiveReminderSchedulerTest {
     @Test
     void sendReminders_NoInactiveUsers_DoesNothing() {
         // Сервис возвращает пустой список
-        when(userService.findInactiveUsersForReminder(3)).thenReturn(Collections.emptyList());
+        when(userService.findInactiveUsersForReminder(7)).thenReturn(Collections.emptyList());
 
         scheduler.sendReminders();
 
@@ -69,36 +69,36 @@ class InactiveReminderSchedulerTest {
 
     @Test
     void sendReminders_SendsPushAndEmail_WhenUserIsVerified() {
-        when(userService.findInactiveUsersForReminder(3)).thenReturn(List.of(verifiedUser));
+        when(userService.findInactiveUsersForReminder(7)).thenReturn(List.of(verifiedUser));
 
         scheduler.sendReminders();
 
         verify(pushNotificationService).sendInactiveReminderPush(1L, "Иван");
-        verify(emailService).sendInactiveReminderEmail("ivan@mail.ru", "Иван");
+        verify(emailService).sendInactiveReminderEmail("ivan@mail.ru", "Иван", 1L);
         verify(userService).markReminderSent(1L);
     }
 
     @Test
     void sendReminders_SendsOnlyPush_WhenEmailNotVerified() {
-        when(userService.findInactiveUsersForReminder(3)).thenReturn(List.of(unverifiedUser));
+        when(userService.findInactiveUsersForReminder(7)).thenReturn(List.of(unverifiedUser));
 
         scheduler.sendReminders();
 
         verify(pushNotificationService).sendInactiveReminderPush(2L, "Пётр");
-        verify(emailService, never()).sendInactiveReminderEmail(anyString(), anyString());
+        verify(emailService, never()).sendInactiveReminderEmail(anyString(), anyString(), anyLong());
         verify(userService).markReminderSent(2L);
     }
 
     @Test
     void sendReminders_ContinuesOnPushFailure() {
         // Push бросает исключение — email всё равно должен быть отправлен
-        when(userService.findInactiveUsersForReminder(3)).thenReturn(List.of(verifiedUser));
+        when(userService.findInactiveUsersForReminder(7)).thenReturn(List.of(verifiedUser));
         doThrow(new RuntimeException("Firebase unavailable"))
                 .when(pushNotificationService).sendInactiveReminderPush(anyLong(), anyString());
 
         scheduler.sendReminders();
 
-        verify(emailService).sendInactiveReminderEmail("ivan@mail.ru", "Иван");
+        verify(emailService).sendInactiveReminderEmail("ivan@mail.ru", "Иван", 1L);
         verify(userService).markReminderSent(1L);
     }
 
@@ -111,9 +111,9 @@ class InactiveReminderSchedulerTest {
         secondUser.setEmail("anna@mail.ru");
         secondUser.setEmailVerified(true);
 
-        when(userService.findInactiveUsersForReminder(3)).thenReturn(List.of(verifiedUser, secondUser));
+        when(userService.findInactiveUsersForReminder(7)).thenReturn(List.of(verifiedUser, secondUser));
         doThrow(new RuntimeException("SMTP error"))
-                .when(emailService).sendInactiveReminderEmail(eq("ivan@mail.ru"), anyString());
+                .when(emailService).sendInactiveReminderEmail(eq("ivan@mail.ru"), anyString(), anyLong());
 
         scheduler.sendReminders();
 
@@ -128,7 +128,7 @@ class InactiveReminderSchedulerTest {
     @Test
     void sendReminders_ContinuesOnMarkReminderFailure() {
         // markReminderSent падает — следующий пользователь всё равно обрабатывается
-        when(userService.findInactiveUsersForReminder(3)).thenReturn(List.of(verifiedUser, unverifiedUser));
+        when(userService.findInactiveUsersForReminder(7)).thenReturn(List.of(verifiedUser, unverifiedUser));
         doThrow(new RuntimeException("DB error")).when(userService).markReminderSent(1L);
 
         scheduler.sendReminders();

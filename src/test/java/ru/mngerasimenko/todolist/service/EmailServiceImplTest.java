@@ -93,7 +93,7 @@ class EmailServiceImplTest {
         MimeMessage mimeMessage = mock(MimeMessage.class);
         when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
 
-        emailService.sendInactiveReminderEmail("user@example.com", "Иван");
+        emailService.sendInactiveReminderEmail("user@example.com", "Иван", 1L);
 
         verify(mailSender).createMimeMessage();
         verify(mailSender).send(mimeMessage);

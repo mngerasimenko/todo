@@ -24,8 +24,9 @@ public interface EmailService {
      * Отправить напоминание неактивному пользователю.
      * @param email email пользователя
      * @param userName имя пользователя для персонализации
+     * @param userId ID пользователя для трекинга
      */
-    void sendInactiveReminderEmail(String email, String userName);
+    void sendInactiveReminderEmail(String email, String userName, Long userId);
 
     /**
      * Проверить доступность SMTP-сервера (кешированный результат).

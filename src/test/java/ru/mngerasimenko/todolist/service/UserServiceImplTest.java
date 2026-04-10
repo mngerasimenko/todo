@@ -946,33 +946,33 @@ class UserServiceImplTest {
         when(repository.findInactiveUsersForReminder(any(LocalDateTime.class), eq(3)))
                 .thenReturn(List.of(user));
 
-        List<User> result = userService.findInactiveUsersForReminder(3);
+        List<User> result = userService.findInactiveUsersForReminder(7);
 
         assertThat(result).hasSize(1);
     }
 
     @Test
     void findInactiveUsersForReminder_FiltersSecondReminderByInterval() {
-        // Второе напоминание — через 7 дней после первого. Отправлено 2 дня назад — рано.
+        // Второе напоминание — через 14 дней после первого. Отправлено 5 дней назад — рано.
         user.setReminderCount(1);
-        user.setLastReminderSentAt(LocalDateTime.now().minusDays(2));
+        user.setLastReminderSentAt(LocalDateTime.now().minusDays(5));
         when(repository.findInactiveUsersForReminder(any(LocalDateTime.class), eq(3)))
                 .thenReturn(List.of(user));
 
-        List<User> result = userService.findInactiveUsersForReminder(3);
+        List<User> result = userService.findInactiveUsersForReminder(7);
 
         assertThat(result).isEmpty();
     }
 
     @Test
     void findInactiveUsersForReminder_AllowsSecondReminderAfterInterval() {
-        // Второе напоминание — через 7 дней. Отправлено 8 дней назад — пора.
+        // Второе напоминание — через 14 дней. Отправлено 15 дней назад — пора.
         user.setReminderCount(1);
-        user.setLastReminderSentAt(LocalDateTime.now().minusDays(8));
+        user.setLastReminderSentAt(LocalDateTime.now().minusDays(15));
         when(repository.findInactiveUsersForReminder(any(LocalDateTime.class), eq(3)))
                 .thenReturn(List.of(user));
 
-        List<User> result = userService.findInactiveUsersForReminder(3);
+        List<User> result = userService.findInactiveUsersForReminder(7);
 
         assertThat(result).hasSize(1);
     }
@@ -985,7 +985,7 @@ class UserServiceImplTest {
         when(repository.findInactiveUsersForReminder(any(LocalDateTime.class), eq(3)))
                 .thenReturn(List.of(user));
 
-        List<User> result = userService.findInactiveUsersForReminder(3);
+        List<User> result = userService.findInactiveUsersForReminder(7);
 
         assertThat(result).hasSize(1);
     }

@@ -89,14 +89,17 @@ public class EmailServiceImpl implements EmailService {
 
     @Override
     @Async
-    public void sendInactiveReminderEmail(String email, String userName) {
+    public void sendInactiveReminderEmail(String email, String userName, Long userId) {
         String safeName = HtmlUtils.htmlEscape(userName != null ? userName : "друг");
-        String openAppLink = emailProperties.getBaseUrl();
+        String baseUrl = emailProperties.getBaseUrl();
         String rustoreLink = "https://www.rustore.ru/catalog/app/ru.mngerasimenko.todolist";
+        String trackClickLink = baseUrl + "/api/track/click/" + userId;
+        String trackOpenLink = baseUrl + "/api/track/open/" + userId;
         String html = loadTemplate("templates/inactive-reminder.html")
                 .replace("{{userName}}", safeName)
-                .replace("{{openAppLink}}", openAppLink)
-                .replace("{{rustoreLink}}", rustoreLink);
+                .replace("{{rustoreLink}}", rustoreLink)
+                .replace("{{trackClickLink}}", trackClickLink)
+                .replace("{{trackOpenLink}}", trackOpenLink);
         sendHtmlEmail(email, "Мы скучаем! — Список задач", html);
     }
 
