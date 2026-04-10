@@ -79,6 +79,7 @@ public class AuthController {
                 .user(userResponse)
                 .build();
 
+        userService.updateLastActiveAt(userDto.getId());
         log.info("Успешный вход пользователя: {}", maskEmail(loginRequest.getEmail()));
         return ResponseEntity.ok(response);
     }
@@ -149,6 +150,7 @@ public class AuthController {
                 .user(userResponse)
                 .build();
 
+        userService.updateLastActiveAt(userDto.getId());
         log.info("Успешное обновление токена для пользователя: {}", maskEmail(result.email()));
         return ResponseEntity.ok(response);
     }

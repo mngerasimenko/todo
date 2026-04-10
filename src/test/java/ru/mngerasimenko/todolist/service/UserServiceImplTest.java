@@ -928,4 +928,13 @@ class UserServiceImplTest {
         verify(repository, never()).saveAndFlush(any(User.class));
         verify(emailService, never()).sendVerificationEmail(anyString(), anyString());
     }
+
+    // ===== updateLastActiveAt =====
+
+    @Test
+    void updateLastActiveAt_CallsRepository() {
+        userService.updateLastActiveAt(1L);
+
+        verify(repository, times(1)).updateLastActiveAt(eq(1L), any(LocalDateTime.class));
+    }
 }

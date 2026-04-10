@@ -87,4 +87,15 @@ class EmailServiceImplTest {
 
         assertThat(result).isFalse();
     }
+
+    @Test
+    void sendInactiveReminderEmail_CallsMailSender() {
+        MimeMessage mimeMessage = mock(MimeMessage.class);
+        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+
+        emailService.sendInactiveReminderEmail("user@example.com", "Иван");
+
+        verify(mailSender).createMimeMessage();
+        verify(mailSender).send(mimeMessage);
+    }
 }

@@ -46,3 +46,8 @@ $null
 /scripts/
 *.png
 monitoring/rustore-position.md
+/monitoring/user-stats.md
+/monitoring/user-stats.html
+/monitoring/user-activity.md
+/monitoring/user-activity.html
+/monitoring/rustore-position.html

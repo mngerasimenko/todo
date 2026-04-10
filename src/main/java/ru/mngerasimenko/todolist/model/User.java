@@ -130,6 +130,18 @@ public class User {
     private boolean betaTester = false;
 
     /**
+     * Время последней активности (логин или refresh токена).
+     */
+    @Column(name = "last_active_at")
+    private LocalDateTime lastActiveAt;
+
+    /**
+     * Время последней отправки напоминания о неактивности.
+     */
+    @Column(name = "last_reminder_sent_at")
+    private LocalDateTime lastReminderSentAt;
+
+    /**
      * Версия записи для оптимистичной блокировки.
      * Hibernate автоматически инкрементирует при каждом UPDATE.
      */
@@ -307,5 +319,21 @@ public class User {
 
     public void setBetaTester(boolean betaTester) {
         this.betaTester = betaTester;
+    }
+
+    public LocalDateTime getLastActiveAt() {
+        return lastActiveAt;
+    }
+
+    public void setLastActiveAt(LocalDateTime lastActiveAt) {
+        this.lastActiveAt = lastActiveAt;
+    }
+
+    public LocalDateTime getLastReminderSentAt() {
+        return lastReminderSentAt;
+    }
+
+    public void setLastReminderSentAt(LocalDateTime lastReminderSentAt) {
+        this.lastReminderSentAt = lastReminderSentAt;
     }
 }

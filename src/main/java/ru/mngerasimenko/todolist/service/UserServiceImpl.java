@@ -320,6 +320,12 @@ public class UserServiceImpl implements UserService {
         return repository.getUserByName(userName) != null;
     }
 
+    @Override
+    @Transactional
+    public void updateLastActiveAt(Long userId) {
+        repository.updateLastActiveAt(userId, LocalDateTime.now());
+    }
+
     /**
      * SHA-256 хеш строки (делегирует в TokenUtils для переиспользования).
      */

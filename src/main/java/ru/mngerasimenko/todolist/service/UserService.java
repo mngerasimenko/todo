@@ -51,4 +51,7 @@ public interface UserService {
 
     /** Смена email с повторной верификацией */
     void changeEmail(Long userId, String newEmail);
+
+    /** Обновить время последней активности пользователя */
+    void updateLastActiveAt(Long userId);
 }

@@ -127,12 +127,13 @@ public class PushNotificationServiceImpl implements PushNotificationService {
      * Невалидные токены (UNREGISTERED) автоматически удаляются.
      */
     private void sendToMultiple(List<String> fcmTokens, String title, String body, Long listId) {
-        String listName = taskListRepository.findById(listId)
-                .map(list -> list.getName()).orElse("");
+        String listName = listId != null
+                ? taskListRepository.findById(listId).map(list -> list.getName()).orElse("")
+                : "";
 
         for (String token : fcmTokens) {
             try {
-                Message message = Message.builder()
+                Message.Builder messageBuilder = Message.builder()
                         .setToken(token)
                         .setAndroidConfig(com.google.firebase.messaging.AndroidConfig.builder()
                                 .setNotification(com.google.firebase.messaging.AndroidNotification.builder()
@@ -140,10 +141,14 @@ public class PushNotificationServiceImpl implements PushNotificationService {
                                         .setBody(body)
                                         .setChannelId("todo_notifications_v2")
                                         .build())
-                                .build())
-                        .putData("list_id", String.valueOf(listId))
-                        .putData("list_name", listName)
-                        .build();
+                                .build());
+
+                if (listId != null) {
+                    messageBuilder.putData("list_id", String.valueOf(listId));
+                    messageBuilder.putData("list_name", listName);
+                }
+
+                Message message = messageBuilder.build();
 
                 FirebaseMessaging.getInstance().send(message);
             } catch (FirebaseMessagingException e) {
@@ -158,5 +163,22 @@ public class PushNotificationServiceImpl implements PushNotificationService {
                 }
             }
         }
+    }
+
+    @Override
+    @Async
+    public void sendInactiveReminderPush(Long userId, String userName) {
+        String displayName = userName != null ? userName : "друг";
+        String title = "Мы скучаем! ✅";
+        String body = displayName + ", ваши списки ждут — загляните!";
+
+        List<String> tokens = pushTokenRepository.findFcmTokensByUserId(userId);
+        if (tokens.isEmpty()) {
+            log.debug("Нет push-токенов для userId={}, напоминание не отправлено", userId);
+            return;
+        }
+
+        sendToMultiple(tokens, title, body, null);
+        log.info("Push-напоминание отправлено userId={} на {} устройств(а)", userId, tokens.size());
     }
 }

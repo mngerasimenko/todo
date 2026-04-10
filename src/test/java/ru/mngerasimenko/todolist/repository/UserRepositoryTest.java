@@ -1,5 +1,6 @@
 package ru.mngerasimenko.todolist.repository;
 
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -8,6 +9,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.test.context.ActiveProfiles;
 import ru.mngerasimenko.todolist.model.User;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,6 +22,9 @@ class UserRepositoryTest {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private EntityManager entityManager;
 
     private User testUser;
 
@@ -244,5 +249,92 @@ class UserRepositoryTest {
 
         assertThat(result).isNotNull();
         assertThat(result.getName()).isEqualTo("user@domain.com|token-123");
+    }
+
+    // ===== updateLastActiveAt =====
+
+    @Test
+    void updateLastActiveAt_UpdatesTimestamp() {
+        // Сохраняем пользователя без lastActiveAt
+        User savedUser = userRepository.saveAndFlush(testUser);
+        assertThat(savedUser.getLastActiveAt()).isNull();
+
+        LocalDateTime now = LocalDateTime.now();
+        userRepository.updateLastActiveAt(savedUser.getId(), now);
+
+        // Flush + clear чтобы @Modifying запрос применился и кеш первого уровня сбросился
+        entityManager.flush();
+        entityManager.clear();
+
+        User updatedUser = userRepository.findById(savedUser.getId()).orElseThrow();
+        assertThat(updatedUser.getLastActiveAt()).isEqualToIgnoringNanos(now);
+    }
+
+    // ===== findInactiveUsersForReminder =====
+
+    @Test
+    void findInactiveUsersForReminder_FindsInactiveUsers() {
+        // Пользователь с lastActiveAt 5 дней назад, без напоминаний
+        testUser.setLastActiveAt(LocalDateTime.now().minusDays(5));
+        testUser.setLastReminderSentAt(null);
+        userRepository.saveAndFlush(testUser);
+
+        LocalDateTime inactiveSince = LocalDateTime.now().minusDays(3);
+        LocalDateTime reminderCutoff = inactiveSince;
+
+        List<User> result = userRepository.findInactiveUsersForReminder(inactiveSince, reminderCutoff);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getEmail()).isEqualTo(TEST_EMAIL);
+    }
+
+    @Test
+    void findInactiveUsersForReminder_ExcludesRecentlyActiveUsers() {
+        // Пользователь активен — был 1 день назад
+        testUser.setLastActiveAt(LocalDateTime.now().minusDays(1));
+        testUser.setLastReminderSentAt(null);
+        userRepository.saveAndFlush(testUser);
+
+        LocalDateTime inactiveSince = LocalDateTime.now().minusDays(3);
+        LocalDateTime reminderCutoff = inactiveSince;
+
+        List<User> result = userRepository.findInactiveUsersForReminder(inactiveSince, reminderCutoff);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void findInactiveUsersForReminder_ExcludesRecentlyRemindedUsers() {
+        // Пользователь неактивен 5 дней, но напоминание отправлено только что
+        testUser.setLastActiveAt(LocalDateTime.now().minusDays(5));
+        testUser.setLastReminderSentAt(LocalDateTime.now());
+        userRepository.saveAndFlush(testUser);
+
+        LocalDateTime inactiveSince = LocalDateTime.now().minusDays(3);
+        LocalDateTime reminderCutoff = inactiveSince;
+
+        List<User> result = userRepository.findInactiveUsersForReminder(inactiveSince, reminderCutoff);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void findInactiveUsersForReminder_ExcludesSystemUser() {
+        // Обычный пользователь (id > 0) — должен быть найден
+        testUser.setLastActiveAt(LocalDateTime.now().minusDays(5));
+        testUser.setLastReminderSentAt(null);
+        User savedUser = userRepository.saveAndFlush(testUser);
+
+        // Убеждаемся что id > 0 (автогенерация)
+        assertThat(savedUser.getId()).isGreaterThan(0L);
+
+        LocalDateTime inactiveSince = LocalDateTime.now().minusDays(3);
+        LocalDateTime reminderCutoff = inactiveSince;
+
+        List<User> result = userRepository.findInactiveUsersForReminder(inactiveSince, reminderCutoff);
+
+        // Только обычные пользователи (id > 0) — системный пользователь (id=0 из миграции) исключён
+        assertThat(result).allMatch(u -> u.getId() > 0);
+        assertThat(result).extracting(User::getEmail).contains(TEST_EMAIL);
     }
 }

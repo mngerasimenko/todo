@@ -1,0 +1,18 @@
+databaseChangeLog:
+  - changeSet:
+      id: 015-add-last-active-at
+      author: mngerasimenko
+      comment: "Add last_active_at and last_reminder_sent_at to todo_users for inactive reminder tracking"
+      changes:
+        - addColumn:
+            tableName: todo_users
+            columns:
+              - column:
+                  name: last_active_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  remarks: "Last time user authenticated (login or token refresh)"
+              - column:
+                  name: last_reminder_sent_at
+                  type: timestamp
+                  remarks: "Last time inactive reminder was sent to this user"

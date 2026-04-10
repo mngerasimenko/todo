@@ -21,6 +21,13 @@ public interface EmailService {
     void sendInviteEmail(String email, String inviteLink, String listName, String inviterName);
 
     /**
+     * Отправить напоминание неактивному пользователю.
+     * @param email email пользователя
+     * @param userName имя пользователя для персонализации
+     */
+    void sendInactiveReminderEmail(String email, String userName);
+
+    /**
      * Проверить доступность SMTP-сервера (кешированный результат).
      * @return true если последняя проверка была успешной
      */

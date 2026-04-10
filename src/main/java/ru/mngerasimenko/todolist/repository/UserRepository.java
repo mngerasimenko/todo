@@ -1,6 +1,9 @@
 package ru.mngerasimenko.todolist.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import ru.mngerasimenko.todolist.model.User;
 
@@ -30,4 +33,23 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findByCreatedAtAfterOrderByCreatedAtDesc(LocalDateTime since);
 
     long countByEmailVerifiedTrue();
+
+    /**
+     * Обновить время последней активности пользователя.
+     * Прямой UPDATE без загрузки Entity, не инкрементирует @Version.
+     */
+    @Modifying
+    @Query("UPDATE User u SET u.lastActiveAt = :time WHERE u.id = :userId")
+    void updateLastActiveAt(@Param("userId") Long userId, @Param("time") LocalDateTime time);
+
+    /**
+     * Найти пользователей, неактивных с указанной даты, которым не отправляли напоминание
+     * (или отправляли раньше cutoff).
+     */
+    @Query("SELECT u FROM User u WHERE u.id > 0 " +
+            "AND (u.lastActiveAt IS NULL OR u.lastActiveAt < :inactiveSince) " +
+            "AND (u.lastReminderSentAt IS NULL OR u.lastReminderSentAt < :reminderCutoff)")
+    List<User> findInactiveUsersForReminder(
+            @Param("inactiveSince") LocalDateTime inactiveSince,
+            @Param("reminderCutoff") LocalDateTime reminderCutoff);
 }

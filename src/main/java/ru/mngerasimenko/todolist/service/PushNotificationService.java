@@ -31,6 +31,13 @@ public interface PushNotificationService {
     void notifyNewMember(Long listId, Long newUserId, String newUserName, String listName);
 
     /**
+     * Отправить напоминание неактивному пользователю (push).
+     * @param userId ID пользователя
+     * @param userName имя для персонализации
+     */
+    void sendInactiveReminderPush(Long userId, String userName);
+
+    /**
      * Проверить доступность Firebase (кешированный результат).
      * @return true если Firebase SDK инициализирован и работает
      */
