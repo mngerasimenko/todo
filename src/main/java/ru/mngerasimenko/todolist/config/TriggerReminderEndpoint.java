@@ -3,6 +3,7 @@ package ru.mngerasimenko.todolist.config;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.actuate.endpoint.annotation.Endpoint;
 import org.springframework.boot.actuate.endpoint.annotation.ReadOperation;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
 import ru.mngerasimenko.todolist.scheduler.InactiveReminderScheduler;
 
@@ -15,6 +16,7 @@ import java.util.Map;
 @Component
 @Endpoint(id = "triggerreminder")
 @RequiredArgsConstructor
+@ConditionalOnBean(InactiveReminderScheduler.class)
 public class TriggerReminderEndpoint {
 
     private final InactiveReminderScheduler scheduler;
