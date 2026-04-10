@@ -356,7 +356,7 @@ public class UserServiceImpl implements UserService {
         if (user.getLastReminderSentAt() == null) {
             return true;
         }
-        int intervalDays = REMINDER_INTERVALS_DAYS[Math.min(user.getReminderCount(), REMINDER_INTERVALS_DAYS.length) - 1];
+        int intervalDays = REMINDER_INTERVALS_DAYS[Math.min(user.getReminderCount(), REMINDER_INTERVALS_DAYS.length - 1)];
         return user.getLastReminderSentAt().plusDays(intervalDays).isBefore(now);
     }
 
