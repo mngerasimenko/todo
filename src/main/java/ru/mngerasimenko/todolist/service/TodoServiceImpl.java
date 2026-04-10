@@ -210,10 +210,10 @@ public class TodoServiceImpl implements TodoService {
         }
         Todo updatedTodo = todoRepository.save(todo);
 
-        // Push-уведомление автору задачи (если выполнил другой пользователь)
-        if (completor != null && !completorUserId.equals(todo.getUser().getId())) {
+        // Push-уведомление всем участникам списка (кроме того, кто выполнил)
+        if (completor != null) {
             pushNotificationService.notifyTodoCompleted(
-                    todo.getUser().getId(), todo.getTaskList().getId(), completor.getName(), todo.getName());
+                    completorUserId, todo.getTaskList().getId(), completor.getName(), todo.getName());
         }
 
         return todoMapper.toDto(updatedTodo);

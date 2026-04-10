@@ -21,9 +21,9 @@ public interface PushNotificationService {
     void notifyNewTodo(Long listId, Long authorUserId, String authorName, String todoName);
 
     /**
-     * Уведомить автора задачи о выполнении (если выполнил другой пользователь).
+     * Уведомить участников списка о выполнении задачи (кроме того, кто выполнил).
      */
-    void notifyTodoCompleted(Long todoOwnerUserId, Long listId, String completorName, String todoName);
+    void notifyTodoCompleted(Long completorUserId, Long listId, String completorName, String todoName);
 
     /**
      * Уведомить участников списка о новом участнике.

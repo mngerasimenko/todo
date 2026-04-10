@@ -83,13 +83,13 @@ public class PushNotificationServiceImpl implements PushNotificationService {
 
     @Override
     @Async
-    public void notifyTodoCompleted(Long todoOwnerUserId, Long listId, String completorName, String todoName) {
-        log.info("Отправка push: задача '{}' выполнена пользователем '{}', владелец userId={}", todoName, completorName, todoOwnerUserId);
-        List<String> tokens = pushTokenRepository.findFcmTokensByUserId(todoOwnerUserId);
+    public void notifyTodoCompleted(Long completorUserId, Long listId, String completorName, String todoName) {
+        log.info("Отправка push: задача '{}' выполнена пользователем '{}' в списке {}", todoName, completorName, listId);
+        List<String> tokens = pushTokenRepository.findFcmTokensByListIdExcludingUser(listId, completorUserId);
         log.info("Найдено {} push-токенов для уведомления", tokens.size());
         if (tokens.isEmpty()) return;
 
-        sendToMultiple(tokens, "Задача выполнена", completorName + " выполнил: \"" + todoName + "\"", listId);
+        sendToMultiple(tokens, "Задача выполнена ✓", completorName + " выполнил: \"" + todoName + "\"", listId);
     }
 
     @Override
