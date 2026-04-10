@@ -59,11 +59,17 @@ cmd_status() {
 
     local docker_mem=$(docker stats --no-stream --format "  {{.Name}}: {{.MemUsage}}" 2>/dev/null | head -5)
 
-    local http_code=$(curl -s -o /dev/null -w "%{http_code}" -Lk --max-time 10 http://localhost/api/status 2>/dev/null)
+    local api_response=$(curl -s -Lk --max-time 10 -w "\n%{http_code}" http://localhost/api/status 2>/dev/null)
+    local http_code=$(echo "$api_response" | tail -1)
+    local api_json=$(echo "$api_response" | sed '$d')
     if [ "$http_code" = "200" ]; then
         local api_status="✅ OK (200)"
+        local smtp_ok=$(echo "$api_json" | python3 -c "import sys,json; d=json.load(sys.stdin); print('✅' if d.get('smtp_healthy') else '❌')" 2>/dev/null || echo "?")
+        local firebase_ok=$(echo "$api_json" | python3 -c "import sys,json; d=json.load(sys.stdin); print('✅' if d.get('firebase_healthy') else '❌')" 2>/dev/null || echo "?")
     else
         local api_status="❌ HTTP ${http_code}"
+        local smtp_ok="?"
+        local firebase_ok="?"
     fi
 
     local pg_connections=$(docker exec postgres-db psql -U postgres -t -c "SELECT count(*) FROM pg_stat_activity;" 2>/dev/null | tr -d ' ')
@@ -94,6 +100,7 @@ cmd_status() {
 ${docker_mem}
 
 <b>API:</b> ${api_status}
+<b>SMTP:</b> ${smtp_ok:-?}  <b>Firebase:</b> ${firebase_ok:-?}
 <b>PG connections:</b> ${pg_connections:-N/A}/${pg_max:-?}
 
 💾 <b>Последний backup:</b> ${backup_info}

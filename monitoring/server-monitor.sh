@@ -92,11 +92,16 @@ for container in $containers; do
     fi
 done
 
-# === 5. Проверка доступности API (через HTTPS, минуя редирект) ===
-http_code=$(curl -s -o /dev/null -w "%{http_code}" -k --max-time 15 https://localhost/api/status 2>/dev/null)
+# === 5. Проверка доступности API и сервисов (один запрос к /api/status) ===
+api_response=$(curl -s -k --max-time 15 -w "\n%{http_code}" https://localhost/api/status 2>/dev/null)
+http_code=$(echo "$api_response" | tail -1)
+api_json=$(echo "$api_response" | sed '$d')
+
 if [ "$http_code" != "200" ]; then
     sleep 10
-    http_code=$(curl -s -o /dev/null -w "%{http_code}" -k --max-time 15 https://localhost/api/status 2>/dev/null)
+    api_response=$(curl -s -k --max-time 15 -w "\n%{http_code}" https://localhost/api/status 2>/dev/null)
+    http_code=$(echo "$api_response" | tail -1)
+    api_json=$(echo "$api_response" | sed '$d')
     if [ "$http_code" != "200" ]; then
         if should_alert "api"; then
             alerts="${alerts}
@@ -105,15 +110,21 @@ if [ "$http_code" != "200" ]; then
     fi
 fi
 
-# === 6. Проверка SMTP (через /api/status -> smtp_healthy) ===
-smtp_healthy=$(curl -s -k --max-time 15 https://localhost/api/status 2>/dev/null | grep -o '"smtp_healthy":[a-z]*' | grep -c 'true')
-if [ "$smtp_healthy" -eq 0 ] && [ "$http_code" = "200" ]; then
-    sleep 10
-    smtp_healthy=$(curl -s -k --max-time 15 https://localhost/api/status 2>/dev/null | grep -o '"smtp_healthy":[a-z]*' | grep -c 'true')
+# === 6. Проверка SMTP и Firebase (из того же /api/status ответа) ===
+if [ "$http_code" = "200" ]; then
+    smtp_healthy=$(echo "$api_json" | grep -o '"smtp_healthy":[a-z]*' | grep -c 'true')
     if [ "$smtp_healthy" -eq 0 ]; then
         if should_alert "smtp"; then
             alerts="${alerts}
 🔴 SMTP: недоступен"
+        fi
+    fi
+
+    firebase_healthy=$(echo "$api_json" | grep -o '"firebase_healthy":[a-z]*' | grep -c 'true')
+    if [ "$firebase_healthy" -eq 0 ]; then
+        if should_alert "firebase"; then
+            alerts="${alerts}
+🔴 Firebase: push-уведомления недоступны"
         fi
     fi
 fi

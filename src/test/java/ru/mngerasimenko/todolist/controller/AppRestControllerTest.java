@@ -11,6 +11,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import ru.mngerasimenko.todolist.config.TestSecurityConfig;
 import ru.mngerasimenko.todolist.security.ApiSecurityConfig;
 import ru.mngerasimenko.todolist.service.EmailService;
+import ru.mngerasimenko.todolist.service.PushNotificationService;
 import ru.mngerasimenko.todolist.settings.AppProperties;
 import ru.mngerasimenko.todolist.settings.Constants;
 
@@ -29,6 +30,9 @@ class AppRestControllerTest {
 
     @MockitoBean
     private EmailService emailService;
+
+    @MockitoBean
+    private PushNotificationService pushNotificationService;
 
     @Test
     void getStatus_ReturnsOkWithStatusAndVersion() throws Exception {
@@ -69,6 +73,24 @@ class AppRestControllerTest {
                 .andExpect(jsonPath("$.min_android_version").exists())
                 .andExpect(jsonPath("$.appName").doesNotExist())
                 .andExpect(jsonPath("$.timestamp").doesNotExist());
+    }
+
+    @Test
+    void getStatus_FirebaseHealthyTrue_ReturnsTrue() throws Exception {
+        when(pushNotificationService.isFirebaseHealthy()).thenReturn(true);
+
+        mockMvc.perform(get("/api/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.firebase_healthy").value(true));
+    }
+
+    @Test
+    void getStatus_FirebaseHealthyFalse_ReturnsFalse() throws Exception {
+        when(pushNotificationService.isFirebaseHealthy()).thenReturn(false);
+
+        mockMvc.perform(get("/api/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.firebase_healthy").value(false));
     }
 
     @Test

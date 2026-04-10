@@ -29,4 +29,15 @@ public interface PushNotificationService {
      * Уведомить участников списка о новом участнике.
      */
     void notifyNewMember(Long listId, Long newUserId, String newUserName, String listName);
+
+    /**
+     * Проверить доступность Firebase (кешированный результат).
+     * @return true если Firebase SDK инициализирован и работает
+     */
+    boolean isFirebaseHealthy();
+
+    /**
+     * Выполнить проверку здоровья Firebase и обновить кеш.
+     */
+    void checkFirebaseHealth();
 }

@@ -28,4 +28,7 @@ public class AppTodoResponse {
 
     @JsonProperty("smtp_healthy")
     private Boolean smtpHealthy;
+
+    @JsonProperty("firebase_healthy")
+    private Boolean firebaseHealthy;
 }

@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ru.mngerasimenko.todolist.dto.AppTodoResponse;
 import ru.mngerasimenko.todolist.service.EmailService;
+import ru.mngerasimenko.todolist.service.PushNotificationService;
 import ru.mngerasimenko.todolist.settings.AppProperties;
 import ru.mngerasimenko.todolist.settings.Constants;
 
@@ -21,6 +22,7 @@ public class AppRestController {
 
     private final AppProperties appProperties;
     private final EmailService emailService;
+    private final PushNotificationService pushNotificationService;
 
     /** Статус приложения: версия сервера, минимальная версия Android-клиента, здоровье SMTP */
     @GetMapping("/status")
@@ -30,6 +32,7 @@ public class AppRestController {
                 .version(appProperties.getVersion())
                 .minAndroidVersion(appProperties.getMinAndroidVersion())
                 .smtpHealthy(emailService.isSmtpHealthy())
+                .firebaseHealthy(pushNotificationService.isFirebaseHealthy())
                 .build();
         return ResponseEntity.ok(response);
     }

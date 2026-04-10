@@ -1,5 +1,6 @@
 package ru.mngerasimenko.todolist.service;
 
+import com.google.firebase.FirebaseApp;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.Message;
 import com.google.firebase.messaging.Notification;
@@ -30,6 +31,9 @@ public class PushNotificationServiceImpl implements PushNotificationService {
     private final PushTokenRepository pushTokenRepository;
     private final UserRepository userRepository;
     private final ru.mngerasimenko.todolist.repository.TaskListRepository taskListRepository;
+
+    /** Кешированный результат проверки Firebase */
+    private volatile boolean firebaseHealthyCache = false;
 
     @Override
     @Transactional
@@ -97,6 +101,25 @@ public class PushNotificationServiceImpl implements PushNotificationService {
         if (tokens.isEmpty()) return;
 
         sendToMultiple(tokens, "Новый участник", newUserName + " присоединился к списку \"" + listName + "\"", listId);
+    }
+
+    @Override
+    public boolean isFirebaseHealthy() {
+        return firebaseHealthyCache;
+    }
+
+    @Override
+    public void checkFirebaseHealth() {
+        try {
+            // Проверяем что FirebaseApp инициализирован
+            FirebaseApp.getInstance();
+            // Проверяем что FirebaseMessaging доступен
+            FirebaseMessaging.getInstance();
+            firebaseHealthyCache = true;
+        } catch (Exception e) {
+            log.warn("Firebase health check failed: {}", e.getMessage());
+            firebaseHealthyCache = false;
+        }
     }
 
     /**
