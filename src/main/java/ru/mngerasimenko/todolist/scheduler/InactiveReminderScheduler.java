@@ -2,6 +2,7 @@ package ru.mngerasimenko.todolist.scheduler;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import ru.mngerasimenko.todolist.model.User;
@@ -22,6 +23,7 @@ import java.util.List;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "app.inactive-reminder.enabled", havingValue = "true", matchIfMissing = true)
 public class InactiveReminderScheduler {
 
     private static final int INACTIVE_DAYS = 7;
