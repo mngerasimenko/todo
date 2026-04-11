@@ -31,9 +31,10 @@ should_alert() {
 
 alerts=""
 
-# 1. Check API availability
-http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "https://${DOMAIN}/api/status" 2>/dev/null)
-response_time=$(curl -s -o /dev/null -w "%{time_total}" --max-time 15 "https://${DOMAIN}/api/status" 2>/dev/null)
+# 1. Check API availability (single request returns both status and time)
+api_check=$(curl -s -o /dev/null -w "%{http_code}|%{time_total}" --max-time 15 "https://${DOMAIN}/api/status" 2>/dev/null)
+http_code="${api_check%|*}"
+response_time="${api_check#*|}"
 
 if [ "$http_code" != "200" ]; then
     if should_alert "external_api"; then
