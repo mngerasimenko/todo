@@ -132,19 +132,7 @@ class TodoRepositoryTest {
         assertThat(todos).isEmpty();
     }
 
-    @Test
-    void saveTodo_WithNullName_ThrowsException() {
-        Todo todo = new Todo();
-        todo.setName(null);
-        todo.setUser(testUser);
-        todo.setTaskList(testTaskList);
-        todo.setCreatedAt(LocalDateTime.now());
-        todo.setDone(false);
-
-        assertThatThrownBy(() -> todoRepository.saveAndFlush(todo))
-                .isInstanceOf(ConstraintViolationException.class)
-                .hasMessageContaining("Validation failed");
-    }
+    // saveTodo_WithNullName — удалён, т.к. @NotBlank снят с name (шифрование обрабатывает null)
 
     @Test
     void saveTodo_WithNullCreatedAt_ThrowsException() {

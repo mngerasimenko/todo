@@ -1,0 +1,54 @@
+databaseChangeLog:
+  - changeSet:
+      id: 017-encryption-fields
+      author: mngerasimenko
+      comment: "Prepare columns for AES-256-GCM encryption: expand to TEXT, add email_hash blind index"
+      changes:
+        # Expand email column to TEXT (encrypted base64 is longer than 128 chars)
+        - modifyDataType:
+            tableName: todo_users
+            columnName: email
+            newDataType: text
+
+        # Expand name column to TEXT
+        - modifyDataType:
+            tableName: todo_users
+            columnName: name
+            newDataType: text
+
+        # Add blind index column for email search
+        - addColumn:
+            tableName: todo_users
+            columns:
+              - column:
+                  name: email_hash
+                  type: varchar(64)
+                  remarks: "HMAC-SHA256 blind index for encrypted email lookup"
+
+        # Expand todo name to TEXT
+        - modifyDataType:
+            tableName: todo
+            columnName: name
+            newDataType: text
+
+        # Drop unique constraint on (name, creator_id) — encrypted name breaks uniqueness
+        - dropUniqueConstraint:
+            tableName: task_list
+            constraintName: uk_task_list_name_creator
+
+        # Drop unique constraint on email — moving to email_hash
+        - dropUniqueConstraint:
+            tableName: todo_users
+            constraintName: todo_users_email_key
+
+        # Add unique constraint on email_hash
+        - addUniqueConstraint:
+            tableName: todo_users
+            columnNames: email_hash
+            constraintName: uk_todo_users_email_hash
+
+        # Expand task_list name to TEXT
+        - modifyDataType:
+            tableName: task_list
+            columnName: name
+            newDataType: text

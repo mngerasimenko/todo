@@ -42,6 +42,7 @@ public class UserServiceImpl implements UserService {
     private final TaskListUserRepository taskListUserRepository;
     private final TaskListRepository taskListRepository;
     private final TodoRepository todoRepository;
+    private final ru.mngerasimenko.todolist.crypto.CryptoService cryptoService;
 
     @Override
     @Transactional(readOnly = true)
@@ -102,20 +103,13 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public UserDto getUserByUserName(String userName) {
-        if (StringUtils.isBlank(userName)) {
-            return null;
-        }
-        return mapper.toDto(repository.getUserByName(userName));
-    }
-
-    @Override
     @Transactional(readOnly = true)
     public UserDto getUserByEmail(String email) {
         if (StringUtils.isBlank(email)) {
             return null;
         }
-        return mapper.toDto(repository.getUserByEmail(email.toLowerCase()));
+        String hash = cryptoService.blindIndex(email.toLowerCase());
+        return mapper.toDto(repository.findByEmailHash(hash));
     }
 
     @Override
@@ -131,8 +125,9 @@ public class UserServiceImpl implements UserService {
     public UserDto createUser(UserDto userDto) {
         User user = mapper.toEntity(userDto);
 
-        // Нормализация email в нижний регистр
+        // Нормализация email в нижний регистр + blind index
         user.setEmail(user.getEmail().toLowerCase());
+        user.setEmailHash(cryptoService.blindIndex(user.getEmail()));
 
         if (user.getAuthId() == null) {
             UUID uuid = UUID.randomUUID();
@@ -244,7 +239,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public void initiatePasswordReset(String email) {
-        User user = repository.getUserByEmail(email.toLowerCase());
+        User user = repository.findByEmailHash(cryptoService.blindIndex(email.toLowerCase()));
         // Всегда 200 — не раскрываем существование аккаунта
         if (user == null || !user.isEmailVerified()) {
             return;
@@ -284,13 +279,15 @@ public class UserServiceImpl implements UserService {
 
         // Проверяем, что новый email не занят другим пользователем
         String normalizedEmail = newEmail.toLowerCase();
-        User existingUser = repository.getUserByEmail(normalizedEmail);
+        String newEmailHash = cryptoService.blindIndex(normalizedEmail);
+        User existingUser = repository.findByEmailHash(newEmailHash);
         if (existingUser != null && !existingUser.getId().equals(userId)) {
             throw new IllegalArgumentException("Email " + newEmail + " уже используется");
         }
 
-        // Обновляем email и сбрасываем верификацию
+        // Обновляем email, blind index и сбрасываем верификацию
         user.setEmail(normalizedEmail);
+        user.setEmailHash(newEmailHash);
         user.setEmailVerified(false);
 
         // Генерируем новый токен верификации
@@ -312,12 +309,7 @@ public class UserServiceImpl implements UserService {
 
     @Transactional(readOnly = true)
     public boolean existsByEmail(String email) {
-        return repository.getUserByEmail(email.toLowerCase()) != null;
-    }
-
-    @Transactional(readOnly = true)
-    public boolean existsByUserName(String userName) {
-        return repository.getUserByName(userName) != null;
+        return repository.findByEmailHash(cryptoService.blindIndex(email.toLowerCase())) != null;
     }
 
     @Override

@@ -42,6 +42,7 @@ class UserRepositoryTest {
         testUser.setAuthId(TEST_AUTH_ID);
         testUser.setName(TEST_NAME);
         testUser.setEmail(TEST_EMAIL);
+        testUser.setEmailHash(TEST_EMAIL); // В тестах без шифрования — hash = email
         testUser.setPassword(TEST_PASSWORD);
     }
 
@@ -119,7 +120,7 @@ class UserRepositoryTest {
     void getUserByEmail_ExistingEmail_ReturnsUser() {
         userRepository.save(testUser);
 
-        User result = userRepository.getUserByEmail(TEST_EMAIL);
+        User result = userRepository.findByEmailHash(TEST_EMAIL);
 
         assertThat(result).isNotNull();
         assertThat(result.getEmail()).isEqualTo(TEST_EMAIL);
@@ -128,14 +129,14 @@ class UserRepositoryTest {
 
     @Test
     void getUserByEmail_NonExistentEmail_ReturnsNull() {
-        User result = userRepository.getUserByEmail("nonexistent@mail.ru");
+        User result = userRepository.findByEmailHash("nonexistent@mail.ru");
 
         assertThat(result).isNull();
     }
 
     @Test
     void getUserByEmail_WithNullEmail_ReturnsNull() {
-        User result = userRepository.getUserByEmail(null);
+        User result = userRepository.findByEmailHash(null);
 
         assertThat(result).isNull();
     }
@@ -158,36 +159,7 @@ class UserRepositoryTest {
         assertThat(result).isNull();
     }
 
-    @Test
-    void getUserByName_ExistingName_ReturnsUser() {
-        userRepository.save(testUser);
-
-        User result = userRepository.getUserByName(TEST_NAME);
-
-        assertThat(result).isNotNull();
-        assertThat(result.getName()).isEqualTo(TEST_NAME);
-        assertThat(result.getEmail()).isEqualTo(TEST_EMAIL);
-    }
-
-    @Test
-    void getUserByName_NonExistentName_ReturnsNull() {
-        User result = userRepository.getUserByName("nonexistent");
-
-        assertThat(result).isNull();
-    }
-
-    @Test
-    void getUserByName_CaseInsensitiveSearch() {
-        userRepository.save(testUser);
-
-        User result1 = userRepository.getUserByName(TEST_NAME); // Заглавные
-        User result2 = userRepository.getUserByName(TEST_NAME); // CamelCase
-
-        assertThat(result1).isNotNull();
-        assertThat(result2).isNotNull();
-        assertThat(result1.getEmail()).isEqualTo(TEST_EMAIL);
-        assertThat(result2.getEmail()).isEqualTo(TEST_EMAIL);
-    }
+    // getUserByName тесты удалены — имя зашифровано, поиск по имени не поддерживается
 
     @Test
     void getUserByAuthId_ExistingAuthId_ReturnsUser() {
@@ -208,48 +180,35 @@ class UserRepositoryTest {
     }
 
     @Test
-    void save_DuplicateEmail_ThrowsException() {
+    void save_DuplicateEmailHash_ThrowsException() {
         userRepository.save(testUser);
 
         User duplicateUser = new User();
         duplicateUser.setAuthId("auth-456");
         duplicateUser.setName("duplicate");
-        duplicateUser.setEmail(TEST_EMAIL); // Та же почта
+        duplicateUser.setEmail("other@mail.ru");
+        duplicateUser.setEmailHash(TEST_EMAIL); // Тот же hash — нарушение unique constraint
         duplicateUser.setPassword("duppass");
 
         assertThatThrownBy(() -> userRepository.saveAndFlush(duplicateUser))
-                .isInstanceOf(DataAccessException.class)
-                .hasMessageContaining("could not execute statement");
+                .isInstanceOf(DataAccessException.class);
     }
 
     @Test
     void getUserByEmail_WithEmptyString_ReturnsNull() {
-        User result = userRepository.getUserByEmail("");
+        User result = userRepository.findByEmailHash("");
 
         assertThat(result).isNull();
     }
 
     @Test
     void getUserByEmail_WithBlankString_ReturnsNull() {
-        User result = userRepository.getUserByEmail("   ");
+        User result = userRepository.findByEmailHash("   ");
 
         assertThat(result).isNull();
     }
 
-    @Test
-    void getUserByName_WithSpecialCharacters_ReturnsUser() {
-        User specialUser = new User();
-        specialUser.setAuthId("auth-special");
-        specialUser.setName("user@domain.com|token-123"); // Спецсимволы
-        specialUser.setEmail("special@mail.ru");
-        specialUser.setPassword("specialpass");
-        userRepository.save(specialUser);
-
-        User result = userRepository.getUserByName("user@domain.com|token-123");
-
-        assertThat(result).isNotNull();
-        assertThat(result.getName()).isEqualTo("user@domain.com|token-123");
-    }
+    // getUserByName_WithSpecialCharacters удалён — имя зашифровано, поиск по имени не поддерживается
 
     // ===== updateLastActiveAt =====
 

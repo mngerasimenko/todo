@@ -4,11 +4,11 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
+import ru.mngerasimenko.todolist.crypto.EncryptedStringConverter;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -40,18 +40,23 @@ public class User {
     @Size(max = 128)
     private String authId;
 
-    @Column(name = "email", nullable = false, unique = true)
-    @Email
-    @NotBlank
-    @Size(max = 128)
+    @Column(name = "email", nullable = false, columnDefinition = "text")
+    @Convert(converter = EncryptedStringConverter.class)
     private String email;
+
+    /**
+     * HMAC-SHA256 blind index для поиска по зашифрованному email.
+     * Unique constraint перенесён сюда (зашифрованный email не может быть unique — разный IV).
+     */
+    @Column(name = "email_hash", length = 64, unique = true)
+    private String emailHash;
 
     @Column(name = "password", nullable = false)
     @NotBlank
-    @Size(min = 5, max = 128)
     private String password;
 
-    @Column(name = "name", nullable = false)
+    @Column(name = "name", nullable = false, columnDefinition = "text")
+    @Convert(converter = EncryptedStringConverter.class)
     private String name;
 
     /**
@@ -185,6 +190,14 @@ public class User {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getEmailHash() {
+        return emailHash;
+    }
+
+    public void setEmailHash(String emailHash) {
+        this.emailHash = emailHash;
     }
 
     public String getPassword() {

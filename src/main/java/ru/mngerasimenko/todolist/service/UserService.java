@@ -17,9 +17,6 @@ public interface UserService {
     /** Удаляет пользователя по ID */
     void delete(long id);
 
-    /** Находит пользователя по имени */
-    UserDto getUserByUserName(String userName);
-
     /** Находит пользователя по email */
     UserDto getUserByEmail(String email);
 

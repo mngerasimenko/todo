@@ -16,11 +16,10 @@ import java.util.List;
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
 
-    User getUserByEmail(String email);
+    /** Поиск по blind index (HMAC-SHA256 хеш email) */
+    User findByEmailHash(String emailHash);
 
     User getUserById(Long id);
-
-    User getUserByName(String userName);
 
     User getUserByAuthId(String authId);
 

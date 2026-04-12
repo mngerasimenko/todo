@@ -1,0 +1,26 @@
+databaseChangeLog:
+  - changeSet:
+      id: 018-email-hash-not-null
+      author: mngerasimenko
+      comment: "Make email_hash NOT NULL after DataEncryptionMigration has filled all values"
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: todo_users
+                columnName: email_hash
+      changes: []
+  - changeSet:
+      id: 018-email-hash-not-null-constraint
+      author: mngerasimenko
+      comment: "Add NOT NULL constraint to email_hash (safe: all rows filled by DataEncryptionMigration)"
+      preConditions:
+        - onFail: MARK_RAN
+        - sqlCheck:
+            expectedResult: "0"
+            sql: "SELECT COUNT(*) FROM todo_users WHERE email_hash IS NULL"
+      changes:
+        - addNotNullConstraint:
+            tableName: todo_users
+            columnName: email_hash
+            columnDataType: varchar(64)

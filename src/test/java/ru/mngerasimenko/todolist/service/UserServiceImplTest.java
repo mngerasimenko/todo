@@ -62,6 +62,9 @@ class UserServiceImplTest {
     @Mock
     private TodoRepository todoRepository;
 
+    @Mock
+    private ru.mngerasimenko.todolist.crypto.CryptoService cryptoService;
+
     @InjectMocks
     private UserServiceImpl userService;
 
@@ -84,6 +87,9 @@ class UserServiceImplTest {
         userDto.setName("user");
         userDto.setEmail("user@mail.ru");
         userDto.setPassword("password");
+
+        // CryptoService: blindIndex возвращает email как есть (для тестов без шифрования)
+        lenient().when(cryptoService.blindIndex(anyString())).thenAnswer(invocation -> invocation.getArgument(0));
 
         // Мок для создания токена верификации в createUser
         lenient().when(emailProperties.getVerificationTokenTtlHours()).thenReturn(24);
@@ -274,33 +280,7 @@ class UserServiceImplTest {
         verify(repository, never()).deleteById(anyLong());
     }
 
-    @Test
-    void getUserByUserName_WithValidUserName_ReturnsUserDto() {
-        when(repository.getUserByName("user")).thenReturn(user);
-        when(mapper.toDto(user)).thenReturn(userDto);
-
-        UserDto result = userService.getUserByUserName("user");
-
-        assertThat(result).isEqualTo(userDto);
-        verify(repository, times(1)).getUserByName("user");
-        verify(mapper, times(1)).toDto(user);
-    }
-
-    @Test
-    void getUserByUserName_WithBlankUserName_ReturnsNull() {
-        UserDto result = userService.getUserByUserName("   ");
-
-        assertThat(result).isNull();
-        verify(repository, never()).getUserByName(anyString());
-    }
-
-    @Test
-    void getUserByUserName_WithNullUserName_ReturnsNull() {
-        UserDto result = userService.getUserByUserName(null);
-
-        assertThat(result).isNull();
-        verify(repository, never()).getUserByName(anyString());
-    }
+    // getUserByUserName и existsByUserName удалены — имя зашифровано, методы убраны
 
     @Test
     void getUserByAuthId_WithValidAuthId_ReturnsUserDto() {
@@ -447,7 +427,7 @@ class UserServiceImplTest {
         updatedUser.setPassword("newpass");
 
         when(repository.findById(1L)).thenReturn(Optional.of(existingUser));
-        when(repository.getUserByEmail("updated@mail.ru")).thenReturn(null);
+        when(repository.findByEmailHash("updated@mail.ru")).thenReturn(null);
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$10$encodedPassword");
         when(repository.save(any(User.class))).thenReturn(updatedUser);
         when(mapper.toDto(updatedUser)).thenReturn(updatedDto);
@@ -493,7 +473,7 @@ class UserServiceImplTest {
         existingEmailUser.setEmail("existing@mail.ru");
 
         when(repository.findById(1L)).thenReturn(Optional.of(existingUser));
-        when(repository.getUserByEmail("existing@mail.ru")).thenReturn(existingEmailUser);
+        when(repository.findByEmailHash("existing@mail.ru")).thenReturn(existingEmailUser);
 
         assertThatThrownBy(() -> userService.updateUser(1L, updatedDto))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -527,43 +507,24 @@ class UserServiceImplTest {
 
     @Test
     void existsByEmail_WithExistingEmail_ReturnsTrue() {
-        when(repository.getUserByEmail("test@mail.ru")).thenReturn(user);
+        when(repository.findByEmailHash("test@mail.ru")).thenReturn(user);
 
         boolean result = userService.existsByEmail("test@mail.ru");
 
         assertThat(result).isTrue();
-        verify(repository, times(1)).getUserByEmail("test@mail.ru");
+        verify(repository, times(1)).findByEmailHash("test@mail.ru");
     }
 
     @Test
     void existsByEmail_WithNonExistentEmail_ReturnsFalse() {
-        when(repository.getUserByEmail("nonexistent@mail.ru")).thenReturn(null);
+        when(repository.findByEmailHash("nonexistent@mail.ru")).thenReturn(null);
 
         boolean result = userService.existsByEmail("nonexistent@mail.ru");
 
         assertThat(result).isFalse();
-        verify(repository, times(1)).getUserByEmail("nonexistent@mail.ru");
+        verify(repository, times(1)).findByEmailHash("nonexistent@mail.ru");
     }
 
-    @Test
-    void existsByUserName_WithExistingUserName_ReturnsTrue() {
-        when(repository.getUserByName("user")).thenReturn(user);
-
-        boolean result = userService.existsByUserName("user");
-
-        assertThat(result).isTrue();
-        verify(repository, times(1)).getUserByName("user");
-    }
-
-    @Test
-    void existsByUserName_WithNonExistentUserName_ReturnsFalse() {
-        when(repository.getUserByName("nonexistent")).thenReturn(null);
-
-        boolean result = userService.existsByUserName("nonexistent");
-
-        assertThat(result).isFalse();
-        verify(repository, times(1)).getUserByName("nonexistent");
-    }
 
     @Test
     void updateColors_WithValidId_ReturnsUpdatedUserDto() {
@@ -737,7 +698,7 @@ class UserServiceImplTest {
         foundUser.setEmail("user@mail.ru");
         foundUser.setEmailVerified(true);
 
-        when(repository.getUserByEmail("user@mail.ru")).thenReturn(foundUser);
+        when(repository.findByEmailHash("user@mail.ru")).thenReturn(foundUser);
         when(emailProperties.getResetTokenTtlHours()).thenReturn(1);
         when(repository.save(any(User.class))).thenReturn(foundUser);
 
@@ -747,7 +708,7 @@ class UserServiceImplTest {
         assertThat(foundUser.getPasswordResetToken()).isNotNull();
         assertThat(foundUser.getPasswordResetExpiresAt()).isNotNull();
         assertThat(foundUser.getPasswordResetExpiresAt()).isAfter(LocalDateTime.now());
-        verify(repository, times(1)).getUserByEmail("user@mail.ru");
+        verify(repository, times(1)).findByEmailHash("user@mail.ru");
         verify(repository, times(1)).save(foundUser);
         verify(emailService, times(1)).sendPasswordResetEmail(eq("user@mail.ru"), anyString());
     }
@@ -755,11 +716,11 @@ class UserServiceImplTest {
     @Test
     void initiatePasswordReset_WithNonExistentUser_DoesNothingSilently() {
         // Пользователь не найден — молча ничего не делаем (защита от перечисления)
-        when(repository.getUserByEmail("unknown@mail.ru")).thenReturn(null);
+        when(repository.findByEmailHash("unknown@mail.ru")).thenReturn(null);
 
         userService.initiatePasswordReset("unknown@mail.ru");
 
-        verify(repository, times(1)).getUserByEmail("unknown@mail.ru");
+        verify(repository, times(1)).findByEmailHash("unknown@mail.ru");
         verify(repository, never()).save(any(User.class));
         verify(emailService, never()).sendPasswordResetEmail(anyString(), anyString());
     }
@@ -772,11 +733,11 @@ class UserServiceImplTest {
         foundUser.setEmail("user@mail.ru");
         foundUser.setEmailVerified(false);
 
-        when(repository.getUserByEmail("user@mail.ru")).thenReturn(foundUser);
+        when(repository.findByEmailHash("user@mail.ru")).thenReturn(foundUser);
 
         userService.initiatePasswordReset("user@mail.ru");
 
-        verify(repository, times(1)).getUserByEmail("user@mail.ru");
+        verify(repository, times(1)).findByEmailHash("user@mail.ru");
         verify(repository, never()).save(any(User.class));
         verify(emailService, never()).sendPasswordResetEmail(anyString(), anyString());
     }
@@ -855,7 +816,7 @@ class UserServiceImplTest {
         foundUser.setEmailVerified(true);
 
         when(repository.findById(1L)).thenReturn(Optional.of(foundUser));
-        when(repository.getUserByEmail("new@mail.ru")).thenReturn(null);
+        when(repository.findByEmailHash("new@mail.ru")).thenReturn(null);
         when(emailProperties.getVerificationTokenTtlHours()).thenReturn(24);
         when(repository.saveAndFlush(any(User.class))).thenReturn(foundUser);
 
@@ -884,7 +845,7 @@ class UserServiceImplTest {
         otherUser.setEmail("taken@mail.ru");
 
         when(repository.findById(1L)).thenReturn(Optional.of(foundUser));
-        when(repository.getUserByEmail("taken@mail.ru")).thenReturn(otherUser);
+        when(repository.findByEmailHash("taken@mail.ru")).thenReturn(otherUser);
 
         assertThatThrownBy(() -> userService.changeEmail(1L, "taken@mail.ru"))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -903,7 +864,7 @@ class UserServiceImplTest {
         foundUser.setEmailVerified(true);
 
         when(repository.findById(1L)).thenReturn(Optional.of(foundUser));
-        when(repository.getUserByEmail("same@mail.ru")).thenReturn(foundUser);
+        when(repository.findByEmailHash("same@mail.ru")).thenReturn(foundUser);
         when(emailProperties.getVerificationTokenTtlHours()).thenReturn(24);
         when(repository.saveAndFlush(any(User.class))).thenReturn(foundUser);
 

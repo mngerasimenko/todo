@@ -48,6 +48,9 @@ class SubscriptionServiceImplTest {
     @Mock
     private Clock clock;
 
+    @Mock
+    private ru.mngerasimenko.todolist.crypto.CryptoService cryptoService;
+
     @InjectMocks
     private SubscriptionServiceImpl subscriptionService;
 
@@ -66,6 +69,7 @@ class SubscriptionServiceImplTest {
     void setUp() {
         lenient().when(clock.instant()).thenReturn(FIXED_INSTANT);
         lenient().when(clock.getZone()).thenReturn(ZONE);
+        lenient().when(cryptoService.blindIndex(anyString())).thenAnswer(inv -> inv.getArgument(0));
 
         freeUser = new User();
         freeUser.setId(1L);
@@ -418,7 +422,7 @@ class SubscriptionServiceImplTest {
     class GetSubscriptionStatus {
         @Test
         void freeUser_ReturnsFreeLimits() {
-            when(userRepository.getUserByEmail("free@test.ru")).thenReturn(freeUser);
+            when(userRepository.findByEmailHash("free@test.ru")).thenReturn(freeUser);
             when(appProperties.getFreeLimits()).thenReturn(freeLimits);
             when(taskListUserRepository.countByUserId(1L)).thenReturn(1L);
 
@@ -433,7 +437,7 @@ class SubscriptionServiceImplTest {
 
         @Test
         void proUser_ReturnsProLimitsAndExpiresAt() {
-            when(userRepository.getUserByEmail("pro@test.ru")).thenReturn(proUser);
+            when(userRepository.findByEmailHash("pro@test.ru")).thenReturn(proUser);
             when(appProperties.getProLimits()).thenReturn(proLimits);
             when(taskListUserRepository.countByUserId(2L)).thenReturn(0L);
 
@@ -446,7 +450,7 @@ class SubscriptionServiceImplTest {
 
         @Test
         void proLifetimeUser_ReturnsProLimitsAndActivationDate() {
-            when(userRepository.getUserByEmail("prolifetime@test.ru")).thenReturn(proLifetimeUser);
+            when(userRepository.findByEmailHash("prolifetime@test.ru")).thenReturn(proLifetimeUser);
             when(appProperties.getProLimits()).thenReturn(proLimits);
             when(taskListUserRepository.countByUserId(5L)).thenReturn(0L);
 
@@ -459,7 +463,7 @@ class SubscriptionServiceImplTest {
 
         @Test
         void expiredProUser_ReturnsFreeAndNullExpiresAt() {
-            when(userRepository.getUserByEmail("expired@test.ru")).thenReturn(expiredProUser);
+            when(userRepository.findByEmailHash("expired@test.ru")).thenReturn(expiredProUser);
             when(appProperties.getFreeLimits()).thenReturn(freeLimits);
             when(taskListUserRepository.countByUserId(4L)).thenReturn(0L);
 
@@ -472,7 +476,7 @@ class SubscriptionServiceImplTest {
 
         @Test
         void nonExistentUser_ThrowsUserNotFoundException() {
-            when(userRepository.getUserByEmail("unknown@test.ru")).thenReturn(null);
+            when(userRepository.findByEmailHash("unknown@test.ru")).thenReturn(null);
 
             assertThatThrownBy(() -> subscriptionService.getSubscriptionStatus("unknown@test.ru"))
                     .isInstanceOf(UserNotFoundException.class);
@@ -480,7 +484,7 @@ class SubscriptionServiceImplTest {
 
         @Test
         void freeUser_AtLimit_CanCreateListIsFalse() {
-            when(userRepository.getUserByEmail("free@test.ru")).thenReturn(freeUser);
+            when(userRepository.findByEmailHash("free@test.ru")).thenReturn(freeUser);
             when(appProperties.getFreeLimits()).thenReturn(freeLimits);
             when(taskListUserRepository.countByUserId(1L)).thenReturn(2L);
 

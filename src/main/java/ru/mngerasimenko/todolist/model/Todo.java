@@ -4,11 +4,10 @@ import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
+import ru.mngerasimenko.todolist.crypto.EncryptedStringConverter;
 
 import java.time.LocalDateTime;
 
@@ -24,9 +23,8 @@ public class Todo {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "name", nullable = false)
-    @NotBlank
-    @Size(min = 2, max = 120)
+    @Column(name = "name", nullable = false, columnDefinition = "text")
+    @Convert(converter = EncryptedStringConverter.class)
     private String name;
 
     /**

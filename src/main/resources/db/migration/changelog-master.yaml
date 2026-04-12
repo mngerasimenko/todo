@@ -31,3 +31,7 @@ databaseChangeLog:
       file: db/migration/015-add-last-active-at.yaml
   - include:
       file: db/migration/016-add-reminder-count.yaml
+  - include:
+      file: db/migration/017-encryption-fields.yaml
+  - include:
+      file: db/migration/018-email-hash-not-null.yaml

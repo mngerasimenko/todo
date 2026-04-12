@@ -197,6 +197,7 @@ jobs:
             MAIL_PASSWORD=${{ secrets.MAIL_PASSWORD }}
             FIREBASE_ENABLED=true
             INACTIVE_REMINDER_ENABLED=${INACTIVE_REMINDER_ENABLED:-true}
+            ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}
             EOF
             chmod 600 .env
 

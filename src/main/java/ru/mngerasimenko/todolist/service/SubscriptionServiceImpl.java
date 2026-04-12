@@ -31,6 +31,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     private final UserRepository userRepository;
     private final TaskListUserRepository taskListUserRepository;
     private final TodoRepository todoRepository;
+    private final ru.mngerasimenko.todolist.crypto.CryptoService cryptoService;
     private final AppProperties appProperties;
     private final Clock clock;
 
@@ -162,7 +163,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     @Override
     @Transactional(readOnly = true)
     public SubscriptionStatusResponse getSubscriptionStatus(String email) {
-        User user = userRepository.getUserByEmail(email.toLowerCase());
+        User user = userRepository.findByEmailHash(cryptoService.blindIndex(email.toLowerCase()));
         if (user == null) {
             throw new UserNotFoundException("User not found: " + email);
         }

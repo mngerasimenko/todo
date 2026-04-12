@@ -3,8 +3,7 @@ package ru.mngerasimenko.todolist.model;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
+import ru.mngerasimenko.todolist.crypto.EncryptedStringConverter;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -15,9 +14,7 @@ import java.util.List;
  * Пользователи подключаются к списку по invite-ссылке.
  */
 @Entity
-@Table(name = "task_list", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_task_list_name_creator", columnNames = {"name", "creator_id"})
-})
+@Table(name = "task_list")
 @JsonIgnoreProperties(value = {"hibernateLazyInitializer", "handler"})
 public class TaskList {
 
@@ -25,9 +22,8 @@ public class TaskList {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "name", nullable = false, length = 128)
-    @NotBlank
-    @Size(max = 128)
+    @Column(name = "name", nullable = false, columnDefinition = "text")
+    @Convert(converter = EncryptedStringConverter.class)
     private String name;
 
     @Column(name = "password_hash", length = 128)
