@@ -3,7 +3,7 @@ package ru.mngerasimenko.todolist.service;
 import java.time.Instant;
 
 /**
- * Сервис для блокировки access-токенов (in-memory blacklist).
+ * Сервис для блокировки access-токенов.
  * Используется при logout для немедленной инвалидации access-токена.
  */
 public interface TokenBlacklistService {
@@ -24,8 +24,4 @@ public interface TokenBlacklistService {
      */
     boolean isBlacklisted(String token);
 
-    /**
-     * Удаляет истёкшие записи из чёрного списка.
-     */
-    void evictExpired();
 }
