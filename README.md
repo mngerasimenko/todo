@@ -52,6 +52,7 @@ REST API бэкенд для совместного управления спи�
 - Ротация refresh-токенов с reuse detection (компрометация цепочки → отзыв всей семьи)
 - Logout с in-memory blacklist access-токенов и отзывом refresh-токенов
 - BCrypt хэширование паролей
+- **Шифрование персональных данных в БД (AES-256-GCM):** email, имя пользователя, названия задач и списков шифруются через JPA `@Convert`. Поиск по email через blind index (HMAC-SHA256). Прозрачно для API-клиентов. Ключ — `ENCRYPTION_KEY` env, graceful degradation без ключа
 - CORS для поддержки React SPA и прямых API-запросов
 - Автоверсионирование (MAJOR.MINOR.PATCH) с проверкой совместимости Android-клиента
 - Оптимистичная блокировка (`@Version`) на всех Entity — защита от потерянных обновлений
@@ -64,7 +65,7 @@ REST API бэкенд для совместного управления спи�
 - Интерактивная документация API (Swagger UI / OpenAPI 3)
 - Контроль доступа: изменение и удаление аккаунта только владельцем, операции с задачами только для участников списка
 - Каскадное удаление аккаунта: передача ADMIN, удаление пустых списков, сохранение публичных задач через системного пользователя
-- 387 unit-тестов с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
+- 431 unit-тест с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
 
 ---
 
@@ -133,7 +134,7 @@ docker compose down
 ### Тесты
 
 ```bash
-# Unit-тесты (387 тестов, без Docker)
+# Unit-тесты (431 тест, без Docker)
 mvn test
 
 # С отчётом покрытия
@@ -153,7 +154,7 @@ mvn test -Pintegration
 Проект использует пайплайн `.github/workflows/deploy.yml`:
 
 **Этап 1 — Тесты** (все PR и push в master):
-- 387 unit-тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
+- 431 unit-тест + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
 - Нагрузочные тесты (3 шт.) запускаются отдельно: `mvn test -Pintegration` (требуют Docker)
 
 **Этап 2 — Деплой** (только push в master):
@@ -221,15 +222,16 @@ src/main/java/ru/mngerasimenko/todolist/
 ├── model/           JPA-сущности (User, Todo, TaskList, TaskListUser, TaskListRole, InviteToken, RefreshToken) + @Version
 ├── dto/             DTO + list/ + auth/ подпакеты (email-верификация, сброс пароля, приглашения, logout)
 ├── mapper/          Ручные мапперы (Todo, User, TaskList)
+├── crypto/          Шифрование данных (CryptoService — AES-256-GCM + HMAC, EncryptedStringConverter — JPA @Convert, DataEncryptionMigration — одноразовая миграция при старте)
 ├── config/          OpenApiConfig (Swagger UI), UsageStatsEndpoint (Actuator)
 ├── security/        Spring Security + JWT + Rate Limiting (Bucket4j)
 ├── settings/        AppProperties, EmailProperties (corsOrigins, версия, SMTP)
 ├── exception/       GlobalExceptionHandler + кастомные исключения (включая TokenExpiredException)
 └── TodolistApplication.java
 
-src/main/resources/db/migration/   Liquibase-миграции (master + 13 changeset-файлов)
+src/main/resources/db/migration/   Liquibase-миграции (master + 15 changeset-файлов, включая 017-encryption-fields, 018-email-hash-not-null)
 src/main/resources/templates/      HTML-шаблоны email (верификация, сброс пароля, приглашение)
-src/test/java/        387 тестов (controller, service, repository, mapper, security, concurrency)
+src/test/java/        431 тест (controller, service, repository, mapper, security, crypto, concurrency)
 postman/             Postman-коллекция + окружения
 monitoring/          VK-мониторинг (скрипты, systemd-сервис, конфиг) + backup PostgreSQL
 ```
