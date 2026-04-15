@@ -11,7 +11,7 @@ public interface TokenBlacklistService {
     /**
      * Добавляет access-токен в чёрный список до момента его истечения.
      *
-     * @param token raw JWT строка
+     * @param token     raw JWT строка
      * @param expiresAt время истечения токена
      */
     void blacklistAccessToken(String token, Instant expiresAt);

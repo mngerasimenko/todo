@@ -1,8 +1,6 @@
 package ru.mngerasimenko.todolist.service;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
 import ru.mngerasimenko.todolist.util.TokenUtils;
 
 import java.time.Instant;
@@ -17,7 +15,9 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class TokenBlacklistServiceInMemory implements TokenBlacklistService {
 
-    /** Ключ — SHA-256 хеш токена, значение — время истечения */
+    /**
+     * Ключ — SHA-256 хеш токена, значение — время истечения
+     */
     private final Map<String, Instant> blacklist = new ConcurrentHashMap<>();
 
     @Override
