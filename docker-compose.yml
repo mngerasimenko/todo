@@ -87,6 +87,10 @@ services:
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
       - APP_FIREBASE_ENABLED=${FIREBASE_ENABLED:-false}
       - FIREBASE_CREDENTIALS_PATH=${FIREBASE_CREDENTIALS_PATH:-/todo/firebase-service-account.json}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-localredispass}
+
 
     volumes:
       - todo-logs:/todo/logs
