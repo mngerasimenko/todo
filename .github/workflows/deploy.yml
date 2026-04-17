@@ -120,10 +120,17 @@ jobs:
             # Update repo
             git fetch origin master
             git reset --hard origin/master
+            
+            # Create volumes/network if not exist (idempotent)
+            docker network create staging-network 2>/dev/null || true
+            docker volume create staging-redis-data 2>/dev/null || true
+            docker volume create staging-postgres-data 2>/dev/null || true
 
-            # Pull latest image and force-recreate container
-            docker pull mngerasimenko/todo-app:latest
-            docker compose -f docker-compose.staging.yml up -d --force-recreate todo-app
+            # Pull all images (app + redis)
+            docker compose -f docker-compose.staging.yml pull
+
+            # Bring up all services; compose recreates only those with changes
+            docker compose -f docker-compose.staging.yml up -d
 
             # Cleanup: remove all unused images and build cache to prevent disk fill
             docker image prune -a -f 2>/dev/null || true

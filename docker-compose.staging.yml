@@ -1,0 +1,97 @@
+services:
+  todo-app:
+    image: mngerasimenko/todo-app:latest
+    container_name: staging-app
+    ports:
+      - "8090:8090"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://staging-db:5432/todo
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - SPRING_PROFILES_ACTIVE=production
+      - JAVA_TOOL_OPTIONS=-Xmx160m -Xms160m
+      - JWT_SECRET=${JWT_SECRET}
+      - SUBSCRIPTION_ENFORCEMENT=false
+      - MAIL_HOST=${MAIL_HOST:-smtp.jino.ru}
+      - MAIL_PORT=${MAIL_PORT:-465}
+      - MAIL_USERNAME=${MAIL_USERNAME:-}
+      - MAIL_PASSWORD=${MAIL_PASSWORD:-}
+      - MAIL_FROM=${MAIL_FROM:-todo-noreply@keepware.ru}
+      - APP_BASE_URL=http://185.244.172.45:8090
+      - APP_VERSION=staging
+      - APP_FIREBASE_ENABLED=true
+      - FIREBASE_CREDENTIALS_PATH=/todo/firebase-service-account.json
+      - MIN_ANDROID_VERSION=1
+      - LATEST_ANDROID_VERSION=99
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - HIKARI_POOL_SIZE=5
+      - TOMCAT_THREADS_MAX=20
+      - TOMCAT_THREADS_MIN_SPARE=2
+      - TOMCAT_ACCEPT_COUNT=20
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-localredispass}
+    volumes:
+      - ./firebase-service-account.json:/todo/firebase-service-account.json:ro
+    depends_on:
+      staging-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - staging-network
+    restart: unless-stopped
+
+  staging-db:
+    image: postgres:17
+    container_name: staging-db
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=todo
+      - POSTGRES_USER=postgres
+    command: >
+      postgres
+      -c shared_buffers=32MB
+      -c work_mem=1MB
+      -c maintenance_work_mem=16MB
+      -c effective_cache_size=128MB
+      -c max_connections=20
+    volumes:
+      - staging-postgres-data:/var/lib/postgresql/data
+    networks:
+      - staging-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # ========================================
+  # СЕРВИС: redis
+  # ========================================
+  redis:
+    image: redis:7-alpine
+    container_name: staging-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-localredispass} --maxmemory 8mb --maxmemory-policy allkeys-lru
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - staging-redis-data:/data
+    networks:
+      - staging-network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-localredispass}", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  staging-postgres-data:
+  staging-redis-data:
+
+networks:
+  staging-network:
+    driver: bridge
