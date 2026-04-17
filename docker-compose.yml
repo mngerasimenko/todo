@@ -56,7 +56,10 @@ services:
       dockerfile: Dockerfile
 
     container_name: todo-app
+
     # Порты не пробрасываются наружу — доступ только через nginx-proxy
+    #ports:
+    #- "8090:8090"
 
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-db:5432/todo
@@ -87,6 +90,9 @@ services:
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
       - APP_FIREBASE_ENABLED=${FIREBASE_ENABLED:-false}
       - FIREBASE_CREDENTIALS_PATH=${FIREBASE_CREDENTIALS_PATH:-/todo/firebase-service-account.json}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-localredispass}
 
     volumes:
       - todo-logs:/todo/logs
@@ -95,9 +101,11 @@ services:
     depends_on:
       postgres-db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8091/actuator/health | grep -q UP || exit 1"]
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:8091/actuator/health | grep -q UP || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -154,13 +162,33 @@ services:
       - todo-network
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 30s
       timeout: 10s
       retries: 10
       start_period: 10s
 
     # Автоматически перезапускать контейнер при падении
+    restart: unless-stopped
+
+  # ========================================
+  # СЕРВИС 6: redis
+  # ========================================
+  redis:
+    image: redis:7-alpine
+    container_name: todo-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-localredispass} --maxmemory 128mb --maxmemory-policy allkeys-lru
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - todo-network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-localredispass}", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
     restart: unless-stopped
 
 # ========================================
@@ -175,6 +203,8 @@ networks:
 # ========================================
 volumes:
   postgres-data:
+    external: true
+  redis-data:
     external: true
   todo-logs:
     external: true

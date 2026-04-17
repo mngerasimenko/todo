@@ -1,8 +1,6 @@
 package ru.mngerasimenko.todolist.service;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
 import ru.mngerasimenko.todolist.util.TokenUtils;
 
 import java.time.Instant;
@@ -14,11 +12,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * Хранит SHA-256 хеш токена → время истечения.
  * Записи автоматически удаляются после истечения срока токена.
  */
-@Service
 @Slf4j
-public class TokenBlacklistServiceImpl implements TokenBlacklistService {
+public class TokenBlacklistServiceInMemory implements TokenBlacklistService {
 
-    /** Ключ — SHA-256 хеш токена, значение — время истечения */
+    /**
+     * Ключ — SHA-256 хеш токена, значение — время истечения
+     */
     private final Map<String, Instant> blacklist = new ConcurrentHashMap<>();
 
     @Override
@@ -43,8 +42,6 @@ public class TokenBlacklistServiceImpl implements TokenBlacklistService {
         return true;
     }
 
-    @Override
-    @Scheduled(fixedRate = 600000) // каждые 10 минут
     public void evictExpired() {
         Instant now = Instant.now();
         int before = blacklist.size();

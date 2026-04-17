@@ -198,6 +198,7 @@ jobs:
             FIREBASE_ENABLED=true
             INACTIVE_REMINDER_ENABLED=${INACTIVE_REMINDER_ENABLED:-true}
             ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}
+            REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
             EOF
             chmod 600 .env
 

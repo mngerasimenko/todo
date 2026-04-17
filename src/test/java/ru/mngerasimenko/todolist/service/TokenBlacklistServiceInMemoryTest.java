@@ -8,15 +8,15 @@ import java.time.Instant;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Тесты TokenBlacklistServiceImpl — blacklist, проверка, очистка.
+ * Тесты TokenBlacklistServiceInMemory — blacklist, проверка, очистка.
  */
-class TokenBlacklistServiceImplTest {
+class TokenBlacklistServiceInMemoryTest {
 
-    private TokenBlacklistServiceImpl blacklistService;
+    private TokenBlacklistServiceInMemory blacklistService;
 
     @BeforeEach
     void setUp() {
-        blacklistService = new TokenBlacklistServiceImpl();
+        blacklistService = new TokenBlacklistServiceInMemory();
     }
 
     @Test

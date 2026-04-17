@@ -50,7 +50,7 @@ REST API бэкенд для совместного управления спи�
 - Вход по email (имена пользователей не уникальны)
 - REST API с JWT аутентификацией (access JWT + opaque refresh tokens в БД)
 - Ротация refresh-токенов с reuse detection (компрометация цепочки → отзыв всей семьи)
-- Logout с in-memory blacklist access-токенов и отзывом refresh-токенов
+- Logout с Redis blacklist access-токенов (TTL = остаток токена, graceful degradation на in-memory fallback при сбое Redis) и отзывом refresh-токенов
 - BCrypt хэширование паролей
 - **Шифрование персональных данных в БД (AES-256-GCM):** email, имя пользователя, названия задач и списков шифруются через JPA `@Convert`. Поиск по email через blind index (HMAC-SHA256). Прозрачно для API-клиентов. Ключ — `ENCRYPTION_KEY` env, graceful degradation без ключа
 - CORS для поддержки React SPA и прямых API-запросов
@@ -65,7 +65,7 @@ REST API бэкенд для совместного управления спи�
 - Интерактивная документация API (Swagger UI / OpenAPI 3)
 - Контроль доступа: изменение и удаление аккаунта только владельцем, операции с задачами только для участников списка
 - Каскадное удаление аккаунта: передача ADMIN, удаление пустых списков, сохранение публичных задач через системного пользователя
-- 431 unit-тест с проверкой покрытия (JaCoCo) + 3 нагрузочных теста (TestContainers, отдельный запуск)
+- 439 unit-тестов с проверкой покрытия (JaCoCo) + 8 интеграционных (3 concurrency + 5 Redis blacklist на TestContainers, отдельный запуск)
 
 ---
 
@@ -80,7 +80,8 @@ REST API бэкенд для совместного управления спи�
 | **Безопасность**| Spring Security + JWT (jjwt)      | 6.4.6   |
 | **Сборка**      | Maven                             | 3.9     |
 | **Тесты**       | JUnit 5 + Mockito + AssertJ       | -       |
-| **Нагрузочные** | TestContainers (PostgreSQL)       | (BOM)   |
+| **Нагрузочные** | TestContainers (PostgreSQL + Redis) | (BOM) |
+| **Кэш / Blacklist** | Redis (Spring Data Redis, Lettuce) | 7-alpine |
 | **Покрытие**    | JaCoCo                            | 0.8.14  |
 | **Контейнеры**  | Docker + Docker Compose           | 24+     |
 | **Rate Limiting**| Bucket4j (Token Bucket)          | 8.14.0  |
@@ -134,7 +135,7 @@ docker compose down
 ### Тесты
 
 ```bash
-# Unit-тесты (431 тест, без Docker)
+# Unit-тесты (439 тестов, без Docker)
 mvn test
 
 # С отчётом покрытия
@@ -154,7 +155,7 @@ mvn test -Pintegration
 Проект использует пайплайн `.github/workflows/deploy.yml`:
 
 **Этап 1 — Тесты** (все PR и push в master):
-- 431 unit-тест + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
+- 439 unit-тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
 - Нагрузочные тесты (3 шт.) запускаются отдельно: `mvn test -Pintegration` (требуют Docker)
 
 **Этап 2 — Деплой** (только push в master):
@@ -217,7 +218,7 @@ chmod +x setup-server.sh
 ```
 src/main/java/ru/mngerasimenko/todolist/
 ├── controller/      REST-контроллеры (5: App, Todo, User, TaskList, Auth)
-├── service/         Бизнес-логика (8 интерфейсов + 8 реализаций, включая RefreshTokenService, TokenBlacklistService)
+├── service/         Бизнес-логика (8 интерфейсов + 9 реализаций; TokenBlacklistServiceRedis — основная, TokenBlacklistServiceInMemory — fallback через композицию)
 ├── repository/      Spring Data JPA (6 репозиториев, включая RefreshTokenRepository)
 ├── model/           JPA-сущности (User, Todo, TaskList, TaskListUser, TaskListRole, InviteToken, RefreshToken) + @Version
 ├── dto/             DTO + list/ + auth/ подпакеты (email-верификация, сброс пароля, приглашения, logout)
@@ -231,7 +232,7 @@ src/main/java/ru/mngerasimenko/todolist/
 
 src/main/resources/db/migration/   Liquibase-миграции (master + 15 changeset-файлов, включая 017-encryption-fields, 018-email-hash-not-null)
 src/main/resources/templates/      HTML-шаблоны email (верификация, сброс пароля, приглашение)
-src/test/java/        431 тест (controller, service, repository, mapper, security, crypto, concurrency)
+src/test/java/        439 unit-тестов + 8 integration (controller, service, repository, mapper, security, crypto, concurrency, redis blacklist integration)
 postman/             Postman-коллекция + окружения
 monitoring/          VK-мониторинг (скрипты, systemd-сервис, конфиг) + backup PostgreSQL
 ```
@@ -241,12 +242,6 @@ monitoring/          VK-мониторинг (скрипты, systemd-серви
 
 - **[todolist-web](https://github.com/mngerasimenko/todolist-web)** — React SPA (TypeScript + Vite + Tailwind CSS)
 - **[todolist-android](https://github.com/mngerasimenko/todolist-android)** — нативный Android-клиент (Kotlin + Jetpack Compose)
-
----
-
-## Changelog
-
-История изменений: [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
