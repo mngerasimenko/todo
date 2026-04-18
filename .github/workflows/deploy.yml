@@ -189,6 +189,8 @@ jobs:
             docker volume create todo-logs 2>/dev/null || true
             docker volume create certbot-conf 2>/dev/null || true
             docker volume create certbot-www 2>/dev/null || true
+            docker volume create prometheus-data 2>/dev/null || true
+            docker volume create grafana-data 2>/dev/null || true
 
             # Записываем .env рядом с docker-compose.yml — чтобы любой
             # последующий `docker compose up` (в т.ч. от других проектов
@@ -206,12 +208,13 @@ jobs:
             INACTIVE_REMINDER_ENABLED=${INACTIVE_REMINDER_ENABLED:-true}
             ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}
             REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+            GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}
             EOF
             chmod 600 .env
 
             # Pull and restart app
-            docker compose pull todo-app
-            docker compose up -d todo-app
+            docker compose pull todo-app prometheus grafana
+            docker compose up -d todo-app prometheus grafana
 
             # Reload nginx for static file updates
             docker exec nginx-proxy nginx -s reload 2>/dev/null || \
