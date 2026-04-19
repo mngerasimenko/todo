@@ -62,6 +62,7 @@ REST API бэкенд для совместного управления спи�
 - Автоматический CI/CD через GitHub Actions
 - SMTP health check в мониторинге сервера
 - Мониторинг сервера через VK-бот (алерты + интерактивные команды: /status, /jvm, /stats, /restart, /logs, /errors)
+- Метрики приложения через Prometheus + Grafana (JVM, HTTP, HikariCP пул соединений, retention 30 дней)
 - Интерактивная документация API (Swagger UI / OpenAPI 3)
 - Контроль доступа: изменение и удаление аккаунта только владельцем, операции с задачами только для участников списка
 - Каскадное удаление аккаунта: передача ADMIN, удаление пустых списков, сохранение публичных задач через системного пользователя
@@ -86,7 +87,9 @@ REST API бэкенд для совместного управления спи�
 | **Контейнеры**  | Docker + Docker Compose           | 24+     |
 | **Rate Limiting**| Bucket4j (Token Bucket)          | 8.14.0  |
 | **Документация**| springdoc-openapi (Swagger UI)    | 2.8.6   |
-| **Мониторинг**  | Spring Boot Actuator (порт 8091)  | 3.5.6   |
+| **Мониторинг**  | Spring Boot Actuator + Micrometer (порт 8091) | 3.5.6   |
+| **Метрики**     | Prometheus                        | 2.54.1  |
+| **Дашборды**    | Grafana                           | 11.3.0  |
 | **CI/CD**       | GitHub Actions                    | -       |
 
 ---
@@ -198,6 +201,18 @@ Telegram-бот для мониторинга состояния сервера.
 **Автоматический backup PostgreSQL** (cron, ежедневно в 3:00):
 - `monitoring/backup.sh` — дамп БД, хранение 7 дней
 
+### Prometheus + Grafana
+
+Метрики приложения собираются через Actuator `/actuator/prometheus` (Micrometer) и визуализируются в Grafana:
+
+- **Prometheus** (`127.0.0.1:9090`) — scrape интервал 15 сек, retention 30 дней
+- **Grafana** (`127.0.0.1:3001`) — provisioning datasource и дашбордов из `monitoring/grafana/`
+  - JVM Micrometer (heap, GC, threads, classes)
+  - Spring Boot Statistics (HTTP requests/errors, HikariCP, response time)
+- Доступ к Grafana только через SSH-туннель: `ssh -L 3001:localhost:3001 deploy@<host>` → `http://localhost:3001`
+- Для Windows есть скрипт быстрого запуска: `scripts/open-grafana.bat`
+- Учётные данные admin — в GitHub Secret `GRAFANA_ADMIN_PASSWORD`
+
 ---
 
 ## Первоначальная настройка сервера
@@ -235,6 +250,8 @@ src/main/resources/templates/      HTML-шаблоны email (верификац
 src/test/java/        439 unit-тестов + 8 integration (controller, service, repository, mapper, security, crypto, concurrency, redis blacklist integration)
 postman/             Postman-коллекция + окружения
 monitoring/          VK-мониторинг (скрипты, systemd-сервис, конфиг) + backup PostgreSQL
+monitoring/prometheus/   Prometheus scrape-конфиг
+monitoring/grafana/      Grafana provisioning: datasources, dashboards (JVM, Spring Boot Statistics)
 ```
 
 ---
