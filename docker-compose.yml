@@ -191,6 +191,46 @@ services:
       retries: 3
     restart: unless-stopped
 
+  # ========================================
+  # СЕРВИС 7: Prometheus (сбор метрик)
+  # ========================================
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=30d'
+    networks:
+      - todo-network
+    restart: unless-stopped
+
+  # ========================================
+  # СЕРВИС 8: Grafana (визуализация метрик)
+  # ========================================
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: grafana
+    ports:
+      - "127.0.0.1:3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3001
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - todo-network
+    restart: unless-stopped
+
 # ========================================
 # СЕТИ
 # ========================================
@@ -211,4 +251,8 @@ volumes:
   certbot-conf:
     external: true
   certbot-www:
+    external: true
+  prometheus-data:
+    external: true
+  grafana-data:
     external: true
