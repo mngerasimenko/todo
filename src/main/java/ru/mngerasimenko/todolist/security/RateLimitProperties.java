@@ -12,10 +12,19 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @Setter
 public class RateLimitProperties {
 
-    /** Включение/выключение rate limiting в рантайме (для тестов). По умолчанию включён. */
+    /**
+     * Включение/выключение rate limiting в рантайме (для тестов). По умолчанию включён.
+     */
     private boolean enabled = true;
 
-    /** Заголовок для получения реального IP клиента от доверенного reverse proxy (nginx). */
+    /**
+     * Хранилище bucket'ов: memory (ConcurrentHashMap в JVM) или redis (LettuceBasedProxyManager).
+     */
+    private RateLimitStorage storage = RateLimitStorage.MEMORY;
+
+    /**
+     * Заголовок для получения реального IP клиента от доверенного reverse proxy (nginx).
+     */
     private String clientIpHeader = "X-Real-IP";
 
     private EndpointLimit login = new EndpointLimit(5, 60);

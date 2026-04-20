@@ -20,6 +20,7 @@ import static org.mockito.Mockito.*;
 class RateLimitFilterTest {
 
     private RateLimitFilter filter;
+    private BucketProviderInMemory provider;
     private FilterChain filterChain;
 
     @BeforeEach
@@ -29,7 +30,8 @@ class RateLimitFilterTest {
         props.setRegister(new RateLimitProperties.EndpointLimit(2, 3600));
         props.setRefresh(new RateLimitProperties.EndpointLimit(5, 60));
         props.setGeneral(new RateLimitProperties.EndpointLimit(10, 60));
-        filter = new RateLimitFilter(props);
+        provider = new BucketProviderInMemory();
+        filter = new RateLimitFilter(props, provider);
         filterChain = mock(FilterChain.class);
     }
 
@@ -302,12 +304,9 @@ class RateLimitFilterTest {
             filter.doFilterInternal(createRequest("POST", "/api/auth/login"),
                     new MockHttpServletResponse(), filterChain);
 
-            assertThat(filter.getActiveBucketCount()).isEqualTo(1);
-
-            // Очистка с нулевым временем жизни — удалит всё
-            filter.evictExpiredBuckets(0);
-
-            assertThat(filter.getActiveBucketCount()).isEqualTo(0);
+            assertThat(provider.getActiveBucketCount()).isEqualTo(1);
+            provider.evictExpiredBuckets(0);
+            assertThat(provider.getActiveBucketCount()).isEqualTo(0);
         }
 
         @Test
@@ -317,9 +316,8 @@ class RateLimitFilterTest {
                     new MockHttpServletResponse(), filterChain);
 
             // Очистка с большим временем жизни — не удалит
-            filter.evictExpiredBuckets(Long.MAX_VALUE);
-
-            assertThat(filter.getActiveBucketCount()).isEqualTo(1);
+            provider.evictExpiredBuckets(Long.MAX_VALUE);
+            assertThat(provider.getActiveBucketCount()).isEqualTo(1);
         }
     }
 
