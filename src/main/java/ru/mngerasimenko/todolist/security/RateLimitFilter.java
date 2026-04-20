@@ -2,11 +2,13 @@ package ru.mngerasimenko.todolist.security;
 
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
+import io.github.bucket4j.BucketConfiguration;
 import io.github.bucket4j.ConsumptionProbe;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
@@ -14,29 +16,20 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Фильтр rate limiting на основе Bucket4j (алгоритм token bucket).
  * Применяет разные лимиты для auth-эндпоинтов и общих запросов.
- * Ключ — IP-адрес клиента (из X-Forwarded-For за nginx).
+ * Ключ — IP-адрес клиента (из X-Real-IP за nginx).
+ * Хранилище bucket'ов абстрагировано через BucketProvider (memory или redis).
  */
 @Component
+@RequiredArgsConstructor
 @Slf4j
 public class RateLimitFilter extends OncePerRequestFilter {
 
     private final RateLimitProperties properties;
-
-    /** Хранилище bucket'ов: ключ = "тип:IP" */
-    private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
-
-    /** Время последнего использования bucket'а для очистки */
-    private final Map<String, Long> lastAccessTime = new ConcurrentHashMap<>();
-
-    public RateLimitFilter(RateLimitProperties properties) {
-        this.properties = properties;
-    }
+    private final BucketProvider bucketProvider;
 
     @Override
     protected void doFilterInternal(
@@ -68,9 +61,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        Bucket bucket = buckets.computeIfAbsent(bucketKey, k -> createBucket(uri, request.getMethod()));
-        lastAccessTime.put(bucketKey, System.currentTimeMillis());
-
+        Bucket bucket = bucketProvider.resolveBucket(bucketKey, buildConfiguration(uri, request.getMethod()));
         ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
 
         if (probe.isConsumed()) {
@@ -152,16 +143,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return "general:" + clientIp;
     }
 
-    /**
-     * Создаёт bucket с лимитами согласно типу эндпоинта.
-     */
-    private Bucket createBucket(String uri, String method) {
+    private BucketConfiguration buildConfiguration(String uri, String method) {
         RateLimitProperties.EndpointLimit limit = resolveLimit(uri, method);
         Bandwidth bandwidth = Bandwidth.builder()
                 .capacity(limit.getRequests())
                 .refillGreedy(limit.getRequests(), Duration.ofSeconds(limit.getDurationSeconds()))
                 .build();
-        return Bucket.builder().addLimit(bandwidth).build();
+        return BucketConfiguration.builder().addLimit(bandwidth).build();
     }
 
     private RateLimitProperties.EndpointLimit resolveLimit(String uri, String method) {
@@ -179,25 +167,4 @@ public class RateLimitFilter extends OncePerRequestFilter {
         return properties.getGeneral();
     }
 
-    /**
-     * Удаляет bucket'ы, которые не использовались дольше указанного времени.
-     * Вызывается из планировщика для предотвращения утечки памяти.
-     */
-    public void evictExpiredBuckets(long maxIdleMillis) {
-        long now = System.currentTimeMillis();
-        lastAccessTime.entrySet().removeIf(entry -> {
-            if (now - entry.getValue() >= maxIdleMillis) {
-                buckets.remove(entry.getKey());
-                return true;
-            }
-            return false;
-        });
-    }
-
-    /**
-     * Количество активных bucket'ов (для мониторинга и тестов).
-     */
-    public int getActiveBucketCount() {
-        return buckets.size();
-    }
 }

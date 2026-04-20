@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import ru.mngerasimenko.todolist.security.BucketProviderInMemory;
 import ru.mngerasimenko.todolist.security.RateLimitFilter;
 import ru.mngerasimenko.todolist.security.RateLimitProperties;
 import ru.mngerasimenko.todolist.security.jwt.JwtAuthenticationFilter;
@@ -76,6 +77,6 @@ public class TestSecurityConfig {
         props.setRefresh(new RateLimitProperties.EndpointLimit(1000, 1));
         props.setGeneral(new RateLimitProperties.EndpointLimit(1000, 1));
         props.setChangeEmail(new RateLimitProperties.EndpointLimit(1000, 1));
-        return new RateLimitFilter(props);
+        return new RateLimitFilter(props, new BucketProviderInMemory());
     }
 }
