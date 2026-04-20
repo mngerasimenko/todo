@@ -56,7 +56,7 @@ REST API бэкенд для совместного управления спи�
 - CORS для поддержки React SPA и прямых API-запросов
 - Автоверсионирование (MAJOR.MINOR.PATCH) с проверкой совместимости Android-клиента
 - Оптимистичная блокировка (`@Version`) на всех Entity — защита от потерянных обновлений
-- Rate Limiting (Bucket4j) — защита от брутфорса и спам-регистраций (5/мин login, 3/час register, 100/мин API)
+- Rate Limiting (Bucket4j, Token Bucket) — защита от брутфорса и спам-регистраций (7/5мин login, 3/час register, 100/мин API). Хранилище bucket'ов переключаемо: `rate-limit.storage=memory|redis`. В режиме `redis` (production) состояние live в Redis через `LettuceBasedProxyManager` — переживает рестарт контейнера и распределяется между инстансами
 - Защита от race conditions (TOCTOU) — атомарные операции через UNIQUE constraints
 - Миграции БД через Liquibase (безопасно для существующих данных)
 - Автоматический CI/CD через GitHub Actions
@@ -66,7 +66,8 @@ REST API бэкенд для совместного управления спи�
 - Интерактивная документация API (Swagger UI / OpenAPI 3)
 - Контроль доступа: изменение и удаление аккаунта только владельцем, операции с задачами только для участников списка
 - Каскадное удаление аккаунта: передача ADMIN, удаление пустых списков, сохранение публичных задач через системного пользователя
-- 439 unit-тестов с проверкой покрытия (JaCoCo) + 8 интеграционных (3 concurrency + 5 Redis blacklist на TestContainers, отдельный запуск)
+- Super-admin через email-whitelist (`SUPER_ADMIN_EMAILS` env) + `@PreAuthorize("@superAdminGuard.check(authentication)")` — ручные админ-операции (например, триггер напоминания неактивному пользователю). Для не-админов `/api/admin/**` маскируется под 404
+- 456 unit-тестов с проверкой покрытия (JaCoCo) + 11 интеграционных (3 concurrency + 5 Redis blacklist + 3 Redis rate-limit на TestContainers, отдельный запуск)
 
 ---
 
@@ -85,7 +86,7 @@ REST API бэкенд для совместного управления спи�
 | **Кэш / Blacklist** | Redis (Spring Data Redis, Lettuce) | 7-alpine |
 | **Покрытие**    | JaCoCo                            | 0.8.14  |
 | **Контейнеры**  | Docker + Docker Compose           | 24+     |
-| **Rate Limiting**| Bucket4j (Token Bucket)          | 8.14.0  |
+| **Rate Limiting**| Bucket4j (Token Bucket, core + lettuce — distributed через Redis) | 8.14.0  |
 | **Документация**| springdoc-openapi (Swagger UI)    | 2.8.6   |
 | **Мониторинг**  | Spring Boot Actuator + Micrometer (порт 8091) | 3.5.6   |
 | **Метрики**     | Prometheus                        | 2.54.1  |
@@ -232,22 +233,22 @@ chmod +x setup-server.sh
 
 ```
 src/main/java/ru/mngerasimenko/todolist/
-├── controller/      REST-контроллеры (5: App, Todo, User, TaskList, Auth)
-├── service/         Бизнес-логика (8 интерфейсов + 9 реализаций; TokenBlacklistServiceRedis — основная, TokenBlacklistServiceInMemory — fallback через композицию)
+├── controller/      REST-контроллеры (7: App, Todo, User, TaskList, Auth, EmailTracking, Admin)
+├── service/         Бизнес-логика (10 интерфейсов + 10 реализаций; TokenBlacklistServiceRedis — основная, TokenBlacklistServiceInMemory — fallback через композицию; AdminService — операции супер-админа)
 ├── repository/      Spring Data JPA (6 репозиториев, включая RefreshTokenRepository)
 ├── model/           JPA-сущности (User, Todo, TaskList, TaskListUser, TaskListRole, InviteToken, RefreshToken) + @Version
 ├── dto/             DTO + list/ + auth/ подпакеты (email-верификация, сброс пароля, приглашения, logout)
 ├── mapper/          Ручные мапперы (Todo, User, TaskList)
 ├── crypto/          Шифрование данных (CryptoService — AES-256-GCM + HMAC, EncryptedStringConverter — JPA @Convert, DataEncryptionMigration — одноразовая миграция при старте)
-├── config/          OpenApiConfig (Swagger UI), UsageStatsEndpoint (Actuator)
-├── security/        Spring Security + JWT + Rate Limiting (Bucket4j)
+├── config/          OpenApiConfig (Swagger UI), UsageStatsEndpoint (Actuator), SuperAdminProperties (email-whitelist)
+├── security/        Spring Security + JWT + Rate Limiting (Bucket4j, memory/redis) + SuperAdminGuard
 ├── settings/        AppProperties, EmailProperties (corsOrigins, версия, SMTP)
 ├── exception/       GlobalExceptionHandler + кастомные исключения (включая TokenExpiredException)
 └── TodolistApplication.java
 
 src/main/resources/db/migration/   Liquibase-миграции (master + 15 changeset-файлов, включая 017-encryption-fields, 018-email-hash-not-null)
 src/main/resources/templates/      HTML-шаблоны email (верификация, сброс пароля, приглашение)
-src/test/java/        439 unit-тестов + 8 integration (controller, service, repository, mapper, security, crypto, concurrency, redis blacklist integration)
+src/test/java/        456 unit-тестов + 11 integration (controller, service, repository, mapper, security, crypto, concurrency, redis blacklist integration, redis rate-limit integration, admin-endpoint)
 postman/             Postman-коллекция + окружения
 monitoring/          VK-мониторинг (скрипты, systemd-сервис, конфиг) + backup PostgreSQL
 monitoring/prometheus/   Prometheus scrape-конфиг
