@@ -94,6 +94,7 @@ services:
       - REDIS_PORT=${REDIS_PORT:-6379}
       - REDIS_PASSWORD=${REDIS_PASSWORD:-localredispass}
       - RATE_LIMIT_STORAGE=redis
+      - SUPER_ADMIN_EMAILS=${SUPER_ADMIN_EMAILS:-}
 
     volumes:
       - todo-logs:/todo/logs

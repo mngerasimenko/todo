@@ -63,8 +63,9 @@ public class ApiSecurityConfig {
                         ).permitAll()
                         // Публичный GET для информации о приглашении
                         .requestMatchers(HttpMethod.GET, "/api/lists/invite/*").permitAll()
-                        // Административные эндпоинты (требуют роль ADMIN)
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        // Административные эндпоинты: аутентификация обязательна,
+                        // проверка супер-админа идёт через @PreAuthorize на контроллере
+                        .requestMatchers("/api/admin/**").authenticated()
                         // Все остальные эндпоинты требуют аутентификации
                         .anyRequest().authenticated()
                 )

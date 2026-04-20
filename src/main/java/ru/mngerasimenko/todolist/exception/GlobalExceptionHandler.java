@@ -1,5 +1,6 @@
 package ru.mngerasimenko.todolist.exception;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -169,7 +170,12 @@ public class GlobalExceptionHandler {
      * Обрабатывает отказ в доступе — пользователь пытается изменить чужие данные (HTTP 403).
      */
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException ex) {
+    public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException ex,
+                                                                   HttpServletRequest request) {
+        // Для /api/admin/** скрываем существование эндпоинта — возвращаем 404 вместо 403
+        if (request.getRequestURI().startsWith("/api/admin")) {
+            return createErrorResponse(HttpStatus.NOT_FOUND, "Not Found", null);
+        }
         log.warn("Access denied: {}", ex.getMessage());
         return createErrorResponse(HttpStatus.FORBIDDEN, "Forbidden", ex.getMessage());
     }
