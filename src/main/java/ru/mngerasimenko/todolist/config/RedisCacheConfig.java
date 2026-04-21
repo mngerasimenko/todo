@@ -1,10 +1,8 @@
 package ru.mngerasimenko.todolist.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.databind.ObjectMapper.DefaultTyping;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -42,13 +40,14 @@ public class RedisCacheConfig {
             "@featureFlagStore.isEnabled(T(ru.mngerasimenko.todolist.featureflags.FeatureFlag).RESPONSE_CACHE)";
 
     @Bean
-    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
+    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory,
+                                          ObjectMapper appObjectMapper) {
         RedisCacheConfiguration base = RedisCacheConfiguration.defaultCacheConfig()
                 .disableCachingNullValues()
                 .serializeKeysWith(RedisSerializationContext.SerializationPair
                         .fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair
-                        .fromSerializer(jsonSerializer()));
+                        .fromSerializer(jsonSerializer(appObjectMapper)));
 
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(base)
@@ -62,16 +61,16 @@ public class RedisCacheConfig {
      * тип DTO при записи в Redis, чтобы при чтении корректно десериализовалось
      * даже для коллекций (List<ListResponse> и т.д.).
      *
-     * Whitelist ограничен нашими пакетами + стандартными JDK — блокирует
-     * известные Jackson gadget-chains (Logback, C3P0, Spring MVEL) на случай
-     * компрометации Redis.
+     * За основу берём Spring Boot auto-configured ObjectMapper — в нём уже
+     * зарегистрированы JavaTimeModule, ParameterNamesModule, все пользовательские
+     * {@code Jackson2ObjectMapperBuilderCustomizer} и настройки {@code spring.jackson.*}.
+     * Копируем его и добавляем только то, что специфично для Redis:
+     * {@link DefaultTyping#NON_FINAL} (чтобы при десериализации знать конкретный тип DTO)
+     * и {@link BasicPolymorphicTypeValidator} (whitelist пакетов — блокирует известные
+     * Jackson gadget-chains на случай компрометации Redis).
      */
-    private GenericJackson2JsonRedisSerializer jsonSerializer() {
-        ObjectMapper mapper = new ObjectMapper();
-        // Критично: Java-8 date/time (LocalDateTime в DTO) — без модуля Jackson не пишет
-        // и ломает сериализацию там, где этот mapper используется.
-        mapper.registerModule(new JavaTimeModule());
-        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    private GenericJackson2JsonRedisSerializer jsonSerializer(ObjectMapper appObjectMapper) {
+        ObjectMapper mapper = appObjectMapper.copy();
         BasicPolymorphicTypeValidator validator = BasicPolymorphicTypeValidator.builder()
                 .allowIfSubType("ru.mngerasimenko.todolist.dto")
                 .allowIfSubType("java.util")
