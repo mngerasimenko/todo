@@ -15,12 +15,18 @@ on:
         options:
           - production
           - staging
+          - rollback-production
+      target_sha:
+        description: 'Target SHA for rollback (empty = use saved deploy-prev.txt)'
+        required: false
+        default: ''
 
 jobs:
   # ============================================
   # Этап 1: Запуск тестов с покрытием
   # ============================================
   test:
+    if: github.event.inputs.deploy_target != 'rollback-production'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -55,7 +61,10 @@ jobs:
   # ============================================
   build:
     needs: test
-    if: github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: |
+      github.ref == 'refs/heads/master' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.event.inputs.deploy_target != 'rollback-production'
     runs-on: ubuntu-latest
     env:
       APP_VERSION_MAJOR: 0
@@ -212,6 +221,19 @@ jobs:
             EOF
             chmod 600 .env
 
+            # === Pre-deploy rollback support ===
+            # Сохраняем текущий running-тег — чтобы rollback мог к нему вернуться
+            docker inspect --format='{{.Config.Image}}' todo-app > deploy-prev.txt 2>/dev/null || true
+
+            # pg_dump перед обновлением — страховка от неудачной миграции
+            mkdir -p backups/pre-deploy
+            BACKUP_FILE="backups/pre-deploy/$(date +%Y%m%d-%H%M%S).dump"
+            docker exec postgres-db pg_dump -U postgres -Fc todo > "$BACKUP_FILE" 2>/dev/null \
+              && echo "pre-deploy backup saved: $BACKUP_FILE" \
+              || echo "WARN: pre-deploy pg_dump failed, continuing"
+            # Ротация: храним 5 последних pre-deploy дампов
+            ls -1t backups/pre-deploy/*.dump 2>/dev/null | tail -n +6 | xargs -r rm -f
+
             # Pull and restart app
             docker compose pull todo-app prometheus grafana
             docker compose up -d todo-app prometheus grafana
@@ -229,3 +251,58 @@ jobs:
             chmod +x /home/deploy/todo/monitoring/*.sh 2>/dev/null || true
 
             echo "Production deployed successfully"
+
+  # ============================================
+  # Этап 5: Откат production (только вручную)
+  # ============================================
+  rollback-production:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_target == 'rollback-production'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      DEPLOY_DIR: ${{ secrets.DEPLOY_DIR || '/home/deploy/todo' }}
+    steps:
+      - name: Rollback production to previous or specified SHA
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd "${{ env.DEPLOY_DIR }}"
+            # Определяем целевой тег
+            TARGET="${{ github.event.inputs.target_sha }}"
+            if [ -z "$TARGET" ]; then
+              if [ ! -f deploy-prev.txt ]; then
+                echo "ERROR: target_sha не указан и deploy-prev.txt не найден"
+                exit 1
+              fi
+              TARGET=$(cat deploy-prev.txt)
+              echo "Использую тег из deploy-prev.txt: $TARGET"
+            else
+              case "$TARGET" in
+                mngerasimenko/todo-app:*) ;;
+                *) TARGET="mngerasimenko/todo-app:$TARGET" ;;
+              esac
+              echo "Откат на указанный тег: $TARGET"
+            fi
+            # Подменяем image todo-app в docker-compose.yml
+            cp docker-compose.yml docker-compose.yml.bak
+            sed -i -E "s|^(\s*image:\s*)mngerasimenko/todo-app:.*|\1$TARGET|" docker-compose.yml
+            # Проверяем что замена прошла
+            if ! grep -q "image:\s*$TARGET" docker-compose.yml; then
+              echo "ERROR: не удалось подменить image в docker-compose.yml"
+              mv docker-compose.yml.bak docker-compose.yml
+              exit 1
+            fi
+
+            docker compose pull todo-app
+            docker compose up -d --force-recreate todo-app
+
+            # Smoke test — через docker network (todo-app не опубликован на хост)
+            sleep 3
+            if docker exec nginx-proxy curl -fsS http://todo-app:8090/api/status > /dev/null 2>&1; then
+              echo "Rollback на $TARGET выполнен, /api/status отвечает 200"
+            else
+              echo "WARN: /api/status недоступен после отката — проверь логи"
+            fi
