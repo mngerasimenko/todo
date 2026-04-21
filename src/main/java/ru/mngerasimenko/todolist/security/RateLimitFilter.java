@@ -13,6 +13,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -22,6 +24,7 @@ import java.time.Duration;
  * Применяет разные лимиты для auth-эндпоинтов и общих запросов.
  * Ключ — IP-адрес клиента (из X-Real-IP за nginx).
  * Хранилище bucket'ов абстрагировано через BucketProvider (memory или redis).
+ * Включение/выключение — через {@link FeatureFlag#RATE_LIMIT} (runtime + env).
  */
 @Component
 @RequiredArgsConstructor
@@ -30,6 +33,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private final RateLimitProperties properties;
     private final BucketProvider bucketProvider;
+    private final FeatureFlagStore flagStore;
 
     @Override
     protected void doFilterInternal(
@@ -41,7 +45,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         String uri = request.getRequestURI();
 
         // Rate limiting отключён — пропускаем все запросы
-        if (!properties.isEnabled()) {
+        if (!flagStore.isEnabled(FeatureFlag.RATE_LIMIT)) {
             filterChain.doFilter(request, response);
             return;
         }

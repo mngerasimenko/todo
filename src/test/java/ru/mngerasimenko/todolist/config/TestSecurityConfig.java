@@ -77,6 +77,11 @@ public class TestSecurityConfig {
         props.setRefresh(new RateLimitProperties.EndpointLimit(1000, 1));
         props.setGeneral(new RateLimitProperties.EndpointLimit(1000, 1));
         props.setChangeEmail(new RateLimitProperties.EndpointLimit(1000, 1));
-        return new RateLimitFilter(props, new BucketProviderInMemory());
+        // В тестах flagStore всегда возвращает true для RATE_LIMIT — фильтр пропускает все запросы через свой rate-limit
+        ru.mngerasimenko.todolist.featureflags.FeatureFlagStore flagStore =
+                org.mockito.Mockito.mock(ru.mngerasimenko.todolist.featureflags.FeatureFlagStore.class);
+        org.mockito.Mockito.when(flagStore.isEnabled(
+                ru.mngerasimenko.todolist.featureflags.FeatureFlag.RATE_LIMIT)).thenReturn(true);
+        return new RateLimitFilter(props, new BucketProviderInMemory(), flagStore);
     }
 }

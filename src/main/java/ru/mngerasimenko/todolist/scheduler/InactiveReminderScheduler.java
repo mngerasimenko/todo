@@ -2,9 +2,10 @@ package ru.mngerasimenko.todolist.scheduler;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.service.EmailService;
 import ru.mngerasimenko.todolist.service.PushNotificationService;
@@ -19,11 +20,12 @@ import java.util.List;
  * Отправляет:
  * - Push-уведомление (если есть FCM-токен)
  * - Email (если email подтверждён)
+ *
+ * Включение/выключение — через {@link FeatureFlag#INACTIVE_REMINDER} (runtime + env).
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "app.inactive-reminder.enabled", havingValue = "true", matchIfMissing = true)
 public class InactiveReminderScheduler {
 
     private static final int INACTIVE_DAYS = 7;
@@ -31,12 +33,18 @@ public class InactiveReminderScheduler {
     private final UserService userService;
     private final EmailService emailService;
     private final PushNotificationService pushNotificationService;
+    private final FeatureFlagStore flagStore;
 
     /**
      * Запускается каждый день в 10:00 по серверному времени.
      */
     @Scheduled(cron = "0 0 10 * * *")
     public void sendReminders() {
+        if (!flagStore.isEnabled(FeatureFlag.INACTIVE_REMINDER)) {
+            log.debug("[inactive-reminder] Scheduler отключён через feature flag");
+            return;
+        }
+
         List<User> inactiveUsers = userService.findInactiveUsersForReminder(INACTIVE_DAYS);
 
         if (inactiveUsers.isEmpty()) {

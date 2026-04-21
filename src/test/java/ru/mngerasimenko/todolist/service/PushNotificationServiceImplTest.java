@@ -1,10 +1,13 @@
 package ru.mngerasimenko.todolist.service;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.repository.PushTokenRepository;
 import ru.mngerasimenko.todolist.repository.TaskListRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
@@ -29,8 +32,17 @@ class PushNotificationServiceImplTest {
     @Mock
     private TaskListRepository taskListRepository;
 
+    @Mock
+    private FeatureFlagStore flagStore;
+
     @InjectMocks
     private PushNotificationServiceImpl pushNotificationService;
+
+    @BeforeEach
+    void setUp() {
+        // По умолчанию push включён — существующие сценарии продолжают работать
+        when(flagStore.isEnabled(FeatureFlag.PUSH_NOTIFICATIONS)).thenReturn(true);
+    }
 
     @Test
     void sendInactiveReminderPush_NoTokens_DoesNotSend() {

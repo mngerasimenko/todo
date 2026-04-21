@@ -13,11 +13,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class RateLimitProperties {
 
     /**
-     * Включение/выключение rate limiting в рантайме (для тестов). По умолчанию включён.
-     */
-    private boolean enabled = true;
-
-    /**
      * Хранилище bucket'ов: memory (ConcurrentHashMap в JVM) или redis (LettuceBasedProxyManager).
      */
     private RateLimitStorage storage = RateLimitStorage.MEMORY;

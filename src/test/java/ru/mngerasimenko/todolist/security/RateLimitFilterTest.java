@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 
 import java.io.IOException;
 
@@ -31,7 +33,9 @@ class RateLimitFilterTest {
         props.setRefresh(new RateLimitProperties.EndpointLimit(5, 60));
         props.setGeneral(new RateLimitProperties.EndpointLimit(10, 60));
         provider = new BucketProviderInMemory();
-        filter = new RateLimitFilter(props, provider);
+        FeatureFlagStore flagStore = mock(FeatureFlagStore.class);
+        when(flagStore.isEnabled(FeatureFlag.RATE_LIMIT)).thenReturn(true);
+        filter = new RateLimitFilter(props, provider, flagStore);
         filterChain = mock(FilterChain.class);
     }
 

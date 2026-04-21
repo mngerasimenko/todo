@@ -11,6 +11,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.model.PushToken;
 import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.repository.PushTokenRepository;
@@ -22,6 +24,8 @@ import java.util.List;
 /**
  * Реализация сервиса push-уведомлений через Firebase Cloud Messaging.
  * Все отправки выполняются асинхронно (@Async), чтобы не блокировать основной запрос.
+ * Отправка полностью подавляется, если выключен {@link FeatureFlag#PUSH_NOTIFICATIONS}
+ * (runtime toggle на случай нестабильной работы Firebase).
  */
 @Slf4j
 @Service
@@ -31,6 +35,7 @@ public class PushNotificationServiceImpl implements PushNotificationService {
     private final PushTokenRepository pushTokenRepository;
     private final UserRepository userRepository;
     private final ru.mngerasimenko.todolist.repository.TaskListRepository taskListRepository;
+    private final FeatureFlagStore flagStore;
 
     /** Кешированный результат проверки Firebase */
     private volatile boolean firebaseHealthyCache = false;
@@ -73,6 +78,7 @@ public class PushNotificationServiceImpl implements PushNotificationService {
     @Override
     @Async
     public void notifyNewTodo(Long listId, Long authorUserId, String authorName, String todoName) {
+        if (pushDisabled()) return;
         log.info("Отправка push: новая задача '{}' в списке {}, автор userId={}", todoName, listId, authorUserId);
         List<String> tokens = pushTokenRepository.findFcmTokensByListIdExcludingUser(listId, authorUserId);
         log.info("Найдено {} push-токенов для уведомления", tokens.size());
@@ -84,6 +90,7 @@ public class PushNotificationServiceImpl implements PushNotificationService {
     @Override
     @Async
     public void notifyTodoCompleted(Long completorUserId, Long listId, String completorName, String todoName) {
+        if (pushDisabled()) return;
         log.info("Отправка push: задача '{}' выполнена пользователем '{}' в списке {}", todoName, completorName, listId);
         List<String> tokens = pushTokenRepository.findFcmTokensByListIdExcludingUser(listId, completorUserId);
         log.info("Найдено {} push-токенов для уведомления", tokens.size());
@@ -95,6 +102,7 @@ public class PushNotificationServiceImpl implements PushNotificationService {
     @Override
     @Async
     public void notifyNewMember(Long listId, Long newUserId, String newUserName, String listName) {
+        if (pushDisabled()) return;
         log.info("Отправка push: новый участник '{}' в списке {} ('{}')", newUserName, listId, listName);
         List<String> tokens = pushTokenRepository.findFcmTokensByListIdExcludingUser(listId, newUserId);
         log.info("Найдено {} push-токенов для уведомления", tokens.size());
@@ -168,6 +176,7 @@ public class PushNotificationServiceImpl implements PushNotificationService {
     @Override
     @Async
     public void sendInactiveReminderPush(Long userId, String userName) {
+        if (pushDisabled()) return;
         String displayName = userName != null ? userName : "друг";
         String title = "Мы скучаем! ✅";
         String body = displayName + ", ваши списки ждут — загляните!";
@@ -180,5 +189,14 @@ public class PushNotificationServiceImpl implements PushNotificationService {
 
         sendToMultiple(tokens, title, body, null);
         log.info("Push-напоминание отправлено userId={} на {} устройств(а)", userId, tokens.size());
+    }
+
+    /** Короткий helper: true если отправку push нужно пропустить. */
+    private boolean pushDisabled() {
+        if (!flagStore.isEnabled(FeatureFlag.PUSH_NOTIFICATIONS)) {
+            log.debug("Push-уведомления отключены через feature flag");
+            return true;
+        }
+        return false;
     }
 }
