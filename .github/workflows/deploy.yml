@@ -222,8 +222,10 @@ jobs:
             chmod 600 .env
 
             # === Pre-deploy rollback support ===
-            # Сохраняем текущий running-тег — чтобы rollback мог к нему вернуться
-            docker inspect --format='{{.Config.Image}}' todo-app > deploy-prev.txt 2>/dev/null || true
+            # Сохраняем immutable digest текущего образа (не тег :latest из compose,
+            # который бесполезен для отката — при rollback записался бы тот же :latest).
+            # Формат: mngerasimenko/todo-app@sha256:<hash> — docker compose это принимает.
+            docker inspect --format='{{index .RepoDigests 0}}' todo-app > deploy-prev.txt 2>/dev/null || true
 
             # pg_dump перед обновлением — страховка от неудачной миграции
             mkdir -p backups/pre-deploy
@@ -281,14 +283,14 @@ jobs:
               echo "Использую тег из deploy-prev.txt: $TARGET"
             else
               case "$TARGET" in
-                mngerasimenko/todo-app:*) ;;
+                mngerasimenko/todo-app:*|mngerasimenko/todo-app@*) ;;
                 *) TARGET="mngerasimenko/todo-app:$TARGET" ;;
               esac
               echo "Откат на указанный тег: $TARGET"
             fi
             # Подменяем image todo-app в docker-compose.yml
             cp docker-compose.yml docker-compose.yml.bak
-            sed -i -E "s|^(\s*image:\s*)mngerasimenko/todo-app:.*|\1$TARGET|" docker-compose.yml
+            sed -i -E "s|^(\s*image:\s*)mngerasimenko/todo-app[:@].*|\1$TARGET|" docker-compose.yml
             # Проверяем что замена прошла
             if ! grep -q "image:\s*$TARGET" docker-compose.yml; then
               echo "ERROR: не удалось подменить image в docker-compose.yml"
