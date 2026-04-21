@@ -6,6 +6,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.service.EmailService;
 import ru.mngerasimenko.todolist.service.PushNotificationService;
@@ -33,6 +35,9 @@ class InactiveReminderSchedulerTest {
     @Mock
     private PushNotificationService pushNotificationService;
 
+    @Mock
+    private FeatureFlagStore flagStore;
+
     @InjectMocks
     private InactiveReminderScheduler scheduler;
 
@@ -41,6 +46,9 @@ class InactiveReminderSchedulerTest {
 
     @BeforeEach
     void setUp() {
+        // Флаг включён — существующие сценарии пропускают через дефолтное поведение
+        lenient().when(flagStore.isEnabled(FeatureFlag.INACTIVE_REMINDER)).thenReturn(true);
+
         verifiedUser = new User();
         verifiedUser.setId(1L);
         verifiedUser.setName("Иван");

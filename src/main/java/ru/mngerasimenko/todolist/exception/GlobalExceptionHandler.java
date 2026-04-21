@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlagNotFoundException;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -55,6 +56,15 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleListNotFound(ListNotFoundException ex) {
         log.warn("List Not Found: {}", ex.getMessage());
         return createErrorResponse(HttpStatus.NOT_FOUND, "List Not Found", ex.getMessage());
+    }
+
+    /**
+     * Неизвестное имя feature-флага в /api/admin/flags/{name}/...
+     */
+    @ExceptionHandler(FeatureFlagNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleFeatureFlagNotFound(FeatureFlagNotFoundException ex) {
+        log.warn("Feature flag not found: {}", ex.getMessage());
+        return createErrorResponse(HttpStatus.NOT_FOUND, "Not Found", ex.getMessage());
     }
 
     /**
