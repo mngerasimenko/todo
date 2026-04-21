@@ -3,10 +3,17 @@ package ru.mngerasimenko.todolist.service;
 import io.micrometer.common.util.StringUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import ru.mngerasimenko.todolist.config.RedisCacheConfig;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.exception.TokenExpiredException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
@@ -43,6 +50,7 @@ public class UserServiceImpl implements UserService {
     private final TaskListRepository taskListRepository;
     private final TodoRepository todoRepository;
     private final ru.mngerasimenko.todolist.crypto.CryptoService cryptoService;
+    private final CacheManager cacheManager;
 
     @Override
     @Transactional(readOnly = true)
@@ -55,9 +63,9 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public void delete(long id) {
-        if (!repository.existsById(id)) {
-            throw new UserNotFoundException("User not found with id: " + id);
-        }
+        User userToDelete = repository.findById(id)
+                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + id));
+        String emailForEvict = userToDelete.getEmail();
 
         // Обрабатываем каждый список, в котором состоит пользователь
         List<TaskListUser> memberships = taskListUserRepository.findByUserId(id);
@@ -100,10 +108,36 @@ public class UserServiceImpl implements UserService {
         // Удаляем пользователя
         repository.deleteById(id);
         log.info("Удалён пользователь: id={}", id);
+        evictUserCache(emailForEvict);
+    }
+
+    /**
+     * Удаление записи из кэша {@code users-me} по email. Вызывается из void-мутаций,
+     * где декларативный {@code @CacheEvict} неудобен (SpEL не может читать состояние до мутации
+     * или evict'ить сразу несколько ключей типа old/new email).
+     *
+     * Evict регистрируется как afterCommit-synchronization, чтобы при rollback
+     * транзакции не чистить кэш зря. Если транзакция неактивна — evict сразу.
+     */
+    private void evictUserCache(String email) {
+        if (email == null) return;
+        Runnable evict = () -> {
+            Cache cache = cacheManager.getCache(RedisCacheConfig.USERS_ME);
+            if (cache != null) cache.evict(email);
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCommit() { evict.run(); }
+            });
+        } else {
+            evict.run();
+        }
     }
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(value = RedisCacheConfig.USERS_ME, key = "#email",
+            condition = RedisCacheConfig.CACHE_CONDITION, unless = "#result == null")
     public UserDto getUserByEmail(String email) {
         if (StringUtils.isBlank(email)) {
             return null;
@@ -165,6 +199,8 @@ public class UserServiceImpl implements UserService {
         User existingUser = repository.findById(id)
                 .orElseThrow(() -> new UserNotFoundException("User not found with id: " + id));
 
+        String oldEmail = existingUser.getEmail();
+
         if (!existingUser.getEmail().equals(userDto.getEmail()) && existsByEmail(userDto.getEmail())) {
             throw new IllegalArgumentException("Email " + userDto.getEmail() + " is already taken");
         }
@@ -176,6 +212,13 @@ public class UserServiceImpl implements UserService {
 
         User updatedUser = repository.save(existingUser);
         log.info("Обновлён пользователь: id={}, name='{}'", updatedUser.getId(), updatedUser.getName());
+
+        // Evict кэша по старому email и (если изменился) новому
+        evictUserCache(oldEmail);
+        if (!oldEmail.equals(updatedUser.getEmail())) {
+            evictUserCache(updatedUser.getEmail());
+        }
+
         return mapper.toDto(updatedUser);
     }
 
@@ -191,6 +234,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
+    @CacheEvict(value = RedisCacheConfig.USERS_ME, key = "#result.email")
     public UserDto updateColors(Long id, String createdTaskColor, String completedTaskColor) {
         User user = repository.findById(id)
                 .orElseThrow(() -> new UserNotFoundException("User not found with id: " + id));
@@ -217,6 +261,7 @@ public class UserServiceImpl implements UserService {
         user.setEmailVerificationExpiresAt(null);
         repository.save(user);
         log.info("Email подтверждён: userId={}", user.getId());
+        evictUserCache(user.getEmail());
     }
 
     @Override
@@ -269,6 +314,7 @@ public class UserServiceImpl implements UserService {
         user.setPasswordResetExpiresAt(null);
         repository.save(user);
         log.info("Пароль сброшен: userId={}", user.getId());
+        evictUserCache(user.getEmail());
     }
 
     @Override
@@ -276,6 +322,8 @@ public class UserServiceImpl implements UserService {
     public void changeEmail(Long userId, String newEmail) {
         User user = repository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
+
+        String oldEmail = user.getEmail();
 
         // Проверяем, что новый email не занят другим пользователем
         String normalizedEmail = newEmail.toLowerCase();
@@ -305,6 +353,10 @@ public class UserServiceImpl implements UserService {
         // Отправляем письмо верификации на новый email
         emailService.sendVerificationEmail(newEmail, rawToken);
         log.info("Email изменён: userId={}, newEmail={}", userId, maskEmail(newEmail));
+
+        // Evict кэша по старому и новому email
+        evictUserCache(oldEmail);
+        evictUserCache(normalizedEmail);
     }
 
     @Transactional(readOnly = true)
