@@ -225,7 +225,11 @@ jobs:
             # Сохраняем immutable digest текущего образа (не тег :latest из compose,
             # который бесполезен для отката — при rollback записался бы тот же :latest).
             # Формат: mngerasimenko/todo-app@sha256:<hash> — docker compose это принимает.
-            docker inspect --format='{{index .RepoDigests 0}}' todo-app > deploy-prev.txt 2>/dev/null || true
+            # Двухступенчато: у контейнера нет поля RepoDigests, оно только у image.
+            PREV_IMAGE_ID=$(docker inspect --format='{{.Image}}' todo-app 2>/dev/null || echo "")
+            if [ -n "$PREV_IMAGE_ID" ]; then
+              docker image inspect --format='{{index .RepoDigests 0}}' "$PREV_IMAGE_ID" > deploy-prev.txt 2>/dev/null || true
+            fi
 
             # pg_dump перед обновлением — страховка от неудачной миграции
             mkdir -p backups/pre-deploy
@@ -275,8 +279,8 @@ jobs:
             # Определяем целевой тег
             TARGET="${{ github.event.inputs.target_sha }}"
             if [ -z "$TARGET" ]; then
-              if [ ! -f deploy-prev.txt ]; then
-                echo "ERROR: target_sha не указан и deploy-prev.txt не найден"
+              if [ ! -s deploy-prev.txt ]; then
+                echo "ERROR: target_sha не указан, а deploy-prev.txt отсутствует или пустой"
                 exit 1
               fi
               TARGET=$(cat deploy-prev.txt)
