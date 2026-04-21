@@ -162,13 +162,16 @@ mvn test -Pintegration
 - 439 unit-тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
 - Нагрузочные тесты (3 шт.) запускаются отдельно: `mvn test -Pintegration` (требуют Docker)
 
-**Этап 2 — Деплой** (только push в master):
+**Этап 2 — Деплой** (push в master → staging автоматически, production только вручную):
 - Сборка JAR + Docker-образ → push в Docker Hub (`mngerasimenko/todo-app:{sha}` + `latest`)
 - SCP `docker-compose.yml` на сервер
+- **Pre-deploy:** immutable digest текущего образа сохраняется в `deploy-prev.txt`, `pg_dump -Fc` пишется в `backups/pre-deploy/` (хранятся 5 последних)
 - `docker compose pull todo-app` → `docker compose up -d todo-app`
 - Миграция БД через Liquibase (автоматически при старте приложения)
 - `depends_on: service_healthy` гарантирует готовность PostgreSQL
 - Версия приложения: `APP_VERSION_MAJOR.APP_VERSION_MINOR.github.run_number` (автоинкремент PATCH)
+
+**Этап 3 — Rollback** (только вручную): Actions → Run workflow → target = `rollback-production`, `target_sha` опционально. Подменяет `image:` в `docker-compose.yml` на digest из `deploy-prev.txt` (или указанный SHA), пересоздаёт только `todo-app` через `docker compose up -d --force-recreate`. Остальные контейнеры не трогаются. БД-миграции уже применены — при необходимости восстанавливай через `pg_restore` из `backups/pre-deploy/*.dump`.
 
 Защита ветки master: обязательный PR + успешные тесты.
 
