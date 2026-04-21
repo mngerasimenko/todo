@@ -1,19 +1,22 @@
 package ru.mngerasimenko.todolist.config;
 
+import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
-import com.fasterxml.jackson.databind.ObjectMapper.DefaultTyping;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
-import org.springframework.data.redis.serializer.RedisSerializationContext;
+import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.RedisSerializationContext.SerializationPair;
+import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import ru.mngerasimenko.todolist.dto.UserDto;
+import ru.mngerasimenko.todolist.dto.list.ListResponse;
 
 import java.time.Duration;
+import java.util.List;
 
 /**
  * Конфигурация Spring Cache через Redis (spring-boot-starter-cache + spring-data-redis).
@@ -21,6 +24,17 @@ import java.time.Duration;
  * Кэшируются hot-paths с коротким TTL:
  * - {@code users-me} (60 сек) — ответ GET /api/users/me, ключ = email пользователя.
  * - {@code task-lists} (60 сек) — ответ GET /api/lists, ключ = userId.
+ *
+ * Для каждого кэша — отдельный типизированный {@link Jackson2JsonRedisSerializer}
+ * (не общий polymorphic). Это проще и безопаснее: не нужен
+ * {@code activateDefaultTyping} (ломается на root-level коллекциях) и
+ * {@code BasicPolymorphicTypeValidator} (не нужен — типы фиксированы).
+ *
+ * За основу берём Spring Boot auto-configured {@link ObjectMapper} — в нём уже
+ * зарегистрированы {@code JavaTimeModule}, {@code ParameterNamesModule}, все
+ * пользовательские {@code Jackson2ObjectMapperBuilderCustomizer} и настройки
+ * {@code spring.jackson.*}. Любые будущие Jackson-модули автоматически
+ * попадают в Redis-сериализацию.
  *
  * Runtime-отключение — через {@link ru.mngerasimenko.todolist.featureflags.FeatureFlag#RESPONSE_CACHE}
  * (SpEL-condition в @Cacheable-методах).
@@ -44,40 +58,26 @@ public class RedisCacheConfig {
                                           ObjectMapper appObjectMapper) {
         RedisCacheConfiguration base = RedisCacheConfiguration.defaultCacheConfig()
                 .disableCachingNullValues()
-                .serializeKeysWith(RedisSerializationContext.SerializationPair
-                        .fromSerializer(new StringRedisSerializer()))
-                .serializeValuesWith(RedisSerializationContext.SerializationPair
-                        .fromSerializer(jsonSerializer(appObjectMapper)));
+                .serializeKeysWith(SerializationPair.fromSerializer(new StringRedisSerializer()));
+
+        // Отдельный serializer для каждого кэша — по фиксированному типу.
+        RedisSerializer<UserDto> userDtoSerializer =
+                new Jackson2JsonRedisSerializer<>(appObjectMapper, UserDto.class);
+
+        JavaType listResponseType = appObjectMapper.getTypeFactory()
+                .constructCollectionType(List.class, ListResponse.class);
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        RedisSerializer<List<ListResponse>> taskListsSerializer =
+                (RedisSerializer) new Jackson2JsonRedisSerializer<>(appObjectMapper, listResponseType);
 
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(base)
-                .withCacheConfiguration(USERS_ME, base.entryTtl(Duration.ofSeconds(60)))
-                .withCacheConfiguration(TASK_LISTS, base.entryTtl(Duration.ofSeconds(60)))
+                .withCacheConfiguration(USERS_ME, base
+                        .entryTtl(Duration.ofSeconds(60))
+                        .serializeValuesWith(SerializationPair.fromSerializer(userDtoSerializer)))
+                .withCacheConfiguration(TASK_LISTS, base
+                        .entryTtl(Duration.ofSeconds(60))
+                        .serializeValuesWith(SerializationPair.fromSerializer(taskListsSerializer)))
                 .build();
-    }
-
-    /**
-     * JSON-сериализатор с whitelisted polymorphic typing — сохраняет конкретный
-     * тип DTO при записи в Redis, чтобы при чтении корректно десериализовалось
-     * даже для коллекций (List<ListResponse> и т.д.).
-     *
-     * За основу берём Spring Boot auto-configured ObjectMapper — в нём уже
-     * зарегистрированы JavaTimeModule, ParameterNamesModule, все пользовательские
-     * {@code Jackson2ObjectMapperBuilderCustomizer} и настройки {@code spring.jackson.*}.
-     * Копируем его и добавляем только то, что специфично для Redis:
-     * {@link DefaultTyping#NON_FINAL} (чтобы при десериализации знать конкретный тип DTO)
-     * и {@link BasicPolymorphicTypeValidator} (whitelist пакетов — блокирует известные
-     * Jackson gadget-chains на случай компрометации Redis).
-     */
-    private GenericJackson2JsonRedisSerializer jsonSerializer(ObjectMapper appObjectMapper) {
-        ObjectMapper mapper = appObjectMapper.copy();
-        BasicPolymorphicTypeValidator validator = BasicPolymorphicTypeValidator.builder()
-                .allowIfSubType("ru.mngerasimenko.todolist.dto")
-                .allowIfSubType("java.util")
-                .allowIfSubType("java.time")
-                .allowIfSubType("java.lang")
-                .build();
-        mapper.activateDefaultTyping(validator, DefaultTyping.NON_FINAL);
-        return new GenericJackson2JsonRedisSerializer(mapper);
     }
 }
