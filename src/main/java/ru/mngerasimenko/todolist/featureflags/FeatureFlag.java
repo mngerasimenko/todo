@@ -23,7 +23,11 @@ public enum FeatureFlag {
 
     PUSH_NOTIFICATIONS("push-notifications.enabled", true,
             "Отправка push-уведомлений через Firebase при действиях в совместных списках " +
-            "и inactive-reminder. Полезно выключить при нестабильной работе Firebase.");
+            "и inactive-reminder. Полезно выключить при нестабильной работе Firebase."),
+
+    RESPONSE_CACHE("response-cache.enabled", true,
+            "Кэширование ответов GET /api/users/me и GET /api/lists в Redis (TTL 60 сек). " +
+            "При false — запросы идут напрямую в Postgres. Аварийное выключение при подозрении на stale-данные.");
 
     private final String name;
     private final boolean defaultValue;

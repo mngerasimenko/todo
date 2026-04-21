@@ -65,6 +65,9 @@ class UserServiceImplTest {
     @Mock
     private ru.mngerasimenko.todolist.crypto.CryptoService cryptoService;
 
+    @Mock
+    private org.springframework.cache.CacheManager cacheManager;
+
     @InjectMocks
     private UserServiceImpl userService;
 
@@ -131,13 +134,13 @@ class UserServiceImplTest {
         // Пользователь без списков
         User deletedUser = new User();
         deletedUser.setId(0L);
-        when(repository.existsById(1L)).thenReturn(true);
+        when(repository.findById(1L)).thenReturn(Optional.of(user));
         when(taskListUserRepository.findByUserId(1L)).thenReturn(List.of());
         when(repository.findById(0L)).thenReturn(Optional.of(deletedUser));
 
         userService.delete(1L);
 
-        verify(repository, times(1)).existsById(1L);
+        verify(repository, times(1)).findById(1L);
         verify(taskListUserRepository, times(1)).findByUserId(1L);
         verify(todoRepository, times(1)).reassignUser(1L, 0L);
         verify(todoRepository, times(1)).reassignCompletorUser(1L, 0L);
@@ -158,7 +161,7 @@ class UserServiceImplTest {
         membership.setUser(user);
         membership.setRole(TaskListRole.ADMIN);
 
-        when(repository.existsById(1L)).thenReturn(true);
+        when(repository.findById(1L)).thenReturn(Optional.of(user));
         when(taskListUserRepository.findByUserId(1L)).thenReturn(List.of(membership));
         when(taskListUserRepository.findByIdListId(10L)).thenReturn(List.of(membership));
         when(repository.findById(0L)).thenReturn(Optional.of(deletedUser));
@@ -196,7 +199,7 @@ class UserServiceImplTest {
         otherMembership.setUser(otherUser);
         otherMembership.setRole(TaskListRole.USER);
 
-        when(repository.existsById(1L)).thenReturn(true);
+        when(repository.findById(1L)).thenReturn(Optional.of(user));
         when(taskListUserRepository.findByUserId(1L)).thenReturn(List.of(adminMembership));
         when(taskListUserRepository.findByIdListId(10L)).thenReturn(List.of(adminMembership, otherMembership));
         when(repository.findById(0L)).thenReturn(Optional.of(deletedUser));
@@ -244,7 +247,7 @@ class UserServiceImplTest {
         otherMembership.setUser(otherUser);
         otherMembership.setRole(TaskListRole.ADMIN);
 
-        when(repository.existsById(1L)).thenReturn(true);
+        when(repository.findById(1L)).thenReturn(Optional.of(user));
         when(taskListUserRepository.findByUserId(1L)).thenReturn(List.of(membership1, membership2));
         when(taskListUserRepository.findByIdListId(10L)).thenReturn(List.of(membership1));
         when(taskListUserRepository.findByIdListId(20L)).thenReturn(List.of(membership2, otherMembership));
@@ -270,13 +273,13 @@ class UserServiceImplTest {
 
     @Test
     void delete_WithNonExistentId_ThrowsUserNotFoundException() {
-        when(repository.existsById(999L)).thenReturn(false);
+        when(repository.findById(999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> userService.delete(999L))
                 .isInstanceOf(UserNotFoundException.class)
                 .hasMessage("User not found with id: 999");
 
-        verify(repository, times(1)).existsById(999L);
+        verify(repository, times(1)).findById(999L);
         verify(repository, never()).deleteById(anyLong());
     }
 

@@ -67,7 +67,8 @@ REST API бэкенд для совместного управления спи�
 - Контроль доступа: изменение и удаление аккаунта только владельцем, операции с задачами только для участников списка
 - Каскадное удаление аккаунта: передача ADMIN, удаление пустых списков, сохранение публичных задач через системного пользователя
 - Super-admin через email-whitelist (`SUPER_ADMIN_EMAILS` env) + `@PreAuthorize("@superAdminGuard.check(authentication)")` — ручные админ-операции (например, триггер напоминания неактивному пользователю). Для не-админов `/api/admin/**` маскируется под 404
-- Runtime feature-flags через `/api/admin/flags/{name}/{value}` — переключение rate-limit, inactive-reminder scheduler'а и push-уведомлений без рестарта. Приоритет: runtime > env > enum-default. Рестарт сбрасывает runtime-override'ы (фича безопасности — забытое выключение защиты автоматически восстанавливается при следующем деплое)
+- Runtime feature-flags через `/api/admin/flags/{name}/{value}` — переключение rate-limit, inactive-reminder scheduler'а, push-уведомлений и response-кэша без рестарта. Приоритет: runtime > env > enum-default. Рестарт сбрасывает runtime-override'ы (фича безопасности — забытое выключение защиты автоматически восстанавливается при следующем деплое)
+- Response-кэш hot-paths через Spring Cache + Redis: `GET /api/users/me` (ключ = email) и `GET /api/lists` (ключ = userId), TTL 60 сек. Точечный `@CacheEvict` на всех мутациях User/TaskList. Runtime-выключение через feature flag `response-cache.enabled`
 - 456 unit-тестов с проверкой покрытия (JaCoCo) + 11 интеграционных (3 concurrency + 5 Redis blacklist + 3 Redis rate-limit на TestContainers, отдельный запуск)
 
 ---

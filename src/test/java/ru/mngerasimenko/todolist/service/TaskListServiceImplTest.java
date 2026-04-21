@@ -78,6 +78,9 @@ class TaskListServiceImplTest {
     @Mock
     private PushNotificationService pushNotificationService;
 
+    @Mock
+    private org.springframework.cache.CacheManager cacheManager;
+
     @InjectMocks
     private TaskListServiceImpl taskListService;
 

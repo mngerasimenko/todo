@@ -2,9 +2,16 @@ package ru.mngerasimenko.todolist.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import ru.mngerasimenko.todolist.config.RedisCacheConfig;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.dto.list.InviteInfoResponse;
 import ru.mngerasimenko.todolist.dto.list.InviteResponse;
@@ -30,6 +37,7 @@ import ru.mngerasimenko.todolist.settings.EmailProperties;
 import ru.mngerasimenko.todolist.util.TokenUtils;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -50,9 +58,11 @@ public class TaskListServiceImpl implements TaskListService {
     private final EmailService emailService;
     private final EmailProperties emailProperties;
     private final PushNotificationService pushNotificationService;
+    private final CacheManager cacheManager;
 
     @Override
     @Transactional(noRollbackFor = DataIntegrityViolationException.class)
+    @CacheEvict(value = RedisCacheConfig.TASK_LISTS, key = "#creatorUserId")
     public ListResponse createList(String name, Long creatorUserId) {
         subscriptionService.assertCanCreateList(creatorUserId);
 
@@ -77,6 +87,8 @@ public class TaskListServiceImpl implements TaskListService {
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(value = RedisCacheConfig.TASK_LISTS, key = "#userId",
+            condition = RedisCacheConfig.CACHE_CONDITION)
     public List<ListResponse> getListsByUserId(Long userId) {
         List<TaskListUser> taskListUsers = taskListUserRepository.findByUserId(userId);
         return taskListUsers.stream()
@@ -121,6 +133,12 @@ public class TaskListServiceImpl implements TaskListService {
         TaskListUser membership = taskListUserRepository.findByIdListIdAndIdUserId(listId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Вы не являетесь участником данного списка"));
 
+        // Для evict'а кэша task-lists: минимум сам уходящий пользователь.
+        // Если уходит ADMIN и есть другие участники — второй ADMIN тоже попадает
+        // под инвалидацию (меняется role; при конфликте имён меняется name списка).
+        List<Long> affectedUserIds = new ArrayList<>();
+        affectedUserIds.add(userId);
+
         String message;
 
         if (membership.getRole() == TaskListRole.ADMIN) {
@@ -141,6 +159,7 @@ public class TaskListServiceImpl implements TaskListService {
                         .filter(m -> !m.getUser().getId().equals(userId))
                         .findFirst()
                         .ifPresent(m -> {
+                            affectedUserIds.add(m.getUser().getId());
                             m.setRole(TaskListRole.ADMIN);
                             taskListUserRepository.saveAndFlush(m);
                             // Если уходящий — создатель списка, передаём creator_id новому ADMIN
@@ -172,6 +191,7 @@ public class TaskListServiceImpl implements TaskListService {
             message = "Вы покинули список";
         }
 
+        evictTaskListsCache(affectedUserIds);
         return message;
     }
 
@@ -185,12 +205,19 @@ public class TaskListServiceImpl implements TaskListService {
             throw new IllegalArgumentException("Только администратор может удалить список");
         }
 
+        // До удаления собираем userIds всех участников — у каждого нужно почистить
+        // закешированный список, иначе они будут видеть призрак удалённого списка до TTL.
+        List<Long> affectedUserIds = taskListUserRepository.findByIdListId(listId).stream()
+                .map(m -> m.getUser().getId())
+                .toList();
+
         inviteTokenRepository.deleteByListId(listId);
         todoRepository.deleteByListId(listId);
         taskListUserRepository.deleteByListId(listId);
         taskListRepository.deleteByListId(listId);
 
         log.info("Список удалён: listId={}, userId={}", listId, userId);
+        evictTaskListsCache(affectedUserIds);
     }
 
     @Override
@@ -252,6 +279,7 @@ public class TaskListServiceImpl implements TaskListService {
 
     @Override
     @Transactional
+    @CacheEvict(value = RedisCacheConfig.TASK_LISTS, key = "#userId")
     public ListResponse acceptInvite(String token, Long userId) {
         String tokenHash = TokenUtils.sha256(token);
         InviteToken inviteToken = inviteTokenRepository.findByTokenHash(tokenHash)
@@ -289,5 +317,31 @@ public class TaskListServiceImpl implements TaskListService {
                 taskList.getId(), userId, user.getName(), taskList.getName());
 
         return taskListMapper.toResponse(taskList, role);
+    }
+
+    /**
+     * Удаление записей из кэша {@code task-lists} для нескольких пользователей сразу.
+     * Используется в leaveList/deleteList, когда мутация затрагивает кэш всех
+     * участников списка (передача ADMIN-прав, удаление списка, rename при конфликте имён).
+     *
+     * Evict регистрируется как afterCommit-synchronization, чтобы при rollback
+     * транзакции не чистить кэш зря (и не отдать пользователю старое значение как «свежее»).
+     */
+    private void evictTaskListsCache(List<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) return;
+        Runnable evict = () -> {
+            Cache cache = cacheManager.getCache(RedisCacheConfig.TASK_LISTS);
+            if (cache == null) return;
+            for (Long uid : userIds) {
+                if (uid != null) cache.evict(uid);
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCommit() { evict.run(); }
+            });
+        } else {
+            evict.run();
+        }
     }
 }
