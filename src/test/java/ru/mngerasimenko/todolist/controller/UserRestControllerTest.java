@@ -456,7 +456,7 @@ class UserRestControllerTest {
     @Test
     @WithMockUser(username = "test@mail.ru", roles = {"USER"})
     void getCurrentUser_ReturnsCurrentUser() throws Exception {
-        when(userService.getUserByEmail("test@mail.ru")).thenReturn(testUserDto);
+        when(userService.getUserDtoForResponse("test@mail.ru")).thenReturn(testUserDto);
         when(userMapper.toResponse(testUserDto)).thenReturn(testUserResponse);
 
         mockMvc.perform(get("/api/users/me"))
@@ -466,7 +466,7 @@ class UserRestControllerTest {
                 .andExpect(jsonPath("$.name").value("testuser"))
                 .andExpect(jsonPath("$.email").value("test@mail.ru"));
 
-        verify(userService, times(1)).getUserByEmail("test@mail.ru");
+        verify(userService, times(1)).getUserDtoForResponse("test@mail.ru");
         verify(userMapper, times(1)).toResponse(testUserDto);
     }
 

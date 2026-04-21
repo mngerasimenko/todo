@@ -17,8 +17,14 @@ public interface UserService {
     /** Удаляет пользователя по ID */
     void delete(long id);
 
-    /** Находит пользователя по email */
+    /** Находит пользователя по email (включая password для BCrypt-проверки в Spring Security). Без кэша. */
     UserDto getUserByEmail(String email);
+
+    /**
+     * Возвращает UserDto для HTTP-ответа (/api/users/me) с password=null.
+     * Кэшируется в Redis (users-me). Не использовать в auth-путях — password нужен там.
+     */
+    UserDto getUserDtoForResponse(String email);
 
     /** Находит пользователя по auth ID (устройство) */
     UserDto getUserByAuthId(String authId);

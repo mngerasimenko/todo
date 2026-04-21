@@ -43,7 +43,7 @@ public class UserRestController {
     /** Получение текущего пользователя по JWT-токену */
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getCurrentUser(@AuthenticationPrincipal UserDetails userDetails) {
-        UserDto userDto = userService.getUserByEmail(userDetails.getUsername());
+        UserDto userDto = userService.getUserDtoForResponse(userDetails.getUsername());
         UserResponse response = userMapper.toResponse(userDto);
         return ResponseEntity.ok(response);
     }

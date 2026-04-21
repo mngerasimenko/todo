@@ -136,14 +136,29 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional(readOnly = true)
-    @Cacheable(value = RedisCacheConfig.USERS_ME, key = "#email",
-            condition = RedisCacheConfig.CACHE_CONDITION, unless = "#result == null")
     public UserDto getUserByEmail(String email) {
         if (StringUtils.isBlank(email)) {
             return null;
         }
         String hash = cryptoService.blindIndex(email.toLowerCase());
         return mapper.toDto(repository.findByEmailHash(hash));
+    }
+
+    /**
+     * Кэшированный вариант для HTTP-ответа. Password обнуляется перед возвратом/кэшированием —
+     * чтобы в Redis не попал BCrypt-hash (отдельное хранилище = расширение security-границы),
+     * и чтобы кэш не сломал Spring Security login (которому нужен реальный password).
+     */
+    @Override
+    @Transactional(readOnly = true)
+    @Cacheable(value = RedisCacheConfig.USERS_ME, key = "#email",
+            condition = RedisCacheConfig.CACHE_CONDITION, unless = "#result == null")
+    public UserDto getUserDtoForResponse(String email) {
+        UserDto dto = getUserByEmail(email);
+        if (dto != null) {
+            dto.setPassword(null);
+        }
+        return dto;
     }
 
     @Override
