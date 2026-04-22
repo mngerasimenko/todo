@@ -23,7 +23,7 @@ public class TodoUserDetailsService implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
 
-        UserDto userDto = userService.getUserByEmail(email);
+        UserDto userDto = userService.getUserByEmailForAuth(email);
 
         if (userDto == null) {
             throw new UsernameNotFoundException("User not found: " + email);

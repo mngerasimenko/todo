@@ -27,6 +27,7 @@ import static ru.mngerasimenko.todolist.model.User.*;
 @Service
 @RequiredArgsConstructor
 public class SubscriptionServiceImpl implements SubscriptionService {
+    // TODO: evict user-auth when subscription mutates в SubscriptionServiceImpl
 
     private final UserRepository userRepository;
     private final TaskListUserRepository taskListUserRepository;
