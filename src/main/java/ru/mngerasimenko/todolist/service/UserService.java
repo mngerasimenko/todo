@@ -21,6 +21,15 @@ public interface UserService {
     UserDto getUserByEmail(String email);
 
     /**
+     * Кэшированный lookup для Spring Security auth-путей (JWT-filter + DaoAuthenticationProvider).
+     * Возвращает UserDto С password (BCrypt-hash) — нужен для login-проверки.
+     * TTL 60 сек, ключ = email.toLowerCase(); инвалидация — через {@code evictUserCache}
+     * во всех мутациях, меняющих password/email/роли пользователя.
+     * НЕ использовать вне security-путей.
+     */
+    UserDto getUserByEmailForAuth(String email);
+
+    /**
      * Возвращает UserDto для HTTP-ответа (/api/users/me) с password=null.
      * Кэшируется в Redis (users-me). Не использовать в auth-путях — password нужен там.
      */

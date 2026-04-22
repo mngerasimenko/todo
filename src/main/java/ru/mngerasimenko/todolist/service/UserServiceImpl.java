@@ -18,27 +18,29 @@ import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.exception.TokenExpiredException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.UserMapper;
-import ru.mngerasimenko.todolist.model.User;
-import ru.mngerasimenko.todolist.repository.UserRepository;
-import ru.mngerasimenko.todolist.settings.EmailProperties;
-import static ru.mngerasimenko.todolist.util.LogUtils.maskEmail;
-
 import ru.mngerasimenko.todolist.model.TaskListRole;
 import ru.mngerasimenko.todolist.model.TaskListUser;
+import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.repository.TaskListRepository;
 import ru.mngerasimenko.todolist.repository.TaskListUserRepository;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
+import ru.mngerasimenko.todolist.repository.UserRepository;
+import ru.mngerasimenko.todolist.settings.EmailProperties;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+
+import static ru.mngerasimenko.todolist.util.LogUtils.maskEmail;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 
-    /** ID системного пользователя «Удалённый пользователь» */
+    /**
+     * ID системного пользователя «Удалённый пользователь»
+     */
     static final Long DELETED_USER_ID = 0L;
 
     private final UserRepository repository;
@@ -115,19 +117,24 @@ public class UserServiceImpl implements UserService {
      * Удаление записи из кэша {@code users-me} по email. Вызывается из void-мутаций,
      * где декларативный {@code @CacheEvict} неудобен (SpEL не может читать состояние до мутации
      * или evict'ить сразу несколько ключей типа old/new email).
-     *
+     * <p>
      * Evict регистрируется как afterCommit-synchronization, чтобы при rollback
      * транзакции не чистить кэш зря. Если транзакция неактивна — evict сразу.
      */
     private void evictUserCache(String email) {
         if (email == null) return;
         Runnable evict = () -> {
-            Cache cache = cacheManager.getCache(RedisCacheConfig.USERS_ME);
-            if (cache != null) cache.evict(email);
+            Cache userMe = cacheManager.getCache(RedisCacheConfig.USERS_ME);
+            if (userMe != null) userMe.evict(email);
+            Cache userAuth = cacheManager.getCache(RedisCacheConfig.USER_AUTH);
+            if (userAuth != null) userAuth.evict(email);
         };
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override public void afterCommit() { evict.run(); }
+                @Override
+                public void afterCommit() {
+                    evict.run();
+                }
             });
         } else {
             evict.run();
@@ -144,6 +151,14 @@ public class UserServiceImpl implements UserService {
         return mapper.toDto(repository.findByEmailHash(hash));
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    @Cacheable(value = RedisCacheConfig.USER_AUTH, key = "#email?.toLowerCase()",
+            condition = RedisCacheConfig.CACHE_CONDITION, unless = "#result == null")
+    public UserDto getUserByEmailForAuth(String email) {
+        return getUserByEmail(email);  // делегация — password сохраняется
+    }
+
     /**
      * Кэшированный вариант для HTTP-ответа. Password обнуляется перед возвратом/кэшированием —
      * чтобы в Redis не попал BCrypt-hash (отдельное хранилище = расширение security-границы),
@@ -151,7 +166,7 @@ public class UserServiceImpl implements UserService {
      */
     @Override
     @Transactional(readOnly = true)
-    @Cacheable(value = RedisCacheConfig.USERS_ME, key = "#email",
+    @Cacheable(value = RedisCacheConfig.USERS_ME, key = "#email?.toLowerCase()",
             condition = RedisCacheConfig.CACHE_CONDITION, unless = "#result == null")
     public UserDto getUserDtoForResponse(String email) {
         UserDto dto = getUserByEmail(email);
@@ -249,7 +264,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    @CacheEvict(value = RedisCacheConfig.USERS_ME, key = "#result.email")
+    @CacheEvict(value = {RedisCacheConfig.USERS_ME, RedisCacheConfig.USER_AUTH}, key = "#result.email")
     public UserDto updateColors(Long id, String createdTaskColor, String completedTaskColor) {
         User user = repository.findById(id)
                 .orElseThrow(() -> new UserNotFoundException("User not found with id: " + id));
@@ -294,6 +309,8 @@ public class UserServiceImpl implements UserService {
         repository.save(user);
         emailService.sendVerificationEmail(user.getEmail(), rawToken);
         log.info("Повторное письмо верификации отправлено: userId={}", userId);
+        // Evict не нужен: меняются только поля emailVerificationToken/ExpiresAt,
+        // которые не используются в auth-путях и /api/users/me.
     }
 
     @Override
@@ -311,6 +328,9 @@ public class UserServiceImpl implements UserService {
         repository.save(user);
         emailService.sendPasswordResetEmail(user.getEmail(), rawToken);
         log.info("Письмо сброса пароля отправлено: userId={}", user.getId());
+        // Evict не нужен: меняются только поля passwordResetToken/ExpiresAt,
+        // которые не используются в auth-путях и /api/users/me.
+        // Сам пароль меняется в resetPassword() — там evict есть.
     }
 
     @Override
@@ -385,7 +405,9 @@ public class UserServiceImpl implements UserService {
         repository.updateLastActiveAt(userId, LocalDateTime.now());
     }
 
-    /** Нарастающие интервалы напоминаний: 7 дней, +14 дней, +30 дней */
+    /**
+     * Нарастающие интервалы напоминаний: 7 дней, +14 дней, +30 дней
+     */
     private static final int MAX_REMINDERS = 3;
     private static final int[] REMINDER_INTERVALS_DAYS = {0, 14, 30};
 

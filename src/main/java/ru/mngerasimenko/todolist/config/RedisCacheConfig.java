@@ -22,8 +22,11 @@ import java.util.List;
  * Конфигурация Spring Cache через Redis (spring-boot-starter-cache + spring-data-redis).
  *
  * Кэшируются hot-paths с коротким TTL:
- * - {@code users-me} (60 сек) — ответ GET /api/users/me, ключ = email пользователя.
+ * - {@code users-me} (60 сек) — ответ GET /api/users/me, ключ = email (lowercase).
  * - {@code task-lists} (60 сек) — ответ GET /api/lists, ключ = userId.
+ * - {@code user-auth} (60 сек) — UserDetails для Spring Security auth (JWT-filter + login),
+ *   ключ = email (lowercase). Содержит password (BCrypt-hash), инвалидируется во всех
+ *   мутациях User: resetPassword, updateUser, changeEmail, verifyEmail, updateColors, delete.
  *
  * Для каждого кэша — отдельный типизированный {@link Jackson2JsonRedisSerializer}
  * (не общий polymorphic). Это проще и безопаснее: не нужен
@@ -45,6 +48,7 @@ public class RedisCacheConfig {
 
     public static final String USERS_ME = "users-me";
     public static final String TASK_LISTS = "task-lists";
+    public static final String USER_AUTH = "user-auth";
 
     /**
      * SpEL-условие для @Cacheable — проверяет feature flag RESPONSE_CACHE.
@@ -78,6 +82,9 @@ public class RedisCacheConfig {
                 .withCacheConfiguration(TASK_LISTS, base
                         .entryTtl(Duration.ofSeconds(60))
                         .serializeValuesWith(SerializationPair.fromSerializer(taskListsSerializer)))
+                .withCacheConfiguration(USER_AUTH, base
+                        .entryTtl(Duration.ofSeconds(60))
+                        .serializeValuesWith(SerializationPair.fromSerializer(userDtoSerializer)))
                 .build();
     }
 }
