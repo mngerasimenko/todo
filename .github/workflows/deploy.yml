@@ -244,9 +244,62 @@ jobs:
             docker compose pull todo-app prometheus grafana
             docker compose up -d todo-app prometheus grafana
 
-            # Reload nginx for static file updates
-            docker exec nginx-proxy nginx -s reload 2>/dev/null || \
-              docker compose up -d --force-recreate nginx-proxy 2>/dev/null || true
+            # Ensure external configs dir exists — volume bind-mount нуждается в существующем каталоге
+            # (Docker создаст сам, но с правами root; лучше явно).
+            mkdir -p /home/deploy/nginx-external
+
+            # Nginx reload/recreate с защитой от битого external-конфига.
+            # Сценарий: если clickmebattle (или другой внешний проект) положил в
+            # /home/deploy/nginx-external/ невалидный .conf — наш nginx-proxy
+            # упадёт на старте, и todo уйдёт в 502. Защита:
+            #   1) Пре-валидация конфига (`nginx -t` в текущем контейнере).
+            #   2) Если test failed — карантинируем все external .conf и пробуем снова.
+            #   3) Если и без external test fails — значит проблема у нас, прерываем.
+            nginx_config_test() {
+              docker exec nginx-proxy nginx -t >/tmp/nginx-t.log 2>&1
+            }
+            quarantine_external() {
+              local ts="$(date +%Y%m%d-%H%M%S)"
+              mkdir -p /home/deploy/nginx-external-quarantine
+              for f in /home/deploy/nginx-external/*.conf; do
+                [ -f "$f" ] || continue
+                mv "$f" "/home/deploy/nginx-external-quarantine/$(basename "$f").${ts}" \
+                  && echo "WARN: quarantined bad external config: $(basename "$f")"
+              done
+            }
+            if docker inspect nginx-proxy --format '{{range .Mounts}}{{.Destination}} {{end}}' 2>/dev/null | grep -q '/etc/nginx/external'; then
+              # Volume уже смонтирован — можно тестировать на живом контейнере
+              if ! nginx_config_test; then
+                echo "WARN: nginx config test failed, last output:"; cat /tmp/nginx-t.log
+                quarantine_external
+                if ! nginx_config_test; then
+                  echo "ERROR: nginx config still broken after quarantine — own config issue, aborting nginx restart"
+                  cat /tmp/nginx-t.log
+                  exit 1
+                fi
+                echo "WARN: nginx config restored after quarantine; clickmebattle/external site may be down until owner fixes their config"
+              fi
+              docker exec nginx-proxy nginx -s reload 2>/dev/null || \
+                docker compose up -d --force-recreate nginx-proxy 2>/dev/null || true
+            else
+              # Первый деплой с новым volume — старый контейнер без /etc/nginx/external,
+              # тестировать негде, делаем force-recreate и проверяем health.
+              echo "External configs volume not yet mounted — force-recreating nginx-proxy"
+              docker compose up -d --force-recreate nginx-proxy
+              sleep 3
+              if ! docker ps --filter "name=nginx-proxy" --filter "status=running" --format '{{.Names}}' | grep -q '^nginx-proxy$'; then
+                echo "WARN: nginx-proxy not running after recreate — quarantining external configs"
+                quarantine_external
+                docker compose up -d --force-recreate nginx-proxy
+                sleep 3
+                if ! docker ps --filter "name=nginx-proxy" --filter "status=running" --format '{{.Names}}' | grep -q '^nginx-proxy$'; then
+                  echo "ERROR: nginx-proxy still down after quarantine — own config issue"
+                  docker logs --tail 50 nginx-proxy || true
+                  exit 1
+                fi
+                echo "WARN: nginx-proxy up after quarantine; external sites may be down until owner fixes their config"
+              fi
+            fi
 
             # Cleanup: remove all unused images and build cache to prevent disk fill
             docker image prune -a -f 2>/dev/null || true

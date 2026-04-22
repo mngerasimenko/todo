@@ -15,6 +15,10 @@ services:
       - ./nginx/help:/usr/share/nginx/help:ro
       - ./nginx/well-known:/usr/share/nginx/well-known:ro
       - ./icon-512-rustore.png:/todo/icon-512-rustore.png:ro
+      # Внешние конфиги других проектов (clickmebattle и др.).
+      # Включаются в nginx/nginx.conf директивой `include /etc/nginx/external/*.conf;`.
+      # Каталог на проде — /home/deploy/nginx-external, каждый проект сам кладёт туда свой .conf через свой CI.
+      - /home/deploy/nginx-external:/etc/nginx/external:ro
       - certbot-conf:/etc/letsencrypt:ro
       - certbot-www:/var/www/certbot:ro
 
