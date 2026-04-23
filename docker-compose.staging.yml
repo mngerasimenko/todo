@@ -33,6 +33,8 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD:-localredispass}
       - RATE_LIMIT_STORAGE=redis
       - SUPER_ADMIN_EMAILS=${SUPER_ADMIN_EMAILS:-}
+      # Break-glass: при сломанном кэше/auth поставить в .env RESPONSE_CACHE_ENABLED=false и пересоздать контейнер.
+      - RESPONSE_CACHE_ENABLED=${RESPONSE_CACHE_ENABLED:-true}
     volumes:
       - ./firebase-service-account.json:/todo/firebase-service-account.json:ro
     depends_on:

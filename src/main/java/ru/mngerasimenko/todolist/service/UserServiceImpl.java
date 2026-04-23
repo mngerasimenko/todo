@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import ru.mngerasimenko.todolist.config.RedisCacheConfig;
+import ru.mngerasimenko.todolist.dto.AuthUserDto;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.exception.TokenExpiredException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
@@ -123,11 +124,16 @@ public class UserServiceImpl implements UserService {
      */
     private void evictUserCache(String email) {
         if (email == null) return;
+        // Ключи в кэшах нормализуются через #email?.toLowerCase() в @Cacheable.
+        // Сейчас все вызовы приходят из БД, где email уже lowercase (нормализация
+        // в createUser/changeEmail), но нормализуем и здесь — защита на случай,
+        // если когда-нибудь evict вызовется с MixedCase-email из user-input/request.
+        String normalizedEmail = email.toLowerCase();
         Runnable evict = () -> {
             Cache userMe = cacheManager.getCache(RedisCacheConfig.USERS_ME);
-            if (userMe != null) userMe.evict(email);
+            if (userMe != null) userMe.evict(normalizedEmail);
             Cache userAuth = cacheManager.getCache(RedisCacheConfig.USER_AUTH);
-            if (userAuth != null) userAuth.evict(email);
+            if (userAuth != null) userAuth.evict(normalizedEmail);
         };
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -155,8 +161,21 @@ public class UserServiceImpl implements UserService {
     @Transactional(readOnly = true)
     @Cacheable(value = RedisCacheConfig.USER_AUTH, key = "#email?.toLowerCase()",
             condition = RedisCacheConfig.CACHE_CONDITION, unless = "#result == null")
-    public UserDto getUserByEmailForAuth(String email) {
-        return getUserByEmail(email);  // делегация — password сохраняется
+    public AuthUserDto getUserByEmailForAuth(String email) {
+        // Прямой маппинг (минуя UserMapper/UserDto) — чтобы password не терялся при
+        // Jackson-сериализации в Redis (в UserDto он под @JsonIgnore).
+        if (StringUtils.isBlank(email)) {
+            return null;
+        }
+        String hash = cryptoService.blindIndex(email.toLowerCase());
+        User user = repository.findByEmailHash(hash);
+        if (user == null) {
+            return null;
+        }
+        return AuthUserDto.builder()
+                .email(user.getEmail())
+                .password(user.getPassword())
+                .build();
     }
 
     /**
@@ -264,7 +283,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    @CacheEvict(value = {RedisCacheConfig.USERS_ME, RedisCacheConfig.USER_AUTH}, key = "#result.email")
+    @CacheEvict(value = {RedisCacheConfig.USERS_ME, RedisCacheConfig.USER_AUTH}, key = "#result.email.toLowerCase()")
     public UserDto updateColors(Long id, String createdTaskColor, String completedTaskColor) {
         User user = repository.findById(id)
                 .orElseThrow(() -> new UserNotFoundException("User not found with id: " + id));

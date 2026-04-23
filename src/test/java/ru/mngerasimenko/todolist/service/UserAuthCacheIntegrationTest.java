@@ -14,6 +14,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.utility.DockerImageName;
 import ru.mngerasimenko.todolist.AbstractIntegrationTest;
 import ru.mngerasimenko.todolist.config.RedisCacheConfig;
+import ru.mngerasimenko.todolist.dto.AuthUserDto;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
@@ -95,7 +96,7 @@ class UserAuthCacheIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void getUserByEmailForAuth_CachesResultInRedis() {
-        UserDto result = userService.getUserByEmailForAuth(email);
+        AuthUserDto result = userService.getUserByEmailForAuth(email);
 
         assertThat(result).isNotNull();
         assertThat(result.getEmail()).isEqualTo(email);
@@ -106,12 +107,36 @@ class UserAuthCacheIntegrationTest extends AbstractIntegrationTest {
         assertThat(redisTemplate.hasKey(redisKey(email))).isTrue();
     }
 
+    /**
+     * Регресс-тест: баг, из-за которого был сделан переход с UserDto на AuthUserDto.
+     * Jackson-сериализация UserDto в Redis теряла password (там стоит @JsonIgnore) →
+     * cache-hit отдавал password=null → login ломался "password cannot be null".
+     * Проверяем что round-trip (DB → Redis → cache hit) сохраняет password целиком.
+     */
+    @Test
+    void getUserByEmailForAuth_CacheHit_PreservesPassword() {
+        AuthUserDto fromDb = userService.getUserByEmailForAuth(email);
+        AuthUserDto fromCache = userService.getUserByEmailForAuth(email);
+
+        assertThat(fromCache).isNotNull();
+        assertThat(fromCache.getPassword())
+                .as("password после cache-hit должен быть идентичен значению из БД")
+                .isNotBlank()
+                .isEqualTo(fromDb.getPassword());
+
+        // Прямая проверка содержимого Redis — JSON обязан содержать поле password
+        String rawJson = redisTemplate.opsForValue().get(redisKey(email));
+        assertThat(rawJson)
+                .as("JSON в Redis должен содержать password (иначе Jackson его игнорирует — регресс)")
+                .contains("\"password\"");
+    }
+
     @Test
     void nullResult_IsNotCached() {
         // unless = "#result == null" блокирует negative caching — защита от email-enumeration
         String unknown = "nobody-" + System.nanoTime() + "@test.local";
 
-        UserDto result = userService.getUserByEmailForAuth(unknown);
+        AuthUserDto result = userService.getUserByEmailForAuth(unknown);
 
         assertThat(result).isNull();
         assertThat(redisTemplate.keys(RedisCacheConfig.USER_AUTH + "::*"))
@@ -169,6 +194,7 @@ class UserAuthCacheIntegrationTest extends AbstractIntegrationTest {
                 .isFalse();
     }
 
+
     @Test
     void changeEmail_EvictsBothOldAndNewEmailKeys() {
         warmCache();
@@ -206,7 +232,7 @@ class UserAuthCacheIntegrationTest extends AbstractIntegrationTest {
     void featureFlagOff_BypassesCache() {
         featureFlagStore.set(FeatureFlag.RESPONSE_CACHE, false);
 
-        UserDto result = userService.getUserByEmailForAuth(email);
+        AuthUserDto result = userService.getUserByEmailForAuth(email);
 
         assertThat(result).isNotNull();
         assertThat(result.getEmail()).isEqualTo(email);

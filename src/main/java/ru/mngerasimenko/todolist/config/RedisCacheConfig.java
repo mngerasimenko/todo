@@ -12,6 +12,7 @@ import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext.SerializationPair;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import ru.mngerasimenko.todolist.dto.AuthUserDto;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.dto.list.ListResponse;
 
@@ -24,9 +25,11 @@ import java.util.List;
  * Кэшируются hot-paths с коротким TTL:
  * - {@code users-me} (60 сек) — ответ GET /api/users/me, ключ = email (lowercase).
  * - {@code task-lists} (60 сек) — ответ GET /api/lists, ключ = userId.
- * - {@code user-auth} (60 сек) — UserDetails для Spring Security auth (JWT-filter + login),
+ * - {@code user-auth} (60 сек) — {@link AuthUserDto} для Spring Security auth (JWT-filter + login),
  *   ключ = email (lowercase). Содержит password (BCrypt-hash), инвалидируется во всех
  *   мутациях User: resetPassword, updateUser, changeEmail, verifyEmail, updateColors, delete.
+ *   Тип отдельный от {@link UserDto}, потому что у {@code UserDto.password} стоит
+ *   {@code @JsonIgnore} и Jackson-сериализация теряет password при записи в Redis.
  *
  * Для каждого кэша — отдельный типизированный {@link Jackson2JsonRedisSerializer}
  * (не общий polymorphic). Это проще и безопаснее: не нужен
@@ -67,6 +70,8 @@ public class RedisCacheConfig {
         // Отдельный serializer для каждого кэша — по фиксированному типу.
         RedisSerializer<UserDto> userDtoSerializer =
                 new Jackson2JsonRedisSerializer<>(appObjectMapper, UserDto.class);
+        RedisSerializer<AuthUserDto> authUserDtoSerializer =
+                new Jackson2JsonRedisSerializer<>(appObjectMapper, AuthUserDto.class);
 
         JavaType listResponseType = appObjectMapper.getTypeFactory()
                 .constructCollectionType(List.class, ListResponse.class);
@@ -84,7 +89,7 @@ public class RedisCacheConfig {
                         .serializeValuesWith(SerializationPair.fromSerializer(taskListsSerializer)))
                 .withCacheConfiguration(USER_AUTH, base
                         .entryTtl(Duration.ofSeconds(60))
-                        .serializeValuesWith(SerializationPair.fromSerializer(userDtoSerializer)))
+                        .serializeValuesWith(SerializationPair.fromSerializer(authUserDtoSerializer)))
                 .build();
     }
 }

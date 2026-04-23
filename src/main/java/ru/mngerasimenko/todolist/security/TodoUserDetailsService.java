@@ -4,7 +4,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
-import ru.mngerasimenko.todolist.dto.UserDto;
+import ru.mngerasimenko.todolist.dto.AuthUserDto;
 import ru.mngerasimenko.todolist.service.UserService;
 
 /**
@@ -23,9 +23,9 @@ public class TodoUserDetailsService implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
 
-        UserDto userDto = userService.getUserByEmailForAuth(email);
+        AuthUserDto authUser = userService.getUserByEmailForAuth(email);
 
-        if (userDto == null) {
+        if (authUser == null) {
             throw new UsernameNotFoundException("User not found: " + email);
         }
 
@@ -34,8 +34,8 @@ public class TodoUserDetailsService implements UserDetailsService {
         // Роль — только USER; роли ADMIN/USER управляются через task_list_user (per-list).
         return org.springframework.security.core.userdetails.User
                 .builder()
-                .username(userDto.getEmail())
-                .password(userDto.getPassword())
+                .username(authUser.getEmail())
+                .password(authUser.getPassword())
                 .roles("USER")
                 .build();
     }

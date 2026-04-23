@@ -1,5 +1,6 @@
 package ru.mngerasimenko.todolist.service;
 
+import ru.mngerasimenko.todolist.dto.AuthUserDto;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.model.User;
 
@@ -22,12 +23,15 @@ public interface UserService {
 
     /**
      * Кэшированный lookup для Spring Security auth-путей (JWT-filter + DaoAuthenticationProvider).
-     * Возвращает UserDto С password (BCrypt-hash) — нужен для login-проверки.
+     * Возвращает {@link AuthUserDto} (email + BCrypt-hash password) — отдельный тип от {@link UserDto}
+     * нужен потому, что {@code UserDto.password} имеет {@code @JsonIgnore} и теряется при
+     * Jackson-сериализации в Redis.
+     * <p>
      * TTL 60 сек, ключ = email.toLowerCase(); инвалидация — через {@code evictUserCache}
      * во всех мутациях, меняющих password/email/роли пользователя.
      * НЕ использовать вне security-путей.
      */
-    UserDto getUserByEmailForAuth(String email);
+    AuthUserDto getUserByEmailForAuth(String email);
 
     /**
      * Возвращает UserDto для HTTP-ответа (/api/users/me) с password=null.
