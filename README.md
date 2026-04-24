@@ -68,8 +68,8 @@ REST API бэкенд для совместного управления спи�
 - Каскадное удаление аккаунта: передача ADMIN, удаление пустых списков, сохранение публичных задач через системного пользователя
 - Super-admin через email-whitelist (`SUPER_ADMIN_EMAILS` env) + `@PreAuthorize("@superAdminGuard.check(authentication)")` — ручные админ-операции (например, триггер напоминания неактивному пользователю). Для не-админов `/api/admin/**` маскируется под 404
 - Runtime feature-flags через `/api/admin/flags/{name}/{value}` — переключение rate-limit, inactive-reminder scheduler'а, push-уведомлений и response-кэша без рестарта. Приоритет: runtime > env > enum-default. Рестарт сбрасывает runtime-override'ы (фича безопасности — забытое выключение защиты автоматически восстанавливается при следующем деплое)
-- Response-кэш hot-paths через Spring Cache + Redis: `GET /api/users/me` (ключ = email) и `GET /api/lists` (ключ = userId), TTL 60 сек. Точечный `@CacheEvict` на всех мутациях User/TaskList. Runtime-выключение через feature flag `response-cache.enabled`
-- 456 unit-тестов с проверкой покрытия (JaCoCo) + 11 интеграционных (3 concurrency + 5 Redis blacklist + 3 Redis rate-limit на TestContainers, отдельный запуск)
+- Response-кэш hot-paths через Spring Cache + Redis: `GET /api/users/me` (ключ = email), `GET /api/lists` (ключ = userId) и auth-lookup `user-auth` для `TodoUserDetailsService.loadUserByUsername` (отдельный `AuthUserDto` с email+password, ключ = email.toLowerCase). TTL 60 сек. Точечный `@CacheEvict` на всех мутациях User/TaskList. Runtime-выключение через feature flag `response-cache.enabled` + break-glass env `RESPONSE_CACHE_ENABLED=false`
+- Unit-тесты с проверкой покрытия (JaCoCo) + интеграционные на TestContainers (concurrency, Redis blacklist, Redis rate-limit, Redis user-auth cache) — отдельный запуск через `-Pintegration`
 
 ---
 
@@ -253,7 +253,7 @@ src/main/java/ru/mngerasimenko/todolist/
 
 src/main/resources/db/migration/   Liquibase-миграции (master + 15 changeset-файлов, включая 017-encryption-fields, 018-email-hash-not-null)
 src/main/resources/templates/      HTML-шаблоны email (верификация, сброс пароля, приглашение)
-src/test/java/        456 unit-тестов + 11 integration (controller, service, repository, mapper, security, crypto, concurrency, redis blacklist integration, redis rate-limit integration, admin-endpoint)
+src/test/java/        Unit + integration тесты (controller, service, repository, mapper, security, crypto, concurrency, redis blacklist integration, redis rate-limit integration, redis user-auth cache, admin-endpoint)
 postman/             Postman-коллекция + окружения
 monitoring/          VK-мониторинг (скрипты, systemd-сервис, конфиг) + backup PostgreSQL
 monitoring/prometheus/   Prometheus scrape-конфиг
