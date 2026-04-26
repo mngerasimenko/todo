@@ -14,7 +14,9 @@ import ru.mngerasimenko.todolist.repository.UserRepository;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Реализация сервиса статистики использования.
@@ -79,9 +81,11 @@ public class StatisticsServiceImpl implements StatisticsService {
                 ? Math.round((double) totalTasks / totalLists * 10.0) / 10.0
                 : 0.0;
 
-        // Активность
-        long activeUsersLast24h = todoRepository.countDistinctActiveUsersSince(now.minusHours(24));
-        long activeUsersLast7d = todoRepository.countDistinctActiveUsersSince(now.minusDays(7));
+        // Активность — объединение DISTINCT user_id из 4 источников:
+        // создал/выполнил Todo, создал TaskList, вступил в TaskListUser
+        long activeUsersLast24h = countActiveUsersSince(now.minusHours(24));
+        long activeUsersLast3d = countActiveUsersSince(now.minusDays(3));
+        long activeUsersLast7d = countActiveUsersSince(now.minusDays(7));
         long activeInviteTokens = inviteTokenRepository.countByExpiresAtAfter(now);
 
         return UsageStatisticsResponse.builder()
@@ -114,9 +118,24 @@ public class StatisticsServiceImpl implements StatisticsService {
                         .build())
                 .activity(UsageStatisticsResponse.ActivityStats.builder()
                         .activeUsersLast24h(activeUsersLast24h)
+                        .activeUsersLast3d(activeUsersLast3d)
                         .activeUsersLast7d(activeUsersLast7d)
                         .activeInviteTokens(activeInviteTokens)
                         .build())
                 .build();
+    }
+
+    /**
+     * Считает уникальных активных пользователей за период.
+     * Активным считается пользователь, который за указанный интервал:
+     *  — создал или выполнил задачу,
+     *  — создал список,
+     *  — вступил в список.
+     */
+    private long countActiveUsersSince(LocalDateTime since) {
+        Set<Long> ids = new HashSet<>(todoRepository.findActiveUserIdsSince(since));
+        ids.addAll(taskListRepository.findActiveUserIdsSince(since));
+        ids.addAll(taskListUserRepository.findActiveUserIdsSince(since));
+        return ids.size();
     }
 }

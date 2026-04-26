@@ -253,7 +253,7 @@ print(f'''📈 Статистика (за {period}ч)
    Среднее на пользователя: {t.get('avg_tasks_per_user', 0):.1f}
    Среднее на список: {t.get('avg_tasks_per_list', 0):.1f}
 
-🔥 Активность: {a.get('active_users_last_24h', '?')} за 24ч, {a.get('active_users_last_7d', '?')} за 7д
+🔥 Активность: {a.get('active_users_last_24h', '?')} за 24ч, {a.get('active_users_last_3d', '?')} за 3д, {a.get('active_users_last_7d', '?')} за 7д
 🔗 Приглашения: {a.get('active_invite_tokens', '?')} активных''')
 " 2>/dev/null)
 

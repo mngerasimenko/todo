@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 import ru.mngerasimenko.todolist.model.TaskList;
 
 import java.time.LocalDateTime;
+import java.util.Set;
 
 /**
  * Репозиторий для работы со списками задач (таблица task_list).
@@ -23,4 +24,11 @@ public interface TaskListRepository extends JpaRepository<TaskList, Long> {
     void deleteByListId(@Param("listId") Long listId);
 
     long countByCreatedAtAfter(LocalDateTime since);
+
+    /**
+     * ID уникальных пользователей, создавших списки после указанной даты.
+     * Используется для расчёта метрики «активные пользователи» в статистике.
+     */
+    @Query("SELECT DISTINCT tl.creator.id FROM TaskList tl WHERE tl.createdAt > :since")
+    Set<Long> findActiveUserIdsSince(@Param("since") LocalDateTime since);
 }

@@ -24,12 +24,14 @@ public class UsageStatsScheduler {
     public void logUsageStats() {
         UsageStatisticsResponse stats = statisticsService.getUsageStatistics(DEFAULT_PERIOD_HOURS);
         log.info("Статистика использования (за {}ч): пользователей={} (новых={}), списков={} (новых={}), " +
-                        "задач={} (новых={}), выполнено={} ({}%), активных за 24ч={}, за 7д={}",
+                        "задач={} (новых={}), выполнено={} ({}%), активных за 24ч={}, за 3д={}, за 7д={}",
                 stats.getPeriodHours(),
                 stats.getUsers().getTotal(), stats.getUsers().getNewInPeriod(),
                 stats.getLists().getTotal(), stats.getLists().getNewInPeriod(),
                 stats.getTasks().getTotal(), stats.getTasks().getNewInPeriod(),
                 stats.getTasks().getCompletedTotal(), stats.getTasks().getCompletionRate(),
-                stats.getActivity().getActiveUsersLast24h(), stats.getActivity().getActiveUsersLast7d());
+                stats.getActivity().getActiveUsersLast24h(),
+                stats.getActivity().getActiveUsersLast3d(),
+                stats.getActivity().getActiveUsersLast7d());
     }
 }

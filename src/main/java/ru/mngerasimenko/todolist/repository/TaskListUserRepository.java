@@ -10,8 +10,10 @@ import ru.mngerasimenko.todolist.model.TaskListRole;
 import ru.mngerasimenko.todolist.model.TaskListUser;
 import ru.mngerasimenko.todolist.model.TaskListUserId;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Репозиторий для работы со связью пользователей и списков (таблица task_list_user).
@@ -73,6 +75,13 @@ public interface TaskListUserRepository extends JpaRepository<TaskListUser, Task
      */
     @Query(value = "SELECT COUNT(*) FROM (SELECT list_id FROM task_list_user GROUP BY list_id HAVING COUNT(*) > 1) sub", nativeQuery = true)
     long countSharedLists();
+
+    /**
+     * ID уникальных пользователей, вступивших в списки после указанной даты.
+     * Используется для расчёта метрики «активные пользователи» в статистике.
+     */
+    @Query("SELECT DISTINCT tlu.user.id FROM TaskListUser tlu WHERE tlu.joinedAt > :since")
+    Set<Long> findActiveUserIdsSince(@Param("since") LocalDateTime since);
 
     /**
      * Удалить запись участия пользователя в списке.

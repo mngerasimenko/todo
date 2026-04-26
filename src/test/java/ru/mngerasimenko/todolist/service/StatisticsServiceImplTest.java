@@ -13,8 +13,8 @@ import ru.mngerasimenko.todolist.repository.TaskListUserRepository;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 
-import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -41,6 +41,15 @@ class StatisticsServiceImplTest {
     @InjectMocks
     private StatisticsServiceImpl statisticsService;
 
+    /**
+     * Стаб для случаев, когда активность не проверяется конкретно — возвращаем пустые наборы.
+     */
+    private void mockEmptyActivity() {
+        when(todoRepository.findActiveUserIdsSince(any())).thenReturn(Set.of());
+        when(taskListRepository.findActiveUserIdsSince(any())).thenReturn(Set.of());
+        when(taskListUserRepository.findActiveUserIdsSince(any())).thenReturn(Set.of());
+    }
+
     @Test
     void getUsageStatistics_returnsCorrectTotals() {
         when(userRepository.count()).thenReturn(10L);
@@ -56,7 +65,7 @@ class StatisticsServiceImplTest {
         when(todoRepository.countByCreatedAtAfter(any())).thenReturn(15L);
         when(todoRepository.countByDoneTrue()).thenReturn(60L);
         when(todoRepository.countByCompletedAtAfter(any())).thenReturn(8L);
-        when(todoRepository.countDistinctActiveUsersSince(any())).thenReturn(3L);
+        mockEmptyActivity();
         when(inviteTokenRepository.countByExpiresAtAfter(any())).thenReturn(2L);
 
         UsageStatisticsResponse result = statisticsService.getUsageStatistics(2);
@@ -97,7 +106,7 @@ class StatisticsServiceImplTest {
         when(todoRepository.countByCreatedAtAfter(any())).thenReturn(0L);
         when(todoRepository.countByDoneTrue()).thenReturn(20L);
         when(todoRepository.countByCompletedAtAfter(any())).thenReturn(0L);
-        when(todoRepository.countDistinctActiveUsersSince(any())).thenReturn(0L);
+        mockEmptyActivity();
         when(inviteTokenRepository.countByExpiresAtAfter(any())).thenReturn(0L);
 
         UsageStatisticsResponse result = statisticsService.getUsageStatistics(2);
@@ -119,7 +128,7 @@ class StatisticsServiceImplTest {
         when(todoRepository.countByCreatedAtAfter(any())).thenReturn(0L);
         when(todoRepository.countByDoneTrue()).thenReturn(0L);
         when(todoRepository.countByCompletedAtAfter(any())).thenReturn(0L);
-        when(todoRepository.countDistinctActiveUsersSince(any())).thenReturn(0L);
+        mockEmptyActivity();
         when(inviteTokenRepository.countByExpiresAtAfter(any())).thenReturn(0L);
 
         UsageStatisticsResponse result = statisticsService.getUsageStatistics(2);
@@ -148,7 +157,7 @@ class StatisticsServiceImplTest {
         when(todoRepository.countByCreatedAtAfter(any())).thenReturn(0L);
         when(todoRepository.countByDoneTrue()).thenReturn(150L);
         when(todoRepository.countByCompletedAtAfter(any())).thenReturn(0L);
-        when(todoRepository.countDistinctActiveUsersSince(any())).thenReturn(0L);
+        mockEmptyActivity();
         when(inviteTokenRepository.countByExpiresAtAfter(any())).thenReturn(0L);
 
         UsageStatisticsResponse result = statisticsService.getUsageStatistics(24);
@@ -172,7 +181,7 @@ class StatisticsServiceImplTest {
         when(todoRepository.countByCreatedAtAfter(any())).thenReturn(0L);
         when(todoRepository.countByDoneTrue()).thenReturn(6L);
         when(todoRepository.countByCompletedAtAfter(any())).thenReturn(0L);
-        when(todoRepository.countDistinctActiveUsersSince(any())).thenReturn(0L);
+        mockEmptyActivity();
         when(inviteTokenRepository.countByExpiresAtAfter(any())).thenReturn(0L);
 
         UsageStatisticsResponse result = statisticsService.getUsageStatistics(2);
@@ -197,7 +206,7 @@ class StatisticsServiceImplTest {
         when(todoRepository.countByCreatedAtAfter(any())).thenReturn(0L);
         when(todoRepository.countByDoneTrue()).thenReturn(0L);
         when(todoRepository.countByCompletedAtAfter(any())).thenReturn(0L);
-        when(todoRepository.countDistinctActiveUsersSince(any())).thenReturn(0L);
+        mockEmptyActivity();
         when(inviteTokenRepository.countByExpiresAtAfter(any())).thenReturn(0L);
 
         UsageStatisticsResponse result = statisticsService.getUsageStatistics(2);
@@ -219,15 +228,47 @@ class StatisticsServiceImplTest {
         when(todoRepository.countByCreatedAtAfter(any())).thenReturn(0L);
         when(todoRepository.countByDoneTrue()).thenReturn(0L);
         when(todoRepository.countByCompletedAtAfter(any())).thenReturn(0L);
-        // countDistinctActiveUsersSince вызывается дважды — за 24ч и за 7д
-        when(todoRepository.countDistinctActiveUsersSince(any())).thenReturn(5L, 8L);
+        // Активность считается за 3 окна (24ч, 3д, 7д) — каждое мокаем тем же набором.
+        // Todo: {1, 2}, TaskList: {3}, TaskListUser: {4} → объединение {1,2,3,4} = 4
+        when(todoRepository.findActiveUserIdsSince(any())).thenReturn(Set.of(1L, 2L));
+        when(taskListRepository.findActiveUserIdsSince(any())).thenReturn(Set.of(3L));
+        when(taskListUserRepository.findActiveUserIdsSince(any())).thenReturn(Set.of(4L));
         when(inviteTokenRepository.countByExpiresAtAfter(any())).thenReturn(3L);
 
         UsageStatisticsResponse result = statisticsService.getUsageStatistics(2);
 
-        assertThat(result.getActivity().getActiveUsersLast24h()).isEqualTo(5);
-        assertThat(result.getActivity().getActiveUsersLast7d()).isEqualTo(8);
+        assertThat(result.getActivity().getActiveUsersLast24h()).isEqualTo(4);
+        assertThat(result.getActivity().getActiveUsersLast3d()).isEqualTo(4);
+        assertThat(result.getActivity().getActiveUsersLast7d()).isEqualTo(4);
         assertThat(result.getActivity().getActiveInviteTokens()).isEqualTo(3);
+    }
+
+    @Test
+    void getUsageStatistics_activeUsers_dedupesAcrossSources() {
+        // Один и тот же user_id фигурирует в разных источниках — должен быть посчитан один раз.
+        // Todo: {1, 2}, TaskList: {2, 3}, TaskListUser: {3, 4} → {1, 2, 3, 4} = 4
+        when(userRepository.count()).thenReturn(0L);
+        when(userRepository.countByCreatedAtAfter(any())).thenReturn(0L);
+        when(userRepository.findByCreatedAtAfterOrderByCreatedAtDesc(any())).thenReturn(List.of());
+        when(userRepository.countByEmailVerifiedTrue()).thenReturn(0L);
+        when(taskListRepository.count()).thenReturn(0L);
+        when(taskListRepository.countByCreatedAtAfter(any())).thenReturn(0L);
+        when(taskListUserRepository.countSharedLists()).thenReturn(0L);
+        when(todoRepository.count()).thenReturn(0L);
+        when(todoRepository.countByIsPrivateTrue()).thenReturn(0L);
+        when(todoRepository.countByCreatedAtAfter(any())).thenReturn(0L);
+        when(todoRepository.countByDoneTrue()).thenReturn(0L);
+        when(todoRepository.countByCompletedAtAfter(any())).thenReturn(0L);
+        when(todoRepository.findActiveUserIdsSince(any())).thenReturn(Set.of(1L, 2L));
+        when(taskListRepository.findActiveUserIdsSince(any())).thenReturn(Set.of(2L, 3L));
+        when(taskListUserRepository.findActiveUserIdsSince(any())).thenReturn(Set.of(3L, 4L));
+        when(inviteTokenRepository.countByExpiresAtAfter(any())).thenReturn(0L);
+
+        UsageStatisticsResponse result = statisticsService.getUsageStatistics(2);
+
+        assertThat(result.getActivity().getActiveUsersLast24h()).isEqualTo(4);
+        assertThat(result.getActivity().getActiveUsersLast3d()).isEqualTo(4);
+        assertThat(result.getActivity().getActiveUsersLast7d()).isEqualTo(4);
     }
 
     @Test
@@ -244,7 +285,7 @@ class StatisticsServiceImplTest {
         when(todoRepository.countByCreatedAtAfter(any())).thenReturn(0L);
         when(todoRepository.countByDoneTrue()).thenReturn(0L);
         when(todoRepository.countByCompletedAtAfter(any())).thenReturn(0L);
-        when(todoRepository.countDistinctActiveUsersSince(any())).thenReturn(0L);
+        mockEmptyActivity();
         when(inviteTokenRepository.countByExpiresAtAfter(any())).thenReturn(0L);
 
         UsageStatisticsResponse result = statisticsService.getUsageStatistics(12);
@@ -268,7 +309,7 @@ class StatisticsServiceImplTest {
         when(todoRepository.countByCreatedAtAfter(any())).thenReturn(0L);
         when(todoRepository.countByDoneTrue()).thenReturn(0L);
         when(todoRepository.countByCompletedAtAfter(any())).thenReturn(0L);
-        when(todoRepository.countDistinctActiveUsersSince(any())).thenReturn(0L);
+        mockEmptyActivity();
         when(inviteTokenRepository.countByExpiresAtAfter(any())).thenReturn(0L);
 
         UsageStatisticsResponse result = statisticsService.getUsageStatistics(2);
