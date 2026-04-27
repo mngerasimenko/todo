@@ -32,6 +32,22 @@ public class RedisHealthService {
     }
 
     /**
+     * Помечает Redis как недоступный сразу, не дожидаясь следующего тика scheduler'а
+     * (раз в 30 сек). Вызывается компонентами hot-path (RateLimitFilter,
+     * TokenBlacklistServiceRedis, CacheErrorHandler) при поимке Redis-исключения.
+     *
+     * Эффект: следующий запрос увидит {@code isRedisHealthy() == false} и сразу
+     * пойдёт через fallback, не делая бесполезный Lettuce-запрос с timeout.
+     * Окно «медленных» запросов сокращается с ~30 сек до 1.
+     *
+     * Восстановление автоматическое — следующий успешный PING из scheduler'а
+     * вернёт {@code redisHealthyCache = true}.
+     */
+    public void markUnhealthy() {
+        redisHealthyCache = false;
+    }
+
+    /**
      * Выполняет PING и обновляет кеш.
      * Любая ошибка (RedisConnectionFailureException, timeout, etc.) → healthy=false.
      */

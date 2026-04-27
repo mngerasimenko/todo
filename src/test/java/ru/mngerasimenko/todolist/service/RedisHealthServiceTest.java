@@ -91,4 +91,26 @@ class RedisHealthServiceTest {
         service.checkRedisHealth();
         assertThat(service.isRedisHealthy()).isTrue();
     }
+
+    @Test
+    void markUnhealthy_SetsCacheToFalse_WithoutPing() {
+        // Сначала переведём в healthy через успешный PING
+        when(connectionFactory.getConnection()).thenReturn(connection);
+        when(connection.ping()).thenReturn("PONG");
+        service.checkRedisHealth();
+        assertThat(service.isRedisHealthy()).isTrue();
+
+        // markUnhealthy() переключает флаг сразу, без обращения к Redis
+        service.markUnhealthy();
+
+        assertThat(service.isRedisHealthy()).isFalse();
+    }
+
+    @Test
+    void markUnhealthy_BeforeAnyCheck_RemainsFalse() {
+        // Изначальное состояние — false; markUnhealthy() оставляет его таким же
+        assertThat(service.isRedisHealthy()).isFalse();
+        service.markUnhealthy();
+        assertThat(service.isRedisHealthy()).isFalse();
+    }
 }

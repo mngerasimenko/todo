@@ -1,5 +1,7 @@
 package ru.mngerasimenko.todolist.security;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,6 +12,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
+import ru.mngerasimenko.todolist.service.RedisHealthService;
 
 import java.io.IOException;
 
@@ -24,6 +27,8 @@ class RateLimitFilterTest {
     private RateLimitFilter filter;
     private BucketProviderInMemory provider;
     private FilterChain filterChain;
+    private RedisHealthService healthAlwaysUp;
+    private MeterRegistry meterRegistry;
 
     @BeforeEach
     void setUp() {
@@ -35,9 +40,12 @@ class RateLimitFilterTest {
         provider = new BucketProviderInMemory();
         FeatureFlagStore flagStore = mock(FeatureFlagStore.class);
         when(flagStore.isEnabled(FeatureFlag.RATE_LIMIT)).thenReturn(true);
+        healthAlwaysUp = mock(RedisHealthService.class);
+        when(healthAlwaysUp.isRedisHealthy()).thenReturn(true);
+        meterRegistry = new SimpleMeterRegistry();
         // 4-й аргумент (in-memory fallback) — null: основной провайдер уже in-memory,
-        // fallback в memory-режиме не нужен.
-        filter = new RateLimitFilter(props, provider, flagStore, null);
+        // fallback в memory-режиме не нужен. health/meter — стандартный mock.
+        filter = new RateLimitFilter(props, provider, flagStore, null, healthAlwaysUp, meterRegistry);
         filterChain = mock(FilterChain.class);
     }
 
@@ -412,7 +420,11 @@ class RateLimitFilterTest {
             FeatureFlagStore flagStore = mock(FeatureFlagStore.class);
             when(flagStore.isEnabled(FeatureFlag.RATE_LIMIT)).thenReturn(true);
 
-            filterWithRedisProvider = new RateLimitFilter(props, failingRedisProvider, flagStore, inMemoryFallback);
+            // health=true: circuit breaker не сработает upfront — пойдём в Redis-bucket → catch → fallback
+            RedisHealthService health = mock(RedisHealthService.class);
+            when(health.isRedisHealthy()).thenReturn(true);
+            filterWithRedisProvider = new RateLimitFilter(props, failingRedisProvider, flagStore,
+                    inMemoryFallback, health, new SimpleMeterRegistry());
         }
 
         @Test
@@ -462,8 +474,10 @@ class RateLimitFilterTest {
             when(flagStore.isEnabled(FeatureFlag.RATE_LIMIT)).thenReturn(true);
             BucketProviderInMemory localFallback = new BucketProviderInMemory();
 
-            RateLimitFilter eagerFilter =
-                    new RateLimitFilter(props, eagerFailingProvider, flagStore, localFallback);
+            RedisHealthService health = mock(RedisHealthService.class);
+            when(health.isRedisHealthy()).thenReturn(true);
+            RateLimitFilter eagerFilter = new RateLimitFilter(props, eagerFailingProvider,
+                    flagStore, localFallback, health, new SimpleMeterRegistry());
 
             MockHttpServletResponse response = new MockHttpServletResponse();
             eagerFilter.doFilterInternal(
@@ -483,14 +497,63 @@ class RateLimitFilterTest {
             props.setLogin(new RateLimitProperties.EndpointLimit(3, 60));
             props.setGeneral(new RateLimitProperties.EndpointLimit(10, 60));
             // Конструктор: 4-й аргумент null → fallback пустой
-            RateLimitFilter filterNoFallback =
-                    new RateLimitFilter(props, failingRedisProvider, flagStore, null);
+            RedisHealthService health = mock(RedisHealthService.class);
+            when(health.isRedisHealthy()).thenReturn(true);
+            RateLimitFilter filterNoFallback = new RateLimitFilter(props, failingRedisProvider,
+                    flagStore, null, health, new SimpleMeterRegistry());
 
             org.junit.jupiter.api.Assertions.assertThrows(
                     io.lettuce.core.RedisCommandTimeoutException.class,
                     () -> filterNoFallback.doFilterInternal(
                             createRequest("POST", "/api/auth/login"),
                             new MockHttpServletResponse(), filterChain));
+        }
+
+        @Test
+        @DisplayName("Circuit breaker: health=false — Redis НЕ дёргается, сразу in-memory")
+        void circuitBreaker_HealthDown_BypassesRedis() throws ServletException, IOException {
+            RateLimitProperties props = new RateLimitProperties();
+            props.setLogin(new RateLimitProperties.EndpointLimit(3, 60));
+            props.setGeneral(new RateLimitProperties.EndpointLimit(10, 60));
+            FeatureFlagStore flagStore = mock(FeatureFlagStore.class);
+            when(flagStore.isEnabled(FeatureFlag.RATE_LIMIT)).thenReturn(true);
+            RedisHealthService healthDown = mock(RedisHealthService.class);
+            when(healthDown.isRedisHealthy()).thenReturn(false);
+            BucketProviderInMemory localFallback = new BucketProviderInMemory();
+            // failingRedisProvider бросает на любой вызов — но не должен вызываться
+            // вообще, так как circuit breaker (health=false) сразу идёт в fallback.
+            RateLimitFilter cbFilter = new RateLimitFilter(props, failingRedisProvider,
+                    flagStore, localFallback, healthDown, new SimpleMeterRegistry());
+
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            cbFilter.doFilterInternal(createRequest("POST", "/api/auth/login"), response, filterChain);
+
+            assertThat(response.getStatus()).isEqualTo(200);
+            verify(filterChain).doFilter(any(), any());
+            // Redis-провайдер НЕ должен был быть вызван (circuit breaker отработал upfront)
+            verify(failingRedisProvider, never()).resolveBucket(anyString(), any());
+            assertThat(localFallback.getActiveBucketCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("Catch-блок: при поимке RedisException вызывается markUnhealthy()")
+        void catchBlock_CallsMarkUnhealthy() throws ServletException, IOException {
+            RateLimitProperties props = new RateLimitProperties();
+            props.setLogin(new RateLimitProperties.EndpointLimit(3, 60));
+            props.setGeneral(new RateLimitProperties.EndpointLimit(10, 60));
+            FeatureFlagStore flagStore = mock(FeatureFlagStore.class);
+            when(flagStore.isEnabled(FeatureFlag.RATE_LIMIT)).thenReturn(true);
+            RedisHealthService health = mock(RedisHealthService.class);
+            when(health.isRedisHealthy()).thenReturn(true);  // изначально жив
+
+            RateLimitFilter cbFilter = new RateLimitFilter(props, failingRedisProvider,
+                    flagStore, inMemoryFallback, health, new SimpleMeterRegistry());
+
+            cbFilter.doFilterInternal(createRequest("POST", "/api/auth/login"),
+                    new MockHttpServletResponse(), filterChain);
+
+            // Должен был пометить Redis unhealthy, чтобы следующий запрос не пытался его использовать
+            verify(health, atLeastOnce()).markUnhealthy();
         }
     }
 }
