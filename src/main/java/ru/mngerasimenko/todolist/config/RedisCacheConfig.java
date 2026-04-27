@@ -140,30 +140,34 @@ public class RedisCacheConfig implements CachingConfigurer {
     @Bean
     public CacheErrorHandler cacheErrorHandler(MeterRegistry meterRegistry) {
         return new CacheErrorHandler() {
+            // SLF4J trick: если последний параметр — Throwable и плейсхолдеров {} столько же,
+            // сколько остальных параметров, Logback не подставляет его в {}, а печатает
+            // полный stack trace с caused-by. Так не теряется реальная причина
+            // (например, JsonMappingException из Jackson при сериализации DTO).
             @Override
             public void handleCacheGetError(RuntimeException ex, Cache cache, Object key) {
-                log.warn("Redis cache GET error in '{}' for key={}: {}", cache.getName(), key, ex.toString());
+                log.warn("Redis cache GET error in '{}' for key={}", cache.getName(), key, ex);
                 incrementErrorCounter(meterRegistry, cache.getName(), "get");
                 markRedisUnhealthyIfPossible();
             }
 
             @Override
             public void handleCachePutError(RuntimeException ex, Cache cache, Object key, Object value) {
-                log.warn("Redis cache PUT error in '{}' for key={}: {}", cache.getName(), key, ex.toString());
+                log.warn("Redis cache PUT error in '{}' for key={}", cache.getName(), key, ex);
                 incrementErrorCounter(meterRegistry, cache.getName(), "put");
                 markRedisUnhealthyIfPossible();
             }
 
             @Override
             public void handleCacheEvictError(RuntimeException ex, Cache cache, Object key) {
-                log.warn("Redis cache EVICT error in '{}' for key={}: {}", cache.getName(), key, ex.toString());
+                log.warn("Redis cache EVICT error in '{}' for key={}", cache.getName(), key, ex);
                 incrementErrorCounter(meterRegistry, cache.getName(), "evict");
                 markRedisUnhealthyIfPossible();
             }
 
             @Override
             public void handleCacheClearError(RuntimeException ex, Cache cache) {
-                log.warn("Redis cache CLEAR error in '{}': {}", cache.getName(), ex.toString());
+                log.warn("Redis cache CLEAR error in '{}'", cache.getName(), ex);
                 incrementErrorCounter(meterRegistry, cache.getName(), "clear");
                 markRedisUnhealthyIfPossible();
             }
