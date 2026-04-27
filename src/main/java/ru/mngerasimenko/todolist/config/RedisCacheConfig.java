@@ -14,6 +14,7 @@ import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.cache.interceptor.CacheInterceptor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -127,7 +128,13 @@ public class RedisCacheConfig implements CachingConfigurer {
                 .build();
     }
 
+    /**
+     * @Primary — Spring видит два бина типа CacheManager (RedisCacheManager и
+     * HealthAwareCacheManager-обёртка), и для разрешения @Cacheable должен выбрать
+     * именно обёртку с circuit breaker'ом, а не голый RedisCacheManager.
+     */
     @Bean
+    @Primary
     public CacheManager cacheManager(RedisCacheManager redisCacheManager,
                                      RedisHealthService redisHealthService) {
         // Оборачиваем в circuit breaker: при !redisHealthService.isRedisHealthy()
