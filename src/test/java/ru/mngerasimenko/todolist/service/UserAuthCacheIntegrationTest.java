@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -62,6 +63,9 @@ class UserAuthCacheIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private FeatureFlagStore featureFlagStore;
+
+    @Autowired
+    private CacheManager cacheManager;
 
     /** SMTP в тестах недоступен — глушим отправку email, чтобы createUser не падал. */
     @MockitoBean
@@ -129,6 +133,39 @@ class UserAuthCacheIntegrationTest extends AbstractIntegrationTest {
         assertThat(rawJson)
                 .as("JSON в Redis должен содержать password (иначе Jackson его игнорирует — регресс)")
                 .contains("\"password\"");
+    }
+
+    /**
+     * Регресс-тест: до фикса {@code RedisCacheManager} конструировался внутри метода
+     * {@code cacheManager()} и сразу оборачивался в {@code HealthAwareCacheManager},
+     * Spring не вызывал {@code afterPropertiesSet()} на внутреннем менеджере →
+     * {@code initialCaches} не подгружались → {@code getCache(name)} проваливался
+     * в {@code getMissingCache()} и создавал кэш через {@code cacheDefaults} без
+     * {@code serializeValuesWith} → дефолтный {@code JdkSerializationRedisSerializer}
+     * пытался сериализовать DTO без {@code Serializable} → {@code SerializationException}
+     * на каждом cache PUT, и в Redis ничего не оседало в правильном формате.
+     *
+     * Тест проверяет два инварианта одновременно:
+     *  1. Все три cache-name зарегистрированы в {@code cacheManager} заранее.
+     *  2. Значение в Redis приходит как JSON (Jackson), а не как JDK-byte-stream.
+     */
+    @Test
+    void cacheManager_LoadsInitialCaches_WithJsonSerializer() {
+        assertThat(cacheManager.getCacheNames())
+                .as("Spring должен подгрузить initialCaches при старте контекста")
+                .contains(RedisCacheConfig.USERS_ME,
+                          RedisCacheConfig.TASK_LISTS,
+                          RedisCacheConfig.USER_AUTH);
+
+        userService.getUserByEmailForAuth(email);
+
+        String raw = redisTemplate.opsForValue().get(redisKey(email));
+        assertThat(raw)
+                .as("Value в Redis должно быть JSON (Jackson2JsonRedisSerializer), " +
+                    "а не JDK byte-stream — иначе сериализатор откатился к defaultам")
+                .isNotNull()
+                .startsWith("{")
+                .contains("\"email\"", "\"password\"");
     }
 
     @Test

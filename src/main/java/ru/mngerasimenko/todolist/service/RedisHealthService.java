@@ -1,5 +1,6 @@
 package ru.mngerasimenko.todolist.service;
 
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.RedisConnection;
@@ -29,6 +30,18 @@ public class RedisHealthService {
 
     public boolean isRedisHealthy() {
         return redisHealthyCache;
+    }
+
+    /**
+     * Синхронный warmup при старте контекста: scheduler опрашивает Redis раз в 30 сек,
+     * и в первое окно после старта {@link #isRedisHealthy()} вернёт false →
+     * {@code HealthAwareCache.put()} no-op → кэш молча не работает первые 30 сек.
+     * Один PING при инициализации закрывает эту дыру: если Redis уже доступен,
+     * healthy=true сразу; если нет — будет восстановлено следующим тиком scheduler'а.
+     */
+    @PostConstruct
+    void warmupHealthCheck() {
+        checkRedisHealth();
     }
 
     /**
