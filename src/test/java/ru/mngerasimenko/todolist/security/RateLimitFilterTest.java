@@ -35,7 +35,9 @@ class RateLimitFilterTest {
         provider = new BucketProviderInMemory();
         FeatureFlagStore flagStore = mock(FeatureFlagStore.class);
         when(flagStore.isEnabled(FeatureFlag.RATE_LIMIT)).thenReturn(true);
-        filter = new RateLimitFilter(props, provider, flagStore);
+        // 4-й аргумент (in-memory fallback) — null: основной провайдер уже in-memory,
+        // fallback в memory-режиме не нужен.
+        filter = new RateLimitFilter(props, provider, flagStore, null);
         filterChain = mock(FilterChain.class);
     }
 
@@ -378,5 +380,117 @@ class RateLimitFilterTest {
         MockHttpServletResponse generalResponse = new MockHttpServletResponse();
         filter.doFilterInternal(createRequest("GET", "/api/todos/all"), generalResponse, filterChain);
         assertThat(generalResponse.getStatus()).isEqualTo(200);
+    }
+
+    // --- Тесты graceful degradation при сбое Redis ---
+
+    @Nested
+    @DisplayName("Graceful degradation: Redis BucketProvider бросает RedisCommandTimeoutException")
+    class RedisFailureFallback {
+
+        private RateLimitFilter filterWithRedisProvider;
+        private BucketProvider failingRedisProvider;
+        private BucketProviderInMemory inMemoryFallback;
+
+        @BeforeEach
+        void setUpFallbackScenario() {
+            RateLimitProperties props = new RateLimitProperties();
+            props.setLogin(new RateLimitProperties.EndpointLimit(3, 60));
+            props.setGeneral(new RateLimitProperties.EndpointLimit(10, 60));
+
+            // Эмулируем BucketProviderRedis: resolveBucket возвращает proxy-bucket,
+            // у которого tryConsumeAndReturnRemaining() бросает RuntimeException
+            // (как Lettuce при сбое Redis).
+            failingRedisProvider = mock(BucketProvider.class);
+            io.github.bucket4j.Bucket failingBucket = mock(io.github.bucket4j.Bucket.class);
+            when(failingBucket.tryConsumeAndReturnRemaining(anyLong()))
+                    .thenThrow(new io.lettuce.core.RedisCommandTimeoutException("timeout"));
+            when(failingRedisProvider.resolveBucket(anyString(), any()))
+                    .thenReturn(failingBucket);
+
+            inMemoryFallback = new BucketProviderInMemory();
+            FeatureFlagStore flagStore = mock(FeatureFlagStore.class);
+            when(flagStore.isEnabled(FeatureFlag.RATE_LIMIT)).thenReturn(true);
+
+            filterWithRedisProvider = new RateLimitFilter(props, failingRedisProvider, flagStore, inMemoryFallback);
+        }
+
+        @Test
+        @DisplayName("Redis bucket бросает — fallback на in-memory, запрос проходит (200)")
+        void redisThrows_FallsBackToInMemory_RequestPassed() throws ServletException, IOException {
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            filterWithRedisProvider.doFilterInternal(
+                    createRequest("POST", "/api/auth/login"), response, filterChain);
+
+            assertThat(response.getStatus()).isEqualTo(200);
+            verify(filterChain).doFilter(any(), any());
+            // fallback bucket был создан и использован
+            assertThat(inMemoryFallback.getActiveBucketCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("Fallback соблюдает лимит — превышение возвращает 429 даже без Redis")
+        void fallback_RespectsLimit_Returns429WhenExceeded() throws ServletException, IOException {
+            // Лимит login = 3/мин, исчерпываем через fallback
+            for (int i = 0; i < 3; i++) {
+                filterWithRedisProvider.doFilterInternal(
+                        createRequest("POST", "/api/auth/login"),
+                        new MockHttpServletResponse(), filterChain);
+            }
+
+            // Следующий запрос — 429 (лимит in-memory bucket'а)
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            filterWithRedisProvider.doFilterInternal(
+                    createRequest("POST", "/api/auth/login"), response, filterChain);
+
+            assertThat(response.getStatus()).isEqualTo(429);
+            verify(filterChain, times(3)).doFilter(any(), any());
+        }
+
+        @Test
+        @DisplayName("Redis resolveBucket бросает — fallback тоже срабатывает")
+        void resolveBucketThrows_FallsBackToInMemory_RequestPassed() throws ServletException, IOException {
+            // Эмулируем eager-режим: resolveBucket сам бросает при сбое Redis.
+            BucketProvider eagerFailingProvider = mock(BucketProvider.class);
+            when(eagerFailingProvider.resolveBucket(anyString(), any()))
+                    .thenThrow(new io.lettuce.core.RedisCommandTimeoutException("timeout on getProxy"));
+
+            RateLimitProperties props = new RateLimitProperties();
+            props.setLogin(new RateLimitProperties.EndpointLimit(3, 60));
+            props.setGeneral(new RateLimitProperties.EndpointLimit(10, 60));
+            FeatureFlagStore flagStore = mock(FeatureFlagStore.class);
+            when(flagStore.isEnabled(FeatureFlag.RATE_LIMIT)).thenReturn(true);
+            BucketProviderInMemory localFallback = new BucketProviderInMemory();
+
+            RateLimitFilter eagerFilter =
+                    new RateLimitFilter(props, eagerFailingProvider, flagStore, localFallback);
+
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            eagerFilter.doFilterInternal(
+                    createRequest("POST", "/api/auth/login"), response, filterChain);
+
+            assertThat(response.getStatus()).isEqualTo(200);
+            verify(filterChain).doFilter(any(), any());
+            assertThat(localFallback.getActiveBucketCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("Без fallback (memory-режим) исключение пробрасывается")
+        void noFallback_RethrowsException() {
+            FeatureFlagStore flagStore = mock(FeatureFlagStore.class);
+            when(flagStore.isEnabled(FeatureFlag.RATE_LIMIT)).thenReturn(true);
+            RateLimitProperties props = new RateLimitProperties();
+            props.setLogin(new RateLimitProperties.EndpointLimit(3, 60));
+            props.setGeneral(new RateLimitProperties.EndpointLimit(10, 60));
+            // Конструктор: 4-й аргумент null → fallback пустой
+            RateLimitFilter filterNoFallback =
+                    new RateLimitFilter(props, failingRedisProvider, flagStore, null);
+
+            org.junit.jupiter.api.Assertions.assertThrows(
+                    io.lettuce.core.RedisCommandTimeoutException.class,
+                    () -> filterNoFallback.doFilterInternal(
+                            createRequest("POST", "/api/auth/login"),
+                            new MockHttpServletResponse(), filterChain));
+        }
     }
 }
