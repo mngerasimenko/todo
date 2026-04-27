@@ -34,4 +34,7 @@ public class AppTodoResponse {
 
     @JsonProperty("firebase_healthy")
     private Boolean firebaseHealthy;
+
+    @JsonProperty("redis_healthy")
+    private Boolean redisHealthy;
 }

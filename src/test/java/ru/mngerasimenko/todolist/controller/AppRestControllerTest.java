@@ -12,6 +12,7 @@ import ru.mngerasimenko.todolist.config.TestSecurityConfig;
 import ru.mngerasimenko.todolist.security.ApiSecurityConfig;
 import ru.mngerasimenko.todolist.service.EmailService;
 import ru.mngerasimenko.todolist.service.PushNotificationService;
+import ru.mngerasimenko.todolist.service.RedisHealthService;
 import ru.mngerasimenko.todolist.settings.AppProperties;
 import ru.mngerasimenko.todolist.settings.Constants;
 
@@ -33,6 +34,9 @@ class AppRestControllerTest {
 
     @MockitoBean
     private PushNotificationService pushNotificationService;
+
+    @MockitoBean
+    private RedisHealthService redisHealthService;
 
     @Test
     void getStatus_ReturnsOkWithStatusAndVersion() throws Exception {
@@ -91,6 +95,24 @@ class AppRestControllerTest {
         mockMvc.perform(get("/api/status"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.firebase_healthy").value(false));
+    }
+
+    @Test
+    void getStatus_RedisHealthyTrue_ReturnsTrue() throws Exception {
+        when(redisHealthService.isRedisHealthy()).thenReturn(true);
+
+        mockMvc.perform(get("/api/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.redis_healthy").value(true));
+    }
+
+    @Test
+    void getStatus_RedisHealthyFalse_ReturnsFalse() throws Exception {
+        when(redisHealthService.isRedisHealthy()).thenReturn(false);
+
+        mockMvc.perform(get("/api/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.redis_healthy").value(false));
     }
 
     @Test
