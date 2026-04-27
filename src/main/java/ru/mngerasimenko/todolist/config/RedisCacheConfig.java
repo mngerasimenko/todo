@@ -4,8 +4,11 @@ import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.config.MeterFilter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.actuate.metrics.cache.CacheMeterBinderProvider;
+import org.springframework.boot.actuate.metrics.cache.RedisCacheMetrics;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CachingConfigurer;
@@ -15,6 +18,7 @@ import org.springframework.cache.interceptor.CacheInterceptor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.data.redis.cache.RedisCache;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -114,7 +118,11 @@ public class RedisCacheConfig implements CachingConfigurer {
         RedisSerializer<List<ListResponse>> taskListsSerializer =
                 (RedisSerializer) new Jackson2JsonRedisSerializer<>(appObjectMapper, listResponseType);
 
+        // enableStatistics() обязателен для cache.gets/puts/evictions Micrometer-метрик:
+        // без него RedisCache.getStatistics() возвращает no-op-объект с нулями,
+        // и панель «Cache Hit Rate» в Grafana показывает «No data».
         return RedisCacheManager.builder(connectionFactory)
+                .enableStatistics()
                 .cacheDefaults(base)
                 .withCacheConfiguration(USERS_ME, base
                         .entryTtl(Duration.ofSeconds(60))
@@ -141,6 +149,47 @@ public class RedisCacheConfig implements CachingConfigurer {
         // все cache-операции no-op без обращения к Redis. Это убирает 4 timeout-ожидания
         // (по 300мс каждое) на каждом запросе во время сбоя Redis — суммарно ~2 сек/запрос.
         return new HealthAwareCacheManager(redisCacheManager, redisHealthService, meterRegistry);
+    }
+
+    /**
+     * Подсказывает Spring Boot {@code CacheMetricsAutoConfiguration}, как извлечь
+     * Micrometer-метрики ({@code cache.gets}, {@code cache.puts}, {@code cache.evictions})
+     * из обёртки {@link HealthAwareCache}.
+     *
+     * Стандартный {@code RedisCacheMeterBinderProvider} принимает только
+     * {@link RedisCache}, а у нас Spring видит {@code HealthAwareCache} → ни один
+     * провайдер не подходит → метрики никогда не регистрируются → Grafana-дашборд
+     * пуст. Здесь разворачиваем обёртку и отдаём родной {@link RedisCacheMetrics}
+     * на underlying {@link RedisCache}.
+     */
+    @Bean
+    public CacheMeterBinderProvider<HealthAwareCache> healthAwareCacheMeterBinderProvider() {
+        return (cache, tags) -> {
+            Cache d = cache.getDelegate();
+            return d instanceof RedisCache rc ? new RedisCacheMetrics(rc, tags) : null;
+        };
+    }
+
+    /**
+     * Spring Boot {@code CacheMetricsAutoConfiguration} регистрирует {@code cache.*}
+     * метрики для каждого {@link CacheManager}-bean. У нас их два: основной
+     * {@link HealthAwareCacheManager} (под именем {@code cacheManager}) и внутренний
+     * {@link RedisCacheManager} (под именем {@code redis}, после strip суффикса
+     * «CacheManager»). В итоге каждая операция даёт две одинаковых серии — и
+     * Prometheus-функции {@code rate()}/{@code increase()} удваивают значения,
+     * что ломает алерты на cache hit rate.
+     *
+     * Отбрасываем дубликат от внутреннего bean'а — остаётся только обёртка
+     * с circuit breaker'ом, через которую и идут реальные cache-операции.
+     *
+     * <p><b>Важно: метод {@code static}.</b> {@code MeterFilter} применяется при
+     * инициализации {@link MeterRegistry}, а сам RedisCacheConfig инжектит
+     * {@code MeterRegistry} в конструкторе → circular dependency. Static-метод
+     * создаётся до instance config'а и обходит цикл (см. Spring Boot Actuator docs).
+     */
+    @Bean
+    public static MeterFilter denyDuplicateCacheManagerMetrics() {
+        return MeterFilter.deny(id -> "redis".equals(id.getTag("cache.manager")));
     }
 
     /**
@@ -315,6 +364,19 @@ public class RedisCacheConfig implements CachingConfigurer {
             this.delegate = delegate;
             this.health = health;
             this.meterRegistry = meterRegistry;
+        }
+
+        /**
+         * Доступ к обёрнутому Cache — нужен только для {@code CacheMeterBinderProvider}
+         * в том же {@link RedisCacheConfig}, поэтому package-private.
+         *
+         * <p><b>Предположение:</b> delegate — это {@link RedisCache}. Если когда-либо
+         * появится дополнительная обёртка между {@code HealthAwareCache} и
+         * {@code RedisCache}, провайдер метрик молча отдаст {@code null} и Grafana
+         * снова потеряет {@code cache.*}. В этом случае нужен второй unwrap.
+         */
+        Cache getDelegate() {
+            return delegate;
         }
 
         @Override

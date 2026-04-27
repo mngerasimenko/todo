@@ -4,6 +4,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
+import io.micrometer.core.instrument.FunctionCounter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.CacheManager;
@@ -66,6 +68,9 @@ class UserAuthCacheIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private CacheManager cacheManager;
+
+    @Autowired
+    private MeterRegistry meterRegistry;
 
     /** SMTP в тестах недоступен — глушим отправку email, чтобы createUser не падал. */
     @MockitoBean
@@ -166,6 +171,54 @@ class UserAuthCacheIntegrationTest extends AbstractIntegrationTest {
                 .isNotNull()
                 .startsWith("{")
                 .contains("\"email\"", "\"password\"");
+    }
+
+    /**
+     * Регресс-тест на два связанных дефекта:
+     *
+     * <ol>
+     *   <li>{@code CacheMeterBinderProvider<HealthAwareCache>} нет → Spring Boot
+     *       не знает, как извлечь статистику из обёртки → meters не регистрируются
+     *       → Grafana «No data».</li>
+     *   <li>Не вызван {@code RedisCacheManagerBuilder.enableStatistics()} → meters
+     *       зарегистрированы, но {@code RedisCache.getStatistics()} возвращает
+     *       no-op-объект с нулями → counter всегда 0.</li>
+     * </ol>
+     *
+     * Поэтому assert не только проверяет существование meter, но и читает значение
+     * после miss + hit — чтобы регресс на любой из двух дефектов поймался.
+     *
+     * {@code MeterFilter.deny(cache.manager=redis)} убирает дубликат (см.
+     * {@code RedisCacheConfig#denyDuplicateCacheManagerMetrics}), поэтому остаётся
+     * ровно одна серия с {@code cache.manager=cacheManager}.
+     */
+    @Test
+    void cacheMetrics_AreRegistered_AndIncrementOnRealAccess() {
+        userService.getUserByEmailForAuth(email);    // miss → put
+        userService.getUserByEmailForAuth(email);    // hit
+
+        FunctionCounter puts = meterRegistry.find("cache.puts")
+                .tag("cache", RedisCacheConfig.USER_AUTH)
+                .functionCounter();
+        assertThat(puts)
+                .as("cache.puts для user-auth должен быть зарегистрирован через " +
+                    "CacheMeterBinderProvider<HealthAwareCache>")
+                .isNotNull();
+        assertThat(puts.count())
+                .as("counter должен расти — без enableStatistics() RedisCache " +
+                    "вернул бы 0 даже при реальных PUT")
+                .isGreaterThan(0.0);
+
+        FunctionCounter hits = meterRegistry.find("cache.gets")
+                .tag("cache", RedisCacheConfig.USER_AUTH)
+                .tag("result", "hit")
+                .functionCounter();
+        assertThat(hits)
+                .as("cache.gets{result=hit} тоже должен существовать")
+                .isNotNull();
+        assertThat(hits.count())
+                .as("второй вызов был cache HIT — counter должен быть > 0")
+                .isGreaterThan(0.0);
     }
 
     @Test
