@@ -98,6 +98,24 @@ class AppRestControllerTest {
     }
 
     @Test
+    void getStatus_RedisHealthyTrue_ReturnsTrue() throws Exception {
+        when(redisHealthService.isRedisHealthy()).thenReturn(true);
+
+        mockMvc.perform(get("/api/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.redis_healthy").value(true));
+    }
+
+    @Test
+    void getStatus_RedisHealthyFalse_ReturnsFalse() throws Exception {
+        when(redisHealthService.isRedisHealthy()).thenReturn(false);
+
+        mockMvc.perform(get("/api/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.redis_healthy").value(false));
+    }
+
+    @Test
     void getAppName_ReturnsOkWithAppName() throws Exception {
         mockMvc.perform(get("/api/appName")
                         .contentType(MediaType.APPLICATION_JSON))

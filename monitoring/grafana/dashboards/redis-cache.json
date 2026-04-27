@@ -146,12 +146,12 @@
       "options": {"legend": {"displayMode": "list"}, "tooltip": {"mode": "single"}},
       "targets": [
         {
-          "expr": "rate(cache_errors_total[1m])",
-          "legendFormat": "errors/sec",
+          "expr": "sum by (cache, operation) (rate(cache_errors_total[1m]))",
+          "legendFormat": "{{cache}} / {{operation}}",
           "refId": "A"
         }
       ],
-      "title": "Cache ERRORS/sec (RED — Redis недоступен)",
+      "title": "Cache ERRORS/sec by cache + operation (RED — Redis недоступен)",
       "type": "timeseries"
     }
   ],

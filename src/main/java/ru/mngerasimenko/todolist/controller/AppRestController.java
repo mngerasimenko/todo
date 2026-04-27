@@ -26,7 +26,7 @@ public class AppRestController {
     private final PushNotificationService pushNotificationService;
     private final RedisHealthService redisHealthService;
 
-    /** Статус приложения: версия сервера, минимальная версия Android-клиента, здоровье SMTP */
+    /** Статус приложения: версия сервера, минимальная версия Android-клиента, здоровье SMTP/Firebase/Redis */
     @GetMapping("/status")
     public ResponseEntity<AppTodoResponse> getStatus() {
         AppTodoResponse response = AppTodoResponse.builder()

@@ -109,7 +109,11 @@ public class RedisCacheConfig implements CachingConfigurer {
     /**
      * CacheErrorHandler — graceful degradation при недоступности Redis.
      *
-     * Все 4 callback'а логируют WARN и инкрементируют counter "cache.errors".
+     * Все 4 callback'а логируют WARN и инкрементируют counter "cache.errors"
+     * с тегами {@code cache} (имя кэша) и {@code operation} (get/put/evict/clear).
+     * Тегирование позволяет в Grafana/Prometheus разделять ошибки по типу кэша
+     * (например, ошибка в "user-auth" критичнее, чем в "task-lists").
+     *
      * Исключения НЕ пробрасываются:
      *   - get-error → Spring трактует как cache miss → метод выполняется (медленнее, но работает).
      *   - put-error → результат метода возвращается клиенту, в кэш не попадает.
@@ -120,34 +124,45 @@ public class RedisCacheConfig implements CachingConfigurer {
      */
     @Bean
     public CacheErrorHandler cacheErrorHandler(MeterRegistry meterRegistry) {
-        Counter errors = Counter.builder("cache.errors")
-                .description("Ошибки операций Spring Cache (Redis недоступен и т.п.)")
-                .register(meterRegistry);
         return new CacheErrorHandler() {
             @Override
             public void handleCacheGetError(RuntimeException ex, Cache cache, Object key) {
                 log.warn("Redis cache GET error in '{}' for key={}: {}", cache.getName(), key, ex.toString());
-                errors.increment();
+                incrementErrorCounter(meterRegistry, cache.getName(), "get");
             }
 
             @Override
             public void handleCachePutError(RuntimeException ex, Cache cache, Object key, Object value) {
                 log.warn("Redis cache PUT error in '{}' for key={}: {}", cache.getName(), key, ex.toString());
-                errors.increment();
+                incrementErrorCounter(meterRegistry, cache.getName(), "put");
             }
 
             @Override
             public void handleCacheEvictError(RuntimeException ex, Cache cache, Object key) {
                 log.warn("Redis cache EVICT error in '{}' for key={}: {}", cache.getName(), key, ex.toString());
-                errors.increment();
+                incrementErrorCounter(meterRegistry, cache.getName(), "evict");
             }
 
             @Override
             public void handleCacheClearError(RuntimeException ex, Cache cache) {
                 log.warn("Redis cache CLEAR error in '{}': {}", cache.getName(), ex.toString());
-                errors.increment();
+                incrementErrorCounter(meterRegistry, cache.getName(), "clear");
             }
         };
+    }
+
+    /**
+     * Регистрирует (или находит уже зарегистрированный) counter "cache.errors"
+     * с тегами cache+operation и инкрементирует его. Micrometer кеширует counter
+     * по name+tags, повторный вызов не создаёт нового объекта.
+     */
+    private static void incrementErrorCounter(MeterRegistry registry, String cacheName, String operation) {
+        Counter.builder("cache.errors")
+                .description("Ошибки операций Spring Cache (Redis недоступен и т.п.)")
+                .tag("cache", cacheName)
+                .tag("operation", operation)
+                .register(registry)
+                .increment();
     }
 
     /**
