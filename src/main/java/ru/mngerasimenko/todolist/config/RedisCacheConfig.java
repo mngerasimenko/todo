@@ -82,10 +82,21 @@ public class RedisCacheConfig implements CachingConfigurer {
         this.redisHealthService = redisHealthService;
     }
 
+    /**
+     * RedisCacheManager регистрируется как самостоятельный bean, чтобы Spring сам
+     * вызвал {@link RedisCacheManager#afterPropertiesSet()} и подгрузил initialCaches
+     * (USERS_ME / TASK_LISTS / USER_AUTH со своими Jackson-сериализаторами).
+     *
+     * Раньше builder().build() вызывался внутри метода cacheManager(), результат
+     * не был bean'ом, afterPropertiesSet() не вызывался — initialCaches оставались
+     * незагруженными, и при getCache(name) Spring создавал кэши через
+     * cacheDefaults без serializeValuesWith → дефолтный JdkSerializationRedisSerializer
+     * пытался сериализовать DTO без Serializable → SerializationException на каждом
+     * cache PUT.
+     */
     @Bean
-    public CacheManager cacheManager(RedisConnectionFactory connectionFactory,
-                                     ObjectMapper appObjectMapper,
-                                     RedisHealthService redisHealthService) {
+    public RedisCacheManager redisCacheManager(RedisConnectionFactory connectionFactory,
+                                               ObjectMapper appObjectMapper) {
         RedisCacheConfiguration base = RedisCacheConfiguration.defaultCacheConfig()
                 .disableCachingNullValues()
                 .serializeKeysWith(SerializationPair.fromSerializer(new StringRedisSerializer()));
@@ -102,7 +113,7 @@ public class RedisCacheConfig implements CachingConfigurer {
         RedisSerializer<List<ListResponse>> taskListsSerializer =
                 (RedisSerializer) new Jackson2JsonRedisSerializer<>(appObjectMapper, listResponseType);
 
-        RedisCacheManager redisCacheManager = RedisCacheManager.builder(connectionFactory)
+        return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(base)
                 .withCacheConfiguration(USERS_ME, base
                         .entryTtl(Duration.ofSeconds(60))
@@ -114,7 +125,11 @@ public class RedisCacheConfig implements CachingConfigurer {
                         .entryTtl(Duration.ofSeconds(60))
                         .serializeValuesWith(SerializationPair.fromSerializer(authUserDtoSerializer)))
                 .build();
+    }
 
+    @Bean
+    public CacheManager cacheManager(RedisCacheManager redisCacheManager,
+                                     RedisHealthService redisHealthService) {
         // Оборачиваем в circuit breaker: при !redisHealthService.isRedisHealthy()
         // все cache-операции no-op без обращения к Redis. Это убирает 4 timeout-ожидания
         // (по 300мс каждое) на каждом запросе во время сбоя Redis — суммарно ~2 сек/запрос.
