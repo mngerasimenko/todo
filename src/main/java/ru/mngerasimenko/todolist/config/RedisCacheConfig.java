@@ -6,7 +6,6 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.config.MeterFilter;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.actuate.metrics.cache.CacheMeterBinderProvider;
 import org.springframework.boot.actuate.metrics.cache.RedisCacheMetrics;
 import org.springframework.cache.Cache;
@@ -14,7 +13,6 @@ import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.interceptor.CacheErrorHandler;
-import org.springframework.cache.interceptor.CacheInterceptor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -268,34 +266,13 @@ public class RedisCacheConfig implements CachingConfigurer {
     }
 
     /**
-     * Диагностический ApplicationRunner — печатает фактический тип CacheErrorHandler,
-     * который Spring AOP в итоге подключил к CacheInterceptor. Если в логе мы видим
-     * имя нашего анонимного класса (RedisCacheConfig$1) — значит CachingConfigurer
-     * сработал. Если SimpleCacheErrorHandler — значит наш override проигнорирован.
-     *
-     * Временно для расследования бага graceful degradation на staging (см. fix-ветку).
-     */
-    @Bean
-    public ApplicationRunner cacheErrorHandlerDiagnostic(CacheInterceptor cacheInterceptor) {
-        return args -> {
-            CacheErrorHandler effective = cacheInterceptor.getErrorHandler();
-            log.info("DIAGNOSTIC: effective CacheErrorHandler in CacheInterceptor = {}",
-                    effective == null ? "null" : effective.getClass().getName());
-        };
-    }
-
-    /**
      * Override CachingConfigurer.errorHandler() — Spring подключит handler глобально
      * ко всем CacheManager. Создаём новый instance через bean-метод (Micrometer counter
      * идемпотентен при повторной регистрации по имени, поэтому безопасно).
      * Не self-inject bean, чтобы избежать circular initialization.
-     *
-     * INFO-лог при вызове — диагностика: если строка не появилась в логе при старте,
-     * значит Spring CachingConfigurer не подхватил наш override (см. fix/redis-graceful-degradation).
      */
     @Override
     public CacheErrorHandler errorHandler() {
-        log.info("CacheErrorHandler registered globally via CachingConfigurer (cache.errors counter active)");
         return cacheErrorHandler(meterRegistry);
     }
 
