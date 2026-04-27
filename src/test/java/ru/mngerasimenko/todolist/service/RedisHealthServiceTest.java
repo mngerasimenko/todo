@@ -113,4 +113,19 @@ class RedisHealthServiceTest {
         service.markUnhealthy();
         assertThat(service.isRedisHealthy()).isFalse();
     }
+
+    @Test
+    void warmupHealthCheck_OnContextStart_FlipsHealthyImmediately() {
+        // @PostConstruct hook закрывает 30-секундную дыру после старта приложения,
+        // когда scheduler ещё не отработал ни разу, а cache.put() уже мог быть вызван.
+        when(connectionFactory.getConnection()).thenReturn(connection);
+        when(connection.ping()).thenReturn("PONG");
+
+        service.warmupHealthCheck();
+
+        assertThat(service.isRedisHealthy())
+                .as("warmup должен зафиксировать healthy=true сразу при старте, если Redis доступен")
+                .isTrue();
+        verify(connection).ping();
+    }
 }
