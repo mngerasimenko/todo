@@ -1,10 +1,10 @@
 package ru.mngerasimenko.todolist.service;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.QueryTimeoutException;
@@ -39,13 +39,18 @@ class TokenBlacklistServiceRedisTest {
     @Mock
     private ValueOperations<String, String> valueOps;
 
-    @InjectMocks
+    @Mock
+    private RedisHealthService redisHealthService;
+
     private TokenBlacklistServiceRedis service;
 
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(service, "keyPrefix", PREFIX);
+        // По умолчанию Redis жив — для существующих тестов это и было неявным условием.
+        lenient().when(redisHealthService.isRedisHealthy()).thenReturn(true);
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        service = new TokenBlacklistServiceRedis(redisTemplate, redisHealthService, new SimpleMeterRegistry());
+        ReflectionTestUtils.setField(service, "keyPrefix", PREFIX);
     }
 
     @Test
@@ -140,5 +145,52 @@ class TokenBlacklistServiceRedisTest {
                         PREFIX + ":blacklist:" + TokenUtils.sha256("token-a"),
                         PREFIX + ":blacklist:" + TokenUtils.sha256("token-b"))
                 .doesNotHaveDuplicates();
+    }
+
+    // --- Circuit breaker: при !redisHealthService.isRedisHealthy() Redis не дёргается ---
+
+    @Test
+    void blacklistAccessToken_HealthDown_BypassesRedis_UsesInMemory() {
+        when(redisHealthService.isRedisHealthy()).thenReturn(false);
+
+        service.blacklistAccessToken(TOKEN, Instant.now().plusSeconds(3600));
+
+        // Redis вообще не должен быть вызван
+        verifyNoInteractions(valueOps);
+        verify(redisTemplate, never()).hasKey(anyString());
+
+        // Но в in-memory fallback токен записан — следующая проверка вернёт true
+        assertThat(service.isBlacklisted(TOKEN)).isTrue();
+    }
+
+    @Test
+    void isBlacklisted_HealthDown_BypassesRedis_ReadsFromInMemory() {
+        when(redisHealthService.isRedisHealthy()).thenReturn(false);
+
+        // Никаких записей не было — fallback пуст → false
+        assertThat(service.isBlacklisted(TOKEN)).isFalse();
+
+        // Redis НЕ дёргался
+        verify(redisTemplate, never()).hasKey(anyString());
+    }
+
+    @Test
+    void blacklistAccessToken_RedisThrows_CallsMarkUnhealthy() {
+        doThrow(new RedisConnectionFailureException("connection refused"))
+                .when(valueOps).set(anyString(), anyString(), any(Duration.class));
+
+        service.blacklistAccessToken(TOKEN, Instant.now().plusSeconds(3600));
+
+        verify(redisHealthService).markUnhealthy();
+    }
+
+    @Test
+    void isBlacklisted_RedisThrows_CallsMarkUnhealthy() {
+        when(redisTemplate.hasKey(KEY))
+                .thenThrow(new QueryTimeoutException("redis command timed out"));
+
+        service.isBlacklisted(TOKEN);
+
+        verify(redisHealthService).markUnhealthy();
     }
 }

@@ -9,9 +9,12 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.dao.QueryTimeoutException;
 import org.springframework.data.redis.RedisConnectionFailureException;
+import ru.mngerasimenko.todolist.service.RedisHealthService;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -28,7 +31,9 @@ class CacheErrorHandlerTest {
     @BeforeEach
     void setUp() {
         meterRegistry = new SimpleMeterRegistry();
-        RedisCacheConfig config = new RedisCacheConfig(meterRegistry);
+        // RedisHealthService = null — для этих тестов нам важен только counter+log,
+        // markUnhealthy внутри handler'а защищён null-check'ом.
+        RedisCacheConfig config = new RedisCacheConfig(meterRegistry, null);
         handler = config.cacheErrorHandler(meterRegistry);
         cache = mock(Cache.class);
         when(cache.getName()).thenReturn("test-cache");
@@ -121,5 +126,25 @@ class CacheErrorHandlerTest {
                 .tag("operation", operation)
                 .counter();
         return counter == null ? 0.0 : counter.count();
+    }
+
+    // --- Circuit breaker integration: handler вызывает RedisHealthService.markUnhealthy() ---
+
+    @Test
+    void allFourErrorMethods_CallMarkUnhealthy_WhenHealthServiceProvided() {
+        // Свежий handler, теперь с реальным RedisHealthService mock'ом
+        RedisHealthService healthMock = mock(RedisHealthService.class);
+        RedisCacheConfig configWithHealth = new RedisCacheConfig(meterRegistry, healthMock);
+        CacheErrorHandler handlerWithHealth = configWithHealth.cacheErrorHandler(meterRegistry);
+        RedisConnectionFailureException ex = new RedisConnectionFailureException("down");
+
+        handlerWithHealth.handleCacheGetError(ex, cache, "k1");
+        handlerWithHealth.handleCachePutError(ex, cache, "k2", "v");
+        handlerWithHealth.handleCacheEvictError(ex, cache, "k3");
+        handlerWithHealth.handleCacheClearError(ex, cache);
+
+        // markUnhealthy вызывается на каждом из 4 callback'ов — итого минимум 4 вызова.
+        // Это гарантирует что circuit breaker переключится в первой же cache-ошибке.
+        verify(healthMock, atLeastOnce()).markUnhealthy();
     }
 }

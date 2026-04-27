@@ -11,6 +11,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.utility.DockerImageName;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.mockito.Mockito;
 import ru.mngerasimenko.todolist.util.TokenUtils;
 
 import java.time.Instant;
@@ -56,7 +58,10 @@ class TokenBlacklistServiceRedisIntegrationTest {
         factory.afterPropertiesSet();
         redisTemplate = new StringRedisTemplate(factory);
 
-        service = new TokenBlacklistServiceRedis(redisTemplate);
+        // В интеграционном тесте Redis всегда жив — health-сервис всегда возвращает true.
+        RedisHealthService health = Mockito.mock(RedisHealthService.class);
+        Mockito.when(health.isRedisHealthy()).thenReturn(true);
+        service = new TokenBlacklistServiceRedis(redisTemplate, health, new SimpleMeterRegistry());
         ReflectionTestUtils.setField(service, "keyPrefix", PREFIX);
     }
 

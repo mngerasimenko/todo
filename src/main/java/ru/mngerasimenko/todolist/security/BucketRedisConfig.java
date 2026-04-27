@@ -28,12 +28,13 @@ public class BucketRedisConfig {
 
     @Bean(destroyMethod = "shutdown")
     public RedisClient bucket4jRedisClient(RedisProperties props) {
-        // Fail-fast timeout 1 секунда — если Redis недоступен, RateLimitFilter
+        // Fail-fast timeout 300мс — если Redis недоступен, RateLimitFilter
         // быстро поймает исключение и переключится на in-memory fallback.
-        // Без явного timeout Lettuce использует дефолт 60 сек: каждый запрос
-        // во время сбоя Redis блокирует Tomcat-поток на минуту, и пул
-        // (server.tomcat.threads.max=200) забивается за ~20 сек при traffic 10 req/s.
-        Duration commandTimeout = Duration.ofSeconds(1);
+        // 300мс с большим запасом — нормальная latency Redis в локальной Docker-сети
+        // меньше 1мс. Дополнительная подстраховка для первого запроса до того, как
+        // circuit breaker (RedisHealthService.markUnhealthy()) переключится.
+        // Без явного timeout Lettuce использует дефолт 60 сек.
+        Duration commandTimeout = Duration.ofMillis(300);
         RedisURI.Builder uriBuilder = RedisURI.builder()
                 .withHost(props.getHost())
                 .withPort(props.getPort())

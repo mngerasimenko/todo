@@ -7,6 +7,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.interceptor.CacheErrorHandler;
@@ -16,6 +17,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import ru.mngerasimenko.todolist.service.RedisHealthService;
+
+import java.util.Collection;
+import java.util.concurrent.Callable;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext.SerializationPair;
 import org.springframework.data.redis.serializer.RedisSerializer;
@@ -70,14 +75,17 @@ public class RedisCacheConfig implements CachingConfigurer {
             "@featureFlagStore.isEnabled(T(ru.mngerasimenko.todolist.featureflags.FeatureFlag).RESPONSE_CACHE)";
 
     private final MeterRegistry meterRegistry;
+    private final RedisHealthService redisHealthService;
 
-    public RedisCacheConfig(MeterRegistry meterRegistry) {
+    public RedisCacheConfig(MeterRegistry meterRegistry, RedisHealthService redisHealthService) {
         this.meterRegistry = meterRegistry;
+        this.redisHealthService = redisHealthService;
     }
 
     @Bean
-    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory,
-                                          ObjectMapper appObjectMapper) {
+    public CacheManager cacheManager(RedisConnectionFactory connectionFactory,
+                                     ObjectMapper appObjectMapper,
+                                     RedisHealthService redisHealthService) {
         RedisCacheConfiguration base = RedisCacheConfiguration.defaultCacheConfig()
                 .disableCachingNullValues()
                 .serializeKeysWith(SerializationPair.fromSerializer(new StringRedisSerializer()));
@@ -94,7 +102,7 @@ public class RedisCacheConfig implements CachingConfigurer {
         RedisSerializer<List<ListResponse>> taskListsSerializer =
                 (RedisSerializer) new Jackson2JsonRedisSerializer<>(appObjectMapper, listResponseType);
 
-        return RedisCacheManager.builder(connectionFactory)
+        RedisCacheManager redisCacheManager = RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(base)
                 .withCacheConfiguration(USERS_ME, base
                         .entryTtl(Duration.ofSeconds(60))
@@ -106,6 +114,11 @@ public class RedisCacheConfig implements CachingConfigurer {
                         .entryTtl(Duration.ofSeconds(60))
                         .serializeValuesWith(SerializationPair.fromSerializer(authUserDtoSerializer)))
                 .build();
+
+        // Оборачиваем в circuit breaker: при !redisHealthService.isRedisHealthy()
+        // все cache-операции no-op без обращения к Redis. Это убирает 4 timeout-ожидания
+        // (по 300мс каждое) на каждом запросе во время сбоя Redis — суммарно ~2 сек/запрос.
+        return new HealthAwareCacheManager(redisCacheManager, redisHealthService, meterRegistry);
     }
 
     /**
@@ -131,24 +144,36 @@ public class RedisCacheConfig implements CachingConfigurer {
             public void handleCacheGetError(RuntimeException ex, Cache cache, Object key) {
                 log.warn("Redis cache GET error in '{}' for key={}: {}", cache.getName(), key, ex.toString());
                 incrementErrorCounter(meterRegistry, cache.getName(), "get");
+                markRedisUnhealthyIfPossible();
             }
 
             @Override
             public void handleCachePutError(RuntimeException ex, Cache cache, Object key, Object value) {
                 log.warn("Redis cache PUT error in '{}' for key={}: {}", cache.getName(), key, ex.toString());
                 incrementErrorCounter(meterRegistry, cache.getName(), "put");
+                markRedisUnhealthyIfPossible();
             }
 
             @Override
             public void handleCacheEvictError(RuntimeException ex, Cache cache, Object key) {
                 log.warn("Redis cache EVICT error in '{}' for key={}: {}", cache.getName(), key, ex.toString());
                 incrementErrorCounter(meterRegistry, cache.getName(), "evict");
+                markRedisUnhealthyIfPossible();
             }
 
             @Override
             public void handleCacheClearError(RuntimeException ex, Cache cache) {
                 log.warn("Redis cache CLEAR error in '{}': {}", cache.getName(), ex.toString());
                 incrementErrorCounter(meterRegistry, cache.getName(), "clear");
+                markRedisUnhealthyIfPossible();
+            }
+
+            // Помечает Redis как недоступный, если RedisHealthService инжектирован.
+            // null-проверка — защита для unit-тестов, где этот сервис может не передаваться.
+            private void markRedisUnhealthyIfPossible() {
+                if (redisHealthService != null) {
+                    redisHealthService.markUnhealthy();
+                }
             }
         };
     }
@@ -197,5 +222,162 @@ public class RedisCacheConfig implements CachingConfigurer {
     public CacheErrorHandler errorHandler() {
         log.info("CacheErrorHandler registered globally via CachingConfigurer (cache.errors counter active)");
         return cacheErrorHandler(meterRegistry);
+    }
+
+    /**
+     * Общий counter "redis.fallback" для всех компонентов resilience-стека.
+     * Тег {@code component} = {@code rate_limit | blacklist | cache} — позволяет в
+     * Grafana строить агрегированный график «сколько fallback'ов в секунду» с
+     * разбивкой и алертить на anomaly.
+     */
+    public static void incrementFallbackCounter(MeterRegistry registry, String component) {
+        Counter.builder("redis.fallback")
+                .description("Срабатывания fallback-механизмов при недоступности Redis")
+                .tag("component", component)
+                .register(registry)
+                .increment();
+    }
+
+    /**
+     * Decorator над основным {@link CacheManager}, реализующий circuit breaker
+     * на основе {@link RedisHealthService}. Когда Redis помечен как down,
+     * возвращает {@link HealthAwareCache} в режиме no-op — без обращения к Redis.
+     *
+     * Эффект: при недоступности Redis 4 cache-операции на запрос
+     * (get/put для user-auth + users-me) выполняются мгновенно вместо timeout
+     * 300мс на каждой → суммарно ~1.2 сек экономии на запрос.
+     */
+    static class HealthAwareCacheManager implements CacheManager {
+
+        private final CacheManager delegate;
+        private final RedisHealthService health;
+        private final MeterRegistry meterRegistry;
+
+        HealthAwareCacheManager(CacheManager delegate, RedisHealthService health, MeterRegistry meterRegistry) {
+            this.delegate = delegate;
+            this.health = health;
+            this.meterRegistry = meterRegistry;
+        }
+
+        @Override
+        public Cache getCache(String name) {
+            Cache underlying = delegate.getCache(name);
+            return underlying == null ? null : new HealthAwareCache(underlying, health, meterRegistry);
+        }
+
+        @Override
+        public Collection<String> getCacheNames() {
+            return delegate.getCacheNames();
+        }
+    }
+
+    /**
+     * Decorator над {@link Cache}, который при {@code !health.isRedisHealthy()}
+     * пропускает обращения к Redis: {@code get} → null (cache miss → метод выполнится),
+     * {@code put}/{@code evict}/{@code clear} → no-op.
+     *
+     * При cache miss из-за circuit breaker инкрементируется counter
+     * {@code redis.fallback{component=cache}}.
+     */
+    static class HealthAwareCache implements Cache {
+
+        private final Cache delegate;
+        private final RedisHealthService health;
+        private final MeterRegistry meterRegistry;
+
+        HealthAwareCache(Cache delegate, RedisHealthService health, MeterRegistry meterRegistry) {
+            this.delegate = delegate;
+            this.health = health;
+            this.meterRegistry = meterRegistry;
+        }
+
+        @Override
+        public String getName() {
+            return delegate.getName();
+        }
+
+        @Override
+        public Object getNativeCache() {
+            return delegate.getNativeCache();
+        }
+
+        @Override
+        public ValueWrapper get(Object key) {
+            if (!health.isRedisHealthy()) {
+                incrementFallbackCounter(meterRegistry, "cache");
+                return null;
+            }
+            return delegate.get(key);
+        }
+
+        @Override
+        public <T> T get(Object key, Class<T> type) {
+            if (!health.isRedisHealthy()) {
+                incrementFallbackCounter(meterRegistry, "cache");
+                return null;
+            }
+            return delegate.get(key, type);
+        }
+
+        @Override
+        public <T> T get(Object key, Callable<T> valueLoader) {
+            if (!health.isRedisHealthy()) {
+                incrementFallbackCounter(meterRegistry, "cache");
+                try {
+                    return valueLoader.call();
+                } catch (Exception ex) {
+                    throw new ValueRetrievalException(key, valueLoader, ex);
+                }
+            }
+            return delegate.get(key, valueLoader);
+        }
+
+        @Override
+        public void put(Object key, Object value) {
+            if (!health.isRedisHealthy()) {
+                return;
+            }
+            delegate.put(key, value);
+        }
+
+        @Override
+        public ValueWrapper putIfAbsent(Object key, Object value) {
+            if (!health.isRedisHealthy()) {
+                return null;
+            }
+            return delegate.putIfAbsent(key, value);
+        }
+
+        @Override
+        public void evict(Object key) {
+            if (!health.isRedisHealthy()) {
+                return;
+            }
+            delegate.evict(key);
+        }
+
+        @Override
+        public boolean evictIfPresent(Object key) {
+            if (!health.isRedisHealthy()) {
+                return false;
+            }
+            return delegate.evictIfPresent(key);
+        }
+
+        @Override
+        public void clear() {
+            if (!health.isRedisHealthy()) {
+                return;
+            }
+            delegate.clear();
+        }
+
+        @Override
+        public boolean invalidate() {
+            if (!health.isRedisHealthy()) {
+                return false;
+            }
+            return delegate.invalidate();
+        }
     }
 }

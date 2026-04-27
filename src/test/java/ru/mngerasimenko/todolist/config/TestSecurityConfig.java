@@ -82,6 +82,10 @@ public class TestSecurityConfig {
                 org.mockito.Mockito.mock(ru.mngerasimenko.todolist.featureflags.FeatureFlagStore.class);
         org.mockito.Mockito.when(flagStore.isEnabled(
                 ru.mngerasimenko.todolist.featureflags.FeatureFlag.RATE_LIMIT)).thenReturn(true);
-        return new RateLimitFilter(props, new BucketProviderInMemory(), flagStore, null);
+        ru.mngerasimenko.todolist.service.RedisHealthService health =
+                org.mockito.Mockito.mock(ru.mngerasimenko.todolist.service.RedisHealthService.class);
+        org.mockito.Mockito.when(health.isRedisHealthy()).thenReturn(true);
+        return new RateLimitFilter(props, new BucketProviderInMemory(), flagStore, null,
+                health, new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
     }
 }
