@@ -28,14 +28,37 @@ public class BucketRedisConfig {
 
     @Bean(destroyMethod = "shutdown")
     public RedisClient bucket4jRedisClient(RedisProperties props) {
+        // Fail-fast timeout 1 секунда — если Redis недоступен, RateLimitFilter
+        // быстро поймает исключение и переключится на in-memory fallback.
+        // Без явного timeout Lettuce использует дефолт 60 сек: каждый запрос
+        // во время сбоя Redis блокирует Tomcat-поток на минуту, и пул
+        // (server.tomcat.threads.max=200) забивается за ~20 сек при traffic 10 req/s.
+        Duration commandTimeout = Duration.ofSeconds(1);
         RedisURI.Builder uriBuilder = RedisURI.builder()
                 .withHost(props.getHost())
                 .withPort(props.getPort())
-                .withDatabase(props.getDatabase());
+                .withDatabase(props.getDatabase())
+                .withTimeout(commandTimeout);
         if (props.getPassword() != null && !props.getPassword().isEmpty()) {
             uriBuilder.withPassword(props.getPassword().toCharArray());
         }
         return RedisClient.create(uriBuilder.build());
+    }
+
+    /**
+     * In-memory fallback для Bucket4j на случай недоступности Redis.
+     *
+     * Активен только в Redis-режиме (rate-limit.storage=redis), создаётся ЗАЕДНО с
+     * {@link BucketProviderRedis}. {@link RateLimitFilter} инжектит его как Optional
+     * и переключается на него при {@code RedisCommandTimeoutException} в hot path.
+     *
+     * Тип bean'а — {@link BucketProviderInMemory}, поэтому существующий
+     * {@code RateLimitCleanupScheduler} (с {@code @ConditionalOnBean(BucketProviderInMemory.class)})
+     * автоматически активируется и периодически чистит протухшие fallback-bucket'ы.
+     */
+    @Bean
+    public BucketProviderInMemory bucket4jInMemoryFallback() {
+        return new BucketProviderInMemory();
     }
 
     @Bean(destroyMethod = "close")
