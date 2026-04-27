@@ -2,7 +2,13 @@ package ru.mngerasimenko.todolist.config;
 
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.Cache;
+import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
@@ -47,7 +53,8 @@ import java.util.List;
  */
 @Configuration
 @EnableCaching
-public class RedisCacheConfig {
+@Slf4j
+public class RedisCacheConfig implements CachingConfigurer {
 
     public static final String USERS_ME = "users-me";
     public static final String TASK_LISTS = "task-lists";
@@ -59,6 +66,12 @@ public class RedisCacheConfig {
      */
     public static final String CACHE_CONDITION =
             "@featureFlagStore.isEnabled(T(ru.mngerasimenko.todolist.featureflags.FeatureFlag).RESPONSE_CACHE)";
+
+    private final MeterRegistry meterRegistry;
+
+    public RedisCacheConfig(MeterRegistry meterRegistry) {
+        this.meterRegistry = meterRegistry;
+    }
 
     @Bean
     public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory,
@@ -91,5 +104,60 @@ public class RedisCacheConfig {
                         .entryTtl(Duration.ofSeconds(60))
                         .serializeValuesWith(SerializationPair.fromSerializer(authUserDtoSerializer)))
                 .build();
+    }
+
+    /**
+     * CacheErrorHandler — graceful degradation при недоступности Redis.
+     *
+     * Все 4 callback'а логируют WARN и инкрементируют counter "cache.errors".
+     * Исключения НЕ пробрасываются:
+     *   - get-error → Spring трактует как cache miss → метод выполняется (медленнее, но работает).
+     *   - put-error → результат метода возвращается клиенту, в кэш не попадает.
+     *   - evict-error → stale-данные живут максимум до TTL=60 сек.
+     *   - clear-error → аналогично evict.
+     *
+     * Подключается через {@link CachingConfigurer#errorHandler()} — глобально на все CacheManager.
+     */
+    @Bean
+    public CacheErrorHandler cacheErrorHandler(MeterRegistry meterRegistry) {
+        Counter errors = Counter.builder("cache.errors")
+                .description("Ошибки операций Spring Cache (Redis недоступен и т.п.)")
+                .register(meterRegistry);
+        return new CacheErrorHandler() {
+            @Override
+            public void handleCacheGetError(RuntimeException ex, Cache cache, Object key) {
+                log.warn("Redis cache GET error in '{}' for key={}: {}", cache.getName(), key, ex.toString());
+                errors.increment();
+            }
+
+            @Override
+            public void handleCachePutError(RuntimeException ex, Cache cache, Object key, Object value) {
+                log.warn("Redis cache PUT error in '{}' for key={}: {}", cache.getName(), key, ex.toString());
+                errors.increment();
+            }
+
+            @Override
+            public void handleCacheEvictError(RuntimeException ex, Cache cache, Object key) {
+                log.warn("Redis cache EVICT error in '{}' for key={}: {}", cache.getName(), key, ex.toString());
+                errors.increment();
+            }
+
+            @Override
+            public void handleCacheClearError(RuntimeException ex, Cache cache) {
+                log.warn("Redis cache CLEAR error in '{}': {}", cache.getName(), ex.toString());
+                errors.increment();
+            }
+        };
+    }
+
+    /**
+     * Override CachingConfigurer.errorHandler() — Spring подключит handler глобально
+     * ко всем CacheManager. Создаём новый instance через bean-метод (Micrometer counter
+     * идемпотентен при повторной регистрации по имени, поэтому безопасно).
+     * Не self-inject bean, чтобы избежать circular initialization.
+     */
+    @Override
+    public CacheErrorHandler errorHandler() {
+        return cacheErrorHandler(meterRegistry);
     }
 }
