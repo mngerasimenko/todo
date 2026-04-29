@@ -157,7 +157,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      MIN_ANDROID_VERSION: 3
+      MIN_ANDROID_VERSION: 7
       LATEST_ANDROID_VERSION: 12
       APP_VERSION_MAJOR: 0
       APP_VERSION_MINOR: 2
