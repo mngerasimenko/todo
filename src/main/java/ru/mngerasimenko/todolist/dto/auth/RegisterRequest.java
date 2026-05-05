@@ -21,9 +21,9 @@ public class RegisterRequest {
     /**
      * Email пользователя
      */
-    @NotBlank(message = "Email не может быть пустым")
-    @Email(message = "Некорректный формат email")
-    @Size(max = 128, message = "Email не должен превышать 128 символов")
+    @NotBlank(message = "Email is required")
+    @Email(message = "Invalid email format")
+    @Size(max = 128, message = "Email must not exceed 128 characters")
     private String email;
 
     public void setEmail(String email) {
@@ -33,15 +33,15 @@ public class RegisterRequest {
     /**
      * Имя пользователя
      */
-    @NotBlank(message = "Имя пользователя не может быть пустым")
-    @Size(min = 2, max = 128, message = "Имя пользователя должно содержать от 2 до 128 символов")
-    @Pattern(regexp = "^[^<>]*$", message = "Имя содержит недопустимые символы")
+    @NotBlank(message = "Name is required")
+    @Size(min = 2, max = 128, message = "Name must be between 2 and 128 characters")
+    @Pattern(regexp = "^[^<>]*$", message = "Name contains invalid characters")
     private String name;
 
     /**
      * Пароль
      */
-    @NotBlank(message = "Пароль не может быть пустым")
-    @Size(min = 5, max = 128, message = "Пароль должен содержать от 5 до 128 символов")
+    @NotBlank(message = "Password is required")
+    @Size(min = 5, max = 128, message = "Password must be between 5 and 128 characters")
     private String password;
 }

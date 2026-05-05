@@ -128,7 +128,7 @@ public class GlobalExceptionHandler {
 
         log.warn("JSON parse error: {}", ex.getMessage());
 
-        return createErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", "Некорректный формат запроса");
+        return createErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", "Invalid request format");
     }
 
     /**
@@ -138,7 +138,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
         log.error("Data integrity violation: {}", ex.getMessage());
         return createErrorResponse(HttpStatus.CONFLICT, "Conflict",
-                "Нарушение целостности данных. Операция отменена.");
+                "Data integrity violation. Operation rolled back.");
     }
 
     /**
@@ -149,7 +149,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
         log.warn("Конфликт оптимистичной блокировки: {}", ex.getMessage());
         return createErrorResponse(HttpStatus.CONFLICT, "Conflict",
-                "Данные были изменены другим пользователем. Пожалуйста, повторите запрос.");
+                "Data was modified by another user. Please retry.");
     }
 
     /**
@@ -199,7 +199,7 @@ public class GlobalExceptionHandler {
         // Для логина — не раскрываем существование аккаунта
         String message = ex.getMessage();
         if (message != null && (message.contains("Bad credentials") || message.contains("bad credentials"))) {
-            message = "Неверный email или пароль";
+            message = "Invalid email or password";
         }
         return createErrorResponse(HttpStatus.UNAUTHORIZED, "Unauthorized", message);
     }
@@ -216,7 +216,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<Map<String, Object>> handleNoResourceFound(NoResourceFoundException ex) {
         log.warn("Static resource not found: {}", ex.getResourcePath());
-        return createErrorResponse(HttpStatus.NOT_FOUND, "Not Found", "Ресурс не найден");
+        return createErrorResponse(HttpStatus.NOT_FOUND, "Not Found", "Resource not found");
     }
 
     /**
@@ -226,7 +226,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleMethodNotSupported(
             HttpRequestMethodNotSupportedException ex) {
         log.warn("Method not supported: {} {}", ex.getMethod(), ex.getMessage());
-        return createErrorResponse(HttpStatus.METHOD_NOT_ALLOWED, "Method Not Allowed", "Метод не поддерживается");
+        return createErrorResponse(HttpStatus.METHOD_NOT_ALLOWED, "Method Not Allowed", "Method not allowed");
     }
 
     /**
@@ -237,7 +237,7 @@ public class GlobalExceptionHandler {
 
         log.error("Unexpected error: {}", ex.getMessage(), ex);
 
-        return createErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", "Внутренняя ошибка сервера");
+        return createErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", "Internal server error");
     }
 
     /**

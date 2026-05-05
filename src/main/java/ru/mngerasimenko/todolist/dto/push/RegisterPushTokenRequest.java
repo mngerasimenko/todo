@@ -14,11 +14,11 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class RegisterPushTokenRequest {
 
-    @NotBlank(message = "FCM-токен обязателен")
+    @NotBlank(message = "FCM token is required")
     @JsonProperty("fcm_token")
     private String fcmToken;
 
-    @NotBlank(message = "ID устройства обязателен")
+    @NotBlank(message = "Device ID is required")
     @JsonProperty("device_id")
     private String deviceId;
 }
