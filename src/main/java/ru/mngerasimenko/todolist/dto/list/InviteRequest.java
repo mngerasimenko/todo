@@ -17,7 +17,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class InviteRequest {
 
-    @Email(message = "Некорректный формат email")
+    @Email(message = "Invalid email format")
     private String email;
 
     public void setEmail(String email) {

@@ -14,10 +14,10 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ResetPasswordRequest {
 
-    @NotBlank(message = "Токен обязателен")
+    @NotBlank(message = "Token is required")
     private String token;
 
-    @NotBlank(message = "Пароль обязателен")
-    @Size(min = 5, max = 128, message = "Пароль должен быть от 5 до 128 символов")
+    @NotBlank(message = "Password is required")
+    @Size(min = 5, max = 128, message = "Password must be between 5 and 128 characters")
     private String password;
 }

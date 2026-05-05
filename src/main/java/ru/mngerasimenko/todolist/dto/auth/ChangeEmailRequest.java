@@ -14,8 +14,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ChangeEmailRequest {
 
-    @NotBlank(message = "Email обязателен")
-    @Email(message = "Некорректный email")
+    @NotBlank(message = "Email is required")
+    @Email(message = "Invalid email format")
     private String email;
 
     public void setEmail(String email) {

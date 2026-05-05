@@ -20,9 +20,9 @@ public class LoginRequest {
     /**
      * Email пользователя
      */
-    @NotBlank(message = "Email не может быть пустым")
-    @Email(message = "Некорректный формат email")
-    @Size(max = 128, message = "Email не должен превышать 128 символов")
+    @NotBlank(message = "Email is required")
+    @Email(message = "Invalid email format")
+    @Size(max = 128, message = "Email must not exceed 128 characters")
     private String email;
 
     public void setEmail(String email) {
@@ -32,7 +32,7 @@ public class LoginRequest {
     /**
      * Пароль
      */
-    @NotBlank(message = "Пароль не может быть пустым")
-    @Size(min = 5, max = 128, message = "Пароль должен содержать от 5 до 128 символов")
+    @NotBlank(message = "Password is required")
+    @Size(min = 5, max = 128, message = "Password must be between 5 and 128 characters")
     private String password;
 }

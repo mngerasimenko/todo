@@ -17,8 +17,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class CreateListRequest {
 
-    @NotBlank(message = "Название списка обязательно")
-    @Size(min = 2, max = 128, message = "Название списка должно быть от 2 до 128 символов")
-    @Pattern(regexp = "^[^<>]*$", message = "Название содержит недопустимые символы")
+    @NotBlank(message = "List name is required")
+    @Size(min = 2, max = 128, message = "List name must be between 2 and 128 characters")
+    @Pattern(regexp = "^[^<>]*$", message = "Name contains invalid characters")
     private String name;
 }
