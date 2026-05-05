@@ -20,15 +20,8 @@ public class MessageService {
     private final MessageSource messageSource;
 
     /**
-     * Возвращает локализованную строку по ключу.
+     * Возвращает локализованную строку по ключу с опциональными параметрами для подстановки {@code {0}}, {@code {1}}, ...
      * Если ключ не найден — возвращает сам ключ (для упрощения отладки в шаблонах).
-     */
-    public String getMessage(String key, Locale locale) {
-        return getMessage(key, locale, (Object[]) null);
-    }
-
-    /**
-     * Возвращает локализованную строку по ключу с параметрами для подстановки {@code {0}}, {@code {1}}, ...
      */
     public String getMessage(String key, Locale locale, Object... args) {
         try {
