@@ -56,6 +56,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
+        <!-- Thymeleaf — рендеринг HTML email-шаблонов с поддержкой i18n MessageSource -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-thymeleaf</artifactId>
+        </dependency>
         <!-- Monitoring -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
