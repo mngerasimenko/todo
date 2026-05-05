@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html xmlns:th="http://www.thymeleaf.org" th:lang="${#locale.language}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Список задач — Напоминание</title>
+    <title th:text="#{email.inactive.subject}">Список задач — Напоминание</title>
 </head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;">
@@ -13,25 +13,25 @@
                 <!-- Header -->
                 <tr>
                     <td style="background:linear-gradient(135deg,#22c55e 0%,#16a34a 100%);padding:28px 32px;text-align:center;">
-                        <h1 style="color:#ffffff;font-size:20px;font-weight:800;margin:0;">Список задач</h1>
-                        <p style="color:rgba(255,255,255,0.85);font-size:13px;margin:4px 0 0;">Мы скучаем!</p>
+                        <h1 style="color:#ffffff;font-size:20px;font-weight:800;margin:0;" th:text="#{app.name}">Список задач</h1>
+                        <p style="color:rgba(255,255,255,0.85);font-size:13px;margin:4px 0 0;" th:text="#{email.inactive.banner}">Мы скучаем!</p>
                     </td>
                 </tr>
                 <!-- Body -->
                 <tr>
                     <td style="padding:32px 28px;text-align:center;">
-                        <img src="https://todo.keepware.ru/icon-512-rustore.png?v=1" alt="Список задач" width="64" height="64" style="display:block;margin:0 auto 16px;border-radius:14px;" />
-                        <p style="color:#1f2937;font-size:15px;line-height:1.6;margin:0 0 16px;text-align:left;">
-                            Привет, {{userName}}!
+                        <img src="https://todo.keepware.ru/icon-512-rustore.png?v=1" th:alt="#{email.inactive.image_alt}" alt="Список задач" width="64" height="64" style="display:block;margin:0 auto 16px;border-radius:14px;" />
+                        <p style="color:#1f2937;font-size:15px;line-height:1.6;margin:0 0 16px;text-align:left;" th:text="#{email.inactive.greeting(${userName})}">
+                            Привет, друг!
                         </p>
-                        <p style="color:#6b7280;font-size:14px;line-height:1.6;margin:0 0 24px;">
-                            Вы не заходили в приложение уже несколько дней. Ваши списки ждут — может, пора отметить выполненные задачи или добавить новые?
+                        <p style="color:#6b7280;font-size:14px;line-height:1.6;margin:0 0 24px;" th:text="#{email.inactive.body}">
+                            Вы не заходили в приложение уже несколько дней.
                         </p>
                         <!-- CTA Button -->
                         <table width="100%" cellpadding="0" cellspacing="0">
                             <tr>
                                 <td align="center" style="padding-bottom:24px;">
-                                    <a href="{{trackClickLink}}" style="display:inline-block;background:linear-gradient(135deg,#22c55e,#16a34a);color:#ffffff;font-size:15px;font-weight:700;padding:14px 36px;border-radius:12px;text-decoration:none;">
+                                    <a th:href="${trackClickLink}" href="#" style="display:inline-block;background:linear-gradient(135deg,#22c55e,#16a34a);color:#ffffff;font-size:15px;font-weight:700;padding:14px 36px;border-radius:12px;text-decoration:none;" th:text="#{email.inactive.button}">
                                         Открыть приложение →
                                     </a>
                                 </td>
@@ -39,22 +39,22 @@
                         </table>
                         <!-- RuStore link -->
                         <p style="color:#9ca3af;font-size:12px;line-height:1.5;margin:0;text-align:center;">
-                            Или скачайте обновление в
-                            <a href="{{rustoreLink}}" style="color:#22c55e;text-decoration:underline;">RuStore</a>
+                            <span th:text="#{email.inactive.rustore_prefix}">Или скачайте обновление в</span>
+                            <a th:href="${rustoreLink}" href="#" style="color:#22c55e;text-decoration:underline;" th:text="#{email.inactive.rustore_link}">RuStore</a>
                         </p>
                     </td>
                 </tr>
                 <!-- Footer -->
                 <tr>
                     <td style="background:#f9fafb;padding:20px 28px;text-align:center;border-top:1px solid #e5e7eb;">
-                        <p style="color:#9ca3af;font-size:11px;margin:0;">
+                        <p style="color:#9ca3af;font-size:11px;margin:0;" th:text="#{email.inactive.footer}">
                             Это автоматическое напоминание от приложения «Список задач»
                         </p>
                     </td>
                 </tr>
             </table>
             <!-- Tracking pixel -->
-            <img src="{{trackOpenLink}}" width="1" height="1" alt="" style="display:none;" />
+            <img th:src="${trackOpenLink}" src="" width="1" height="1" alt="" style="display:none;" />
         </td>
     </tr>
 </table>
