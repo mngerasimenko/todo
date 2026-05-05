@@ -120,4 +120,17 @@ class EmailServiceImplTest {
         verify(mailSender).send(mimeMessage);
         verify(templateEngine).process(eq("inactive-reminder"), any(Context.class));
     }
+
+    @Test
+    void sendInactiveReminderEmail_NullUserName_LooksUpFallbackInMessageService() {
+        MimeMessage mimeMessage = mock(MimeMessage.class);
+        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+
+        emailService.sendInactiveReminderEmail("user@example.com", null, 1L);
+
+        // При userName=null сервис обязан подтянуть fallback-имя из messages_*.properties,
+        // чтобы письмо оставалось локализованным (раньше было hardcoded "друг").
+        verify(messageService).getMessage(eq("email.inactive.fallback_name"), any(Locale.class));
+        verify(mailSender).send(mimeMessage);
+    }
 }
