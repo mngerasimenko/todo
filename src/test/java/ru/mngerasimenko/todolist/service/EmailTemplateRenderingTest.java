@@ -52,7 +52,9 @@ class EmailTemplateRenderingTest {
             resolver.setSuffix(".html");
             resolver.setTemplateMode(TemplateMode.HTML);
             resolver.setCharacterEncoding(StandardCharsets.UTF_8.name());
-            resolver.setCacheable(false);
+            // Cache enabled — matches production (spring.thymeleaf.cache=true) and SmtpSendTest;
+            // each test renders a unique (template, locale) pair so caching has no observable effect.
+            resolver.setCacheable(true);
             return resolver;
         }
 
