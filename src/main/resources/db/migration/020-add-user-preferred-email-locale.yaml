@@ -1,0 +1,21 @@
+databaseChangeLog:
+  - changeSet:
+      id: 020-add-user-preferred-email-locale
+      author: mngerasimenko
+      comment: "R-3 (B.6): per-user email locale, default 'ru' for backward compatibility. Set on register from RegisterRequest.locale or Accept-Language header"
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: todo_users
+                columnName: preferred_email_locale
+      changes:
+        - addColumn:
+            tableName: todo_users
+            columns:
+              - column:
+                  name: preferred_email_locale
+                  type: varchar(8)
+                  defaultValue: ru
+                  constraints:
+                    nullable: false

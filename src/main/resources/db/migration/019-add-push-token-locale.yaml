@@ -1,0 +1,21 @@
+databaseChangeLog:
+  - changeSet:
+      id: 019-add-push-token-locale
+      author: mngerasimenko
+      comment: "R-3 (B.5): per-token locale for FCM notifications, default 'ru' for backward compatibility"
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: push_token
+                columnName: locale
+      changes:
+        - addColumn:
+            tableName: push_token
+            columns:
+              - column:
+                  name: locale
+                  type: varchar(8)
+                  defaultValue: ru
+                  constraints:
+                    nullable: false
