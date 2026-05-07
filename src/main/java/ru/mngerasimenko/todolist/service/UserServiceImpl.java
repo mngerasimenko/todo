@@ -84,13 +84,17 @@ public class UserServiceImpl implements UserService {
             } else {
                 // Есть другие участники
                 if (membership.getRole() == TaskListRole.ADMIN) {
-                    // Передаём ADMIN первому другому участнику и сохраняем до JPQL-запросов
+                    // Передаём ADMIN первому другому участнику и сохраняем до JPQL-запросов.
+                    // Также передаём creator списка на этого же пользователя — иначе FK
+                    // fk_task_list_creator блокирует delete user (пользователь остаётся
+                    // creator-ом list, и БД не даёт удалить его строку).
                     allMembers.stream()
                             .filter(m -> !m.getUser().getId().equals(id))
                             .findFirst()
                             .ifPresent(m -> {
                                 m.setRole(TaskListRole.ADMIN);
                                 taskListUserRepository.saveAndFlush(m);
+                                taskListRepository.updateCreator(listId, m.getUser().getId());
                             });
                 }
                 // Удаляем приватные задачи пользователя в этом списке
