@@ -62,7 +62,7 @@ class AdminServiceImplTest {
         assertThat(response.isEmailSent()).isTrue();
 
         verify(pushNotificationService).sendInactiveReminderPush(42L, "Target");
-        verify(emailService).sendInactiveReminderEmail("target@mail.ru", "Target", 42L);
+        verify(emailService).sendInactiveReminderEmail(eq("target@mail.ru"), eq("Target"), eq(42L), any());
         verify(userService).markReminderSent(42L);
     }
 
@@ -92,7 +92,7 @@ class AdminServiceImplTest {
         assertThat(response.isPushSent()).isFalse();
         assertThat(response.isEmailSent()).isTrue();
 
-        verify(emailService).sendInactiveReminderEmail("target@mail.ru", "Target", 42L);
+        verify(emailService).sendInactiveReminderEmail(eq("target@mail.ru"), eq("Target"), eq(42L), any());
         verify(userService).markReminderSent(42L);
     }
 
@@ -100,7 +100,7 @@ class AdminServiceImplTest {
     void triggerInactiveReminder_emailFails_StillReturnsPushSentAndMarks() {
         when(userService.getUserByEmail("target@mail.ru")).thenReturn(user);
         doThrow(new RuntimeException("smtp down"))
-                .when(emailService).sendInactiveReminderEmail("target@mail.ru", "Target", 42L);
+                .when(emailService).sendInactiveReminderEmail(eq("target@mail.ru"), eq("Target"), eq(42L), any());
 
         InactiveReminderTriggerResponse response = adminService.triggerInactiveReminder("target@mail.ru");
 

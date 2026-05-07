@@ -59,7 +59,7 @@ class EmailServiceImplTest {
         MimeMessage mimeMessage = mock(MimeMessage.class);
         when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
 
-        emailService.sendVerificationEmail("user@example.com", "test-token-123");
+        emailService.sendVerificationEmail("user@example.com", "test-token-123", "ru");
 
         verify(mailSender).createMimeMessage();
         verify(mailSender).send(mimeMessage);
@@ -71,7 +71,7 @@ class EmailServiceImplTest {
         MimeMessage mimeMessage = mock(MimeMessage.class);
         when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
 
-        emailService.sendPasswordResetEmail("user@example.com", "reset-token-456");
+        emailService.sendPasswordResetEmail("user@example.com", "reset-token-456", "ru");
 
         verify(mailSender).createMimeMessage();
         verify(mailSender).send(mimeMessage);
@@ -85,7 +85,7 @@ class EmailServiceImplTest {
         doThrow(new RuntimeException("SMTP error")).when(mailSender).send(any(MimeMessage.class));
 
         // Не должен бросать исключение — ошибка логируется
-        emailService.sendVerificationEmail("user@example.com", "test-token");
+        emailService.sendVerificationEmail("user@example.com", "test-token", "ru");
 
         verify(mailSender).send(mimeMessage);
     }
@@ -96,7 +96,7 @@ class EmailServiceImplTest {
         when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
         doThrow(new RuntimeException("SMTP error")).when(mailSender).send(any(MimeMessage.class));
 
-        emailService.sendPasswordResetEmail("user@example.com", "reset-token");
+        emailService.sendPasswordResetEmail("user@example.com", "reset-token", "ru");
 
         verify(mailSender).send(mimeMessage);
     }
@@ -114,7 +114,7 @@ class EmailServiceImplTest {
         MimeMessage mimeMessage = mock(MimeMessage.class);
         when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
 
-        emailService.sendInactiveReminderEmail("user@example.com", "Иван", 1L);
+        emailService.sendInactiveReminderEmail("user@example.com", "Иван", 1L, "ru");
 
         verify(mailSender).createMimeMessage();
         verify(mailSender).send(mimeMessage);
@@ -126,7 +126,7 @@ class EmailServiceImplTest {
         MimeMessage mimeMessage = mock(MimeMessage.class);
         when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
 
-        emailService.sendInactiveReminderEmail("user@example.com", null, 1L);
+        emailService.sendInactiveReminderEmail("user@example.com", null, 1L, "ru");
 
         // При userName=null сервис обязан подтянуть fallback-имя из messages_*.properties,
         // чтобы письмо оставалось локализованным (раньше было hardcoded "друг").

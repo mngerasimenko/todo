@@ -243,9 +243,12 @@ public class TaskListServiceImpl implements TaskListService {
 
         String inviteLink = emailProperties.getBaseUrl() + "/invite/" + rawToken;
 
-        // Отправка email, если указан получатель
+        // Отправка email, если указан получатель.
+        // Локаль берём от inviter — приглашаемый может ещё не иметь аккаунта,
+        // и эвристика "у inviter и invitee одинаковый язык" обычно срабатывает.
         if (recipientEmail != null && !recipientEmail.isBlank()) {
-            emailService.sendInviteEmail(recipientEmail, inviteLink, taskList.getName(), inviter.getName());
+            emailService.sendInviteEmail(recipientEmail, inviteLink, taskList.getName(),
+                    inviter.getName(), inviter.getPreferredEmailLocale());
         }
 
         log.info("Создано приглашение: listId={}, inviterId={}, email={}", listId, userId, maskEmail(recipientEmail));

@@ -34,9 +34,9 @@ import static ru.mngerasimenko.todolist.util.LogUtils.maskEmail;
 public class EmailServiceImpl implements EmailService {
 
     /**
-     * Локаль для всех писем до B.6. Совпадает с прежним поведением (всё на русском).
+     * Fallback-локаль для писем — используется если caller передал null/blank.
      */
-    private static final Locale DEFAULT_LOCALE = Locale.forLanguageTag("ru");
+    private static final String DEFAULT_LOCALE_TAG = "ru";
 
     private final JavaMailSender mailSender;
     private final EmailProperties emailProperties;
@@ -48,8 +48,8 @@ public class EmailServiceImpl implements EmailService {
 
     @Override
     @Async
-    public void sendVerificationEmail(String email, String token) {
-        Locale locale = DEFAULT_LOCALE;
+    public void sendVerificationEmail(String email, String token, String localeTag) {
+        Locale locale = resolveLocale(localeTag);
         String link = emailProperties.getBaseUrl() + "/verify-email?token=" + token;
         int ttlHours = emailProperties.getVerificationTokenTtlHours();
         String html = renderTemplate("email-verification", locale, Map.of(
@@ -61,8 +61,8 @@ public class EmailServiceImpl implements EmailService {
 
     @Override
     @Async
-    public void sendPasswordResetEmail(String email, String token) {
-        Locale locale = DEFAULT_LOCALE;
+    public void sendPasswordResetEmail(String email, String token, String localeTag) {
+        Locale locale = resolveLocale(localeTag);
         String link = emailProperties.getBaseUrl() + "/reset-password?token=" + token;
         int ttlHours = emailProperties.getResetTokenTtlHours();
         String html = renderTemplate("password-reset", locale, Map.of(
@@ -74,8 +74,8 @@ public class EmailServiceImpl implements EmailService {
 
     @Override
     @Async
-    public void sendInviteEmail(String email, String inviteLink, String listName, String inviterName) {
-        Locale locale = DEFAULT_LOCALE;
+    public void sendInviteEmail(String email, String inviteLink, String listName, String inviterName, String localeTag) {
+        Locale locale = resolveLocale(localeTag);
         int ttlHours = emailProperties.getInviteTokenTtlHours();
         String safeListName = HtmlUtils.htmlEscape(listName);
         String safeInviterName = HtmlUtils.htmlEscape(inviterName);
@@ -92,8 +92,8 @@ public class EmailServiceImpl implements EmailService {
 
     @Override
     @Async
-    public void sendInactiveReminderEmail(String email, String userName, Long userId) {
-        Locale locale = DEFAULT_LOCALE;
+    public void sendInactiveReminderEmail(String email, String userName, Long userId, String localeTag) {
+        Locale locale = resolveLocale(localeTag);
         String fallback = messageService.getMessage("email.inactive.fallback_name", locale);
         String safeName = HtmlUtils.htmlEscape(userName != null ? userName : fallback);
         String baseUrl = emailProperties.getBaseUrl();
@@ -107,6 +107,17 @@ public class EmailServiceImpl implements EmailService {
                 "trackOpenLink", trackOpenLink
         ));
         sendHtmlEmail(email, messageService.getMessage("email.inactive.subject", locale), html);
+    }
+
+    /**
+     * Резолв локали из BCP-47 строки. Null/blank → "ru". Невалидный тэг (e.g. "*")
+     * остаётся как есть — MessageSource сам сделает fallback на default.
+     */
+    private Locale resolveLocale(String localeTag) {
+        if (localeTag == null || localeTag.isBlank()) {
+            return Locale.forLanguageTag(DEFAULT_LOCALE_TAG);
+        }
+        return Locale.forLanguageTag(localeTag);
     }
 
     @Override
