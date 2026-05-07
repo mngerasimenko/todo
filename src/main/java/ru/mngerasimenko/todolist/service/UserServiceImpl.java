@@ -424,6 +424,18 @@ public class UserServiceImpl implements UserService {
         evictUserCache(normalizedEmail);
     }
 
+    @Override
+    @Transactional
+    public void updateEmailLocale(Long userId, String locale) {
+        User user = repository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
+        user.setPreferredEmailLocale(locale);
+        repository.saveAndFlush(user);
+        log.info("Email locale изменён: userId={}, locale={}", userId, locale);
+        // Evict кэша users-me — следующий запрос /api/users/me получит обновлённое поле
+        evictUserCache(user.getEmail());
+    }
+
     @Transactional(readOnly = true)
     public boolean existsByEmail(String email) {
         return repository.findByEmailHash(cryptoService.blindIndex(email.toLowerCase())) != null;
