@@ -73,7 +73,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"email\": \"runner_{{runId}}@example.com\",\n  \"name\": \"runner_{{runId}}\",\n  \"password\": \"runner_{{runId}}\"\n}"
+							"raw": "{\n  \"email\": \"runner_{{runId}}@example.com\",\n  \"name\": \"runner_{{runId}}\",\n  \"password\": \"runner_{{runId}}\",\n  \"locale\": \"ru\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/auth/register",
@@ -503,6 +503,57 @@
 							]
 						},
 						"description": "Перелогин с новым email после Change Email. Обновляет accessToken/refreshToken — без этого все защищённые запросы дальше по коллекции получат 401, потому что предыдущий JWT-токен подписан старым email-ом, а в БД email уже новый."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Email Locale",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status 204\", function () { pm.response.to.have.status(204); });"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"locale\": \"en\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/users/me/email-locale",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"users",
+								"me",
+								"email-locale"
+							]
+						},
+						"description": "Сменить язык email-уведомлений текущего пользователя (R-3 phase B.6). Влияет на verify / reset / invite / inactive-reminder. Локаль в формате BCP-47 (e.g. \"ru\", \"en\"), max 8 символов, NotBlank.\n\n**Ошибки:** `400` (валидация), `401` (нет авторизации)."
 					},
 					"response": []
 				}
