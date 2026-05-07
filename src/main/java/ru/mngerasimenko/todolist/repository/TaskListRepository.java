@@ -23,6 +23,17 @@ public interface TaskListRepository extends JpaRepository<TaskList, Long> {
     @Query("DELETE FROM TaskList t WHERE t.id = :listId")
     void deleteByListId(@Param("listId") Long listId);
 
+    /**
+     * Передать роль creator списка другому пользователю.
+     * <p>
+     * Вызывается из {@code UserServiceImpl.delete()} при удалении аккаунта
+     * пользователя, который был создателем shared-списка с другими участниками
+     * — иначе FK {@code fk_task_list_creator} блокирует удаление user-а.
+     */
+    @Modifying
+    @Query("UPDATE TaskList t SET t.creator.id = :newCreatorId WHERE t.id = :listId")
+    void updateCreator(@Param("listId") Long listId, @Param("newCreatorId") Long newCreatorId);
+
     long countByCreatedAtAfter(LocalDateTime since);
 
     /**
