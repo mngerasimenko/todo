@@ -481,7 +481,7 @@ class TaskListServiceImplTest {
         assertThat(result.getInviteLink()).startsWith("https://todo.keepware.ru/invite/");
         assertThat(result.getExpiresAt()).isAfter(LocalDateTime.now().plusHours(23));
         verify(inviteTokenRepository).save(any(InviteToken.class));
-        verify(emailService, never()).sendInviteEmail(anyString(), anyString(), anyString(), anyString());
+        verify(emailService, never()).sendInviteEmail(anyString(), anyString(), anyString(), anyString(), anyString());
     }
 
     @Test
@@ -495,7 +495,7 @@ class TaskListServiceImplTest {
         InviteResponse result = taskListService.createInvite(10L, 1L, "friend@mail.ru");
 
         assertThat(result).isNotNull();
-        verify(emailService).sendInviteEmail(eq("friend@mail.ru"), anyString(), eq("TestList"), eq("testuser"));
+        verify(emailService).sendInviteEmail(eq("friend@mail.ru"), anyString(), eq("TestList"), eq("testuser"), anyString());
     }
 
     @Test

@@ -221,6 +221,13 @@ public class UserServiceImpl implements UserService {
             user.setAuthId(uuid.toString());
         }
 
+        // Язык писем: контроллер передаёт уже резолвленную локаль
+        // (RegisterRequest.locale → Accept-Language → "ru"). Защитный fallback на null.
+        if (userDto.getPreferredEmailLocale() != null && !userDto.getPreferredEmailLocale().isBlank()) {
+            user.setPreferredEmailLocale(userDto.getPreferredEmailLocale());
+        }
+        // Иначе остаётся default из Entity field initializer ("ru")
+
         // Хэшируем пароль перед сохранением
         user.setPassword(passwordEncoder.encode(user.getPassword()));
 
@@ -237,7 +244,7 @@ public class UserServiceImpl implements UserService {
             log.info("Создан пользователь: id={}, name='{}'", savedUser.getId(), savedUser.getName());
 
             // Отправка письма верификации (асинхронно)
-            emailService.sendVerificationEmail(savedUser.getEmail(), rawToken);
+            emailService.sendVerificationEmail(savedUser.getEmail(), rawToken, savedUser.getPreferredEmailLocale());
 
             return mapper.toDto(savedUser);
         } catch (DataIntegrityViolationException e) {
@@ -330,7 +337,7 @@ public class UserServiceImpl implements UserService {
         user.setEmailVerificationExpiresAt(
                 LocalDateTime.now().plusHours(emailProperties.getVerificationTokenTtlHours()));
         repository.save(user);
-        emailService.sendVerificationEmail(user.getEmail(), rawToken);
+        emailService.sendVerificationEmail(user.getEmail(), rawToken, user.getPreferredEmailLocale());
         log.info("Повторное письмо верификации отправлено: userId={}", userId);
         // Evict не нужен: меняются только поля emailVerificationToken/ExpiresAt,
         // которые не используются в auth-путях и /api/users/me.
@@ -349,7 +356,7 @@ public class UserServiceImpl implements UserService {
         user.setPasswordResetExpiresAt(
                 LocalDateTime.now().plusHours(emailProperties.getResetTokenTtlHours()));
         repository.save(user);
-        emailService.sendPasswordResetEmail(user.getEmail(), rawToken);
+        emailService.sendPasswordResetEmail(user.getEmail(), rawToken, user.getPreferredEmailLocale());
         log.info("Письмо сброса пароля отправлено: userId={}", user.getId());
         // Evict не нужен: меняются только поля passwordResetToken/ExpiresAt,
         // которые не используются в auth-путях и /api/users/me.
@@ -408,13 +415,25 @@ public class UserServiceImpl implements UserService {
             throw new IllegalArgumentException("Email " + newEmail + " уже используется");
         }
 
-        // Отправляем письмо верификации на новый email
-        emailService.sendVerificationEmail(newEmail, rawToken);
+        // Отправляем письмо верификации на новый email (язык — из preferredEmailLocale пользователя)
+        emailService.sendVerificationEmail(newEmail, rawToken, user.getPreferredEmailLocale());
         log.info("Email изменён: userId={}, newEmail={}", userId, maskEmail(newEmail));
 
         // Evict кэша по старому и новому email
         evictUserCache(oldEmail);
         evictUserCache(normalizedEmail);
+    }
+
+    @Override
+    @Transactional
+    public void updateEmailLocale(Long userId, String locale) {
+        User user = repository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
+        user.setPreferredEmailLocale(locale);
+        repository.saveAndFlush(user);
+        log.info("Email locale изменён: userId={}, locale={}", userId, locale);
+        // Evict кэша users-me — следующий запрос /api/users/me получит обновлённое поле
+        evictUserCache(user.getEmail());
     }
 
     @Transactional(readOnly = true)

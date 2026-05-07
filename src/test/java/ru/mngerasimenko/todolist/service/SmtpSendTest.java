@@ -25,14 +25,14 @@ class SmtpSendTest {
     void sendTestVerificationEmail() {
         EmailServiceImpl emailService = createEmailService();
         String token = UUID.randomUUID().toString();
-        emailService.sendVerificationEmail("mngerasimenko@gmail.com", token);
+        emailService.sendVerificationEmail("mngerasimenko@gmail.com", token, "ru");
     }
 
     @Test
     void sendTestPasswordResetEmail() {
         EmailServiceImpl emailService = createEmailService();
         String token = UUID.randomUUID().toString();
-        emailService.sendPasswordResetEmail("mngeras@yandex.ru", token);
+        emailService.sendPasswordResetEmail("mngeras@yandex.ru", token, "ru");
     }
 
     private EmailServiceImpl createEmailService() {

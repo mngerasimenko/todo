@@ -35,3 +35,7 @@ databaseChangeLog:
       file: db/migration/017-encryption-fields.yaml
   - include:
       file: db/migration/018-email-hash-not-null.yaml
+  - include:
+      file: db/migration/019-add-push-token-locale.yaml
+  - include:
+      file: db/migration/020-add-user-preferred-email-locale.yaml

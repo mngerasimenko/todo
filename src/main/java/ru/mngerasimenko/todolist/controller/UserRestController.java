@@ -13,6 +13,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import ru.mngerasimenko.todolist.dto.SubscriptionStatusResponse;
 import ru.mngerasimenko.todolist.dto.UpdateColorsRequest;
+import ru.mngerasimenko.todolist.dto.UpdateEmailLocaleRequest;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.dto.UserRequest;
 import ru.mngerasimenko.todolist.dto.UserResponse;
@@ -139,7 +140,12 @@ public class UserRestController {
             @AuthenticationPrincipal UserDetails userDetails,
             @Valid @RequestBody RegisterPushTokenRequest request) {
         UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
-        pushNotificationService.registerToken(currentUser.getId(), request.getFcmToken(), request.getDeviceId());
+        pushNotificationService.registerToken(
+                currentUser.getId(),
+                request.getFcmToken(),
+                request.getDeviceId(),
+                request.getLocale()
+        );
         return ResponseEntity.ok().build();
     }
 
@@ -150,6 +156,19 @@ public class UserRestController {
             @PathVariable String deviceId) {
         UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
         pushNotificationService.removeToken(currentUser.getId(), deviceId);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Сменить язык email-уведомлений текущего пользователя.
+     * Влияет на все будущие письма (verify / reset / invite / inactive-reminder).
+     */
+    @PatchMapping("/me/email-locale")
+    public ResponseEntity<Void> updateEmailLocale(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @Valid @RequestBody UpdateEmailLocaleRequest request) {
+        UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
+        userService.updateEmailLocale(currentUser.getId(), request.getLocale());
         return ResponseEntity.noContent().build();
     }
 

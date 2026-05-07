@@ -61,4 +61,12 @@ public class UserDto {
 
     @JsonProperty("is_beta_tester")
     private Boolean betaTester;
+
+    /**
+     * Язык писем пользователя в формате BCP-47 (e.g. "ru", "en").
+     * Устанавливается при регистрации, меняется через PATCH /api/users/me/email-locale.
+     */
+    @JsonProperty("preferred_email_locale")
+    @Size(max = 8)
+    private String preferredEmailLocale;
 }

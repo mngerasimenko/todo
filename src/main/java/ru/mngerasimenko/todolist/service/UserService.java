@@ -69,6 +69,12 @@ public interface UserService {
     /** Смена email с повторной верификацией */
     void changeEmail(Long userId, String newEmail);
 
+    /**
+     * Сменить язык email-уведомлений пользователя.
+     * Влияет на все будущие письма (verify, reset, invite, inactive-reminder).
+     */
+    void updateEmailLocale(Long userId, String locale);
+
     /** Обновить время последней активности пользователя */
     void updateLastActiveAt(Long userId);
 

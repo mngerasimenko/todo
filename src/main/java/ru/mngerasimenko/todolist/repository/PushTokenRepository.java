@@ -23,19 +23,14 @@ public interface PushTokenRepository extends JpaRepository<PushToken, Long> {
     List<PushToken> findByUserId(Long userId);
 
     /**
-     * Все FCM-токены участников списка (кроме указанного пользователя).
+     * Все push-токены участников списка (кроме указанного пользователя).
      * Используется для отправки push всем участникам кроме автора действия.
+     * Возвращает полный entity (включая {@code locale}) для per-token локализации.
      */
-    @Query("SELECT pt.fcmToken FROM PushToken pt " +
+    @Query("SELECT pt FROM PushToken pt " +
             "JOIN TaskListUser tlu ON tlu.user.id = pt.user.id " +
             "WHERE tlu.id.listId = :listId AND pt.user.id != :excludeUserId")
-    List<String> findFcmTokensByListIdExcludingUser(Long listId, Long excludeUserId);
-
-    /**
-     * Все FCM-токены конкретного пользователя (для персональных уведомлений).
-     */
-    @Query("SELECT pt.fcmToken FROM PushToken pt WHERE pt.user.id = :userId")
-    List<String> findFcmTokensByUserId(Long userId);
+    List<PushToken> findByListIdExcludingUser(Long listId, Long excludeUserId);
 
     /**
      * Найти токен по FCM-токену (для удаления невалидных).

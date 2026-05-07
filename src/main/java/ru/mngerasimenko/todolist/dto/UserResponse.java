@@ -48,4 +48,11 @@ public class UserResponse {
 
     @JsonProperty("is_beta_tester")
     private Boolean betaTester;
+
+    /**
+     * Язык писем пользователя (BCP-47, e.g. "ru", "en"). Возвращается в /api/users/me
+     * и в LoginResponse — клиенты используют для отображения текущей настройки в Settings.
+     */
+    @JsonProperty("preferred_email_locale")
+    private String preferredEmailLocale;
 }
