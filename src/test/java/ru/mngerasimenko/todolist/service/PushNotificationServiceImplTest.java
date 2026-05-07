@@ -40,6 +40,9 @@ class PushNotificationServiceImplTest {
     @Mock
     private FeatureFlagStore flagStore;
 
+    @Mock
+    private MessageService messageService;
+
     @InjectMocks
     private PushNotificationServiceImpl pushNotificationService;
 
@@ -54,11 +57,11 @@ class PushNotificationServiceImplTest {
     @Test
     void sendInactiveReminderPush_NoTokens_DoesNotSend() {
         // У пользователя нет push-токенов — метод должен завершиться без ошибок
-        when(pushTokenRepository.findFcmTokensByUserId(1L)).thenReturn(Collections.emptyList());
+        when(pushTokenRepository.findByUserId(1L)).thenReturn(Collections.emptyList());
 
         pushNotificationService.sendInactiveReminderPush(1L, "Иван");
 
-        verify(pushTokenRepository).findFcmTokensByUserId(1L);
+        verify(pushTokenRepository).findByUserId(1L);
         // Firebase не вызывается, исключений нет
         verifyNoMoreInteractions(pushTokenRepository);
     }
