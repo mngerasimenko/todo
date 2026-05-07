@@ -139,7 +139,12 @@ public class UserRestController {
             @AuthenticationPrincipal UserDetails userDetails,
             @Valid @RequestBody RegisterPushTokenRequest request) {
         UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
-        pushNotificationService.registerToken(currentUser.getId(), request.getFcmToken(), request.getDeviceId());
+        pushNotificationService.registerToken(
+                currentUser.getId(),
+                request.getFcmToken(),
+                request.getDeviceId(),
+                request.getLocale()
+        );
         return ResponseEntity.ok().build();
     }
 

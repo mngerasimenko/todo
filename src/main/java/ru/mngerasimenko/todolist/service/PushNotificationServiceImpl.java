@@ -42,25 +42,29 @@ public class PushNotificationServiceImpl implements PushNotificationService {
 
     @Override
     @Transactional
-    public void registerToken(Long userId, String fcmToken, String deviceId) {
+    public void registerToken(Long userId, String fcmToken, String deviceId, String locale) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found: " + userId));
+
+        // Fallback на "ru" для старых Android-клиентов, которые не шлют поле locale
+        String effectiveLocale = (locale == null || locale.isBlank()) ? "ru" : locale;
 
         PushToken pushToken = pushTokenRepository.findByDeviceId(deviceId)
                 .orElse(null);
 
         if (pushToken != null) {
-            // Обновляем существующий токен (устройство могло сменить пользователя или токен)
+            // Обновляем существующий токен (устройство могло сменить пользователя, токен или язык)
             pushToken.setUser(user);
             pushToken.setFcmToken(fcmToken);
+            pushToken.setLocale(effectiveLocale);
             pushToken.setUpdatedAt(LocalDateTime.now());
             pushTokenRepository.save(pushToken);
-            log.info("Обновлён push-токен для устройства: deviceId={}, userId={}", deviceId, userId);
+            log.info("Обновлён push-токен для устройства: deviceId={}, userId={}, locale={}", deviceId, userId, effectiveLocale);
         } else {
             // Новое устройство
-            pushToken = new PushToken(user, fcmToken, deviceId);
+            pushToken = new PushToken(user, fcmToken, deviceId, effectiveLocale);
             pushTokenRepository.save(pushToken);
-            log.info("Зарегистрирован push-токен: deviceId={}, userId={}", deviceId, userId);
+            log.info("Зарегистрирован push-токен: deviceId={}, userId={}, locale={}", deviceId, userId, effectiveLocale);
         }
     }
 

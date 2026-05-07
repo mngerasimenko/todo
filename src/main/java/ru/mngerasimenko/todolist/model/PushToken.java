@@ -32,6 +32,14 @@ public class PushToken {
     @Column(name = "device_id", nullable = false, unique = true, length = 255)
     private String deviceId;
 
+    /**
+     * Язык push-уведомлений на этом устройстве (BCP-47, e.g. "ru", "en").
+     * Хранится per-token, потому что один пользователь может иметь устройства
+     * с разной системной локалью (планшет EN, телефон RU и т.п.).
+     */
+    @Column(name = "locale", nullable = false, length = 8)
+    private String locale = "ru";
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -41,10 +49,11 @@ public class PushToken {
     public PushToken() {
     }
 
-    public PushToken(User user, String fcmToken, String deviceId) {
+    public PushToken(User user, String fcmToken, String deviceId, String locale) {
         this.user = user;
         this.fcmToken = fcmToken;
         this.deviceId = deviceId;
+        this.locale = locale;
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }
@@ -81,6 +90,14 @@ public class PushToken {
 
     public void setDeviceId(String deviceId) {
         this.deviceId = deviceId;
+    }
+
+    public String getLocale() {
+        return locale;
+    }
+
+    public void setLocale(String locale) {
+        this.locale = locale;
     }
 
     public LocalDateTime getCreatedAt() {
