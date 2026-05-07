@@ -32,6 +32,7 @@ public class UserMapper {
                 .subscriptionType(user.getSubscriptionType())
                 .subscriptionExpiresAt(user.getSubscriptionExpiresAt())
                 .betaTester(user.isBetaTester())
+                .preferredEmailLocale(user.getPreferredEmailLocale())
                 .build();
     }
 
@@ -86,6 +87,7 @@ public class UserMapper {
                 .subscriptionType(dto.getSubscriptionType())
                 .subscriptionExpiresAt(dto.getSubscriptionExpiresAt())
                 .betaTester(dto.getBetaTester())
+                .preferredEmailLocale(dto.getPreferredEmailLocale())
                 .build();
     }
 }

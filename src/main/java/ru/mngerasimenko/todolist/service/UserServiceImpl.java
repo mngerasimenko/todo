@@ -221,6 +221,13 @@ public class UserServiceImpl implements UserService {
             user.setAuthId(uuid.toString());
         }
 
+        // Язык писем: контроллер передаёт уже резолвленную локаль
+        // (RegisterRequest.locale → Accept-Language → "ru"). Защитный fallback на null.
+        if (userDto.getPreferredEmailLocale() != null && !userDto.getPreferredEmailLocale().isBlank()) {
+            user.setPreferredEmailLocale(userDto.getPreferredEmailLocale());
+        }
+        // Иначе остаётся default из Entity field initializer ("ru")
+
         // Хэшируем пароль перед сохранением
         user.setPassword(passwordEncoder.encode(user.getPassword()));
 

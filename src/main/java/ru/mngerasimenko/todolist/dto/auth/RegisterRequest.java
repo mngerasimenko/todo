@@ -44,4 +44,12 @@ public class RegisterRequest {
     @NotBlank(message = "Password is required")
     @Size(min = 5, max = 128, message = "Password must be between 5 and 128 characters")
     private String password;
+
+    /**
+     * Язык писем для нового пользователя в формате BCP-47 (e.g. "ru", "en").
+     * Опциональное поле — если не указано, сервер использует Accept-Language
+     * заголовок запроса, fallback "ru" (см. UserServiceImpl.createUser).
+     */
+    @Size(max = 8, message = "Locale must not exceed 8 characters")
+    private String locale;
 }

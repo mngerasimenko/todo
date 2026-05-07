@@ -154,6 +154,15 @@ public class User {
     private int reminderCount = 0;
 
     /**
+     * Язык, на котором пользователь хочет получать email-письма (BCP-47).
+     * Устанавливается при регистрации (RegisterRequest.locale → Accept-Language → "ru").
+     * Меняется только через явный PATCH /api/users/me/email-locale (R-3 phase B.6).
+     * Не синхронизируется с UI-локалью приложения автоматически (по UX-решению).
+     */
+    @Column(name = "preferred_email_locale", nullable = false, length = 8)
+    private String preferredEmailLocale = "ru";
+
+    /**
      * Версия записи для оптимистичной блокировки.
      * Hibernate автоматически инкрементирует при каждом UPDATE.
      */
@@ -264,6 +273,14 @@ public class User {
 
     public void setVersion(Long version) {
         this.version = version;
+    }
+
+    public String getPreferredEmailLocale() {
+        return preferredEmailLocale;
+    }
+
+    public void setPreferredEmailLocale(String preferredEmailLocale) {
+        this.preferredEmailLocale = preferredEmailLocale;
     }
 
     public boolean isEmailVerified() {
