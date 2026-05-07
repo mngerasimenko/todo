@@ -100,7 +100,7 @@ public class TaskListServiceImpl implements TaskListService {
     @Transactional(readOnly = true)
     public List<ListMemberResponse> getMembers(Long listId, Long requestingUserId) {
         if (!taskListRepository.existsById(listId)) {
-            throw new ListNotFoundException("Список не найден. Возможно, он был удалён");
+            throw new ListNotFoundException("List not found. It may have been deleted");
         }
         if (!taskListUserRepository.existsByIdListIdAndIdUserId(listId, requestingUserId)) {
             throw new IllegalArgumentException("Вы не являетесь участником данного списка");
@@ -116,7 +116,7 @@ public class TaskListServiceImpl implements TaskListService {
     @Transactional(readOnly = true)
     public List<TodoDto> getTodosByList(Long listId, Long requestingUserId) {
         if (!taskListRepository.existsById(listId)) {
-            throw new ListNotFoundException("Список не найден. Возможно, он был удалён");
+            throw new ListNotFoundException("List not found. It may have been deleted");
         }
         if (!taskListUserRepository.existsByIdListIdAndIdUserId(listId, requestingUserId)) {
             throw new IllegalArgumentException("Вы не являетесь участником данного списка");
