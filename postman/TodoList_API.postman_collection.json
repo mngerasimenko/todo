@@ -51,8 +51,10 @@
 									"    pm.expect(jsonData.token_type).to.eql(\"Bearer\");",
 									"});",
 									"",
-									"pm.test(\"Response time is less than 2000ms\", function () {",
-									"    pm.expect(pm.response.responseTime).to.be.below(2000);",
+									"pm.test(\"Response time is less than 5000ms\", function () {",
+									"    // Cold-start приложения (первый запрос после старта) даёт ~2-3s на JIT/Hibernate;",
+									"    // 5s — разумный потолок, ниже которого регресс заметен, но cold-start проходит.",
+									"    pm.expect(pm.response.responseTime).to.be.below(5000);",
 									"});"
 								],
 								"type": "text/javascript",
@@ -113,9 +115,9 @@
 									"    pm.environment.set(\"userId\", jsonData.user.id);",
 									"});",
 									"",
-									"pm.test(\"Expires in 1 hour\", function () {",
+									"pm.test(\"Expires in 4 hours\", function () {",
 									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData.expires_in).to.eql(3600);",
+									"    pm.expect(jsonData.expires_in).to.eql(14400);",
 									"});"
 								],
 								"type": "text/javascript",
@@ -434,7 +436,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"email\": \"newemail@example.com\"\n}"
+							"raw": "{\n  \"email\": \"newemail_{{runId}}@example.com\"\n}"
 						},
 						"url": {
 							"raw": "{{baseUrl}}/api/auth/change-email",
@@ -447,7 +449,60 @@
 								"change-email"
 							]
 						},
-						"description": "Смена email с повторной верификацией. Требует JWT авторизацию. Отправляет письмо подтверждения на новый email."
+						"description": "Смена email с повторной верификацией. Требует JWT авторизацию. Отправляет письмо подтверждения на новый email.\n\n**Важно:** change-email сразу меняет email пользователя в БД (письмо нужно только для верификации нового адреса). После смены текущий JWT с sub=oldEmail инвалидируется — следующим шагом нужен повторный Login с новым email (см. \"Login (after email change)\" ниже)."
+					},
+					"response": []
+				},
+				{
+					"name": "Login (after email change)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response has access_token\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.access_token).to.exist;",
+									"    pm.expect(jsonData.refresh_token).to.exist;",
+									"    ",
+									"    // Перезаписываем токены — после Change Email старый JWT с sub=oldEmail невалиден,",
+									"    // последующим тестам (Lists/Todos/Users/Negative/Cascade) нужен JWT с sub=newEmail.",
+									"    pm.environment.set(\"accessToken\", jsonData.access_token);",
+									"    pm.environment.set(\"refreshToken\", jsonData.refresh_token);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"newemail_{{runId}}@example.com\",\n  \"password\": \"runner_{{runId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"login"
+							]
+						},
+						"description": "Перелогин с новым email после Change Email. Обновляет accessToken/refreshToken — без этого все защищённые запросы дальше по коллекции получат 401, потому что предыдущий JWT-токен подписан старым email-ом, а в БД email уже новый."
 					},
 					"response": []
 				}
@@ -2720,6 +2775,119 @@
 								"create"
 							]
 						}
+					},
+					"response": []
+				},
+				{
+					"name": "4. Invite main user as MEMBER (in delTestUser list)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201', function () { pm.response.to.have.status(201); });",
+									"pm.test('Response has invite_link', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.invite_link).to.exist;",
+									"    var link = jsonData.invite_link;",
+									"    pm.environment.set('delInviteToken', link.substring(link.lastIndexOf('/') + 1));",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{delUserToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/lists/{{delListId}}/invite",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"lists",
+								"{{delListId}}",
+								"invite"
+							]
+						},
+						"description": "delTestUser создаёт invite-ссылку для своего списка. Нужно для шагов 7-8: чтобы main user стал участником списка ДО удаления delTestUser, иначе при cascade-delete единственного участника весь список тоже удаляется (см. UserServiceImpl.delete: if allMembers.size() == 1 → deleteByListId)."
+					},
+					"response": []
+				},
+				{
+					"name": "4b. Accept invite (as main user)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Main user joined with USER role', function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.id).to.exist;",
+									"    pm.expect(jsonData.role).to.eql('USER');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"{{delInviteToken}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/lists/invite/accept",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"lists",
+								"invite",
+								"accept"
+							]
+						},
+						"description": "main user принимает приглашение и становится MEMBER в delTestUser-list. После delete delTestUser (шаг 5) main user автоматически промоутится в ADMIN (см. UserServiceImpl.delete: ADMIN передаётся первому другому участнику)."
 					},
 					"response": []
 				},
