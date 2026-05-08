@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy — Todo List</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', 'Segoe UI', Roboto, -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #f5f6fa;
+            color: #2d3436;
+            line-height: 1.7;
+        }
+        .container {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 40px 24px 80px;
+        }
+        .lang-switcher {
+            text-align: right;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+        .lang-switcher a {
+            color: #636e72;
+            padding: 4px 8px;
+            border-radius: 4px;
+            text-decoration: none;
+        }
+        .lang-switcher a.active {
+            color: #1a73e8;
+            font-weight: 600;
+            background: rgba(26, 115, 232, 0.08);
+        }
+        .lang-switcher span {
+            color: #b2bec3;
+            font-size: 12px;
+        }
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #1a73e8;
+        }
+        .date {
+            color: #636e72;
+            font-size: 14px;
+            margin-bottom: 32px;
+        }
+        h2 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-top: 32px;
+            margin-bottom: 12px;
+            color: #2d3436;
+        }
+        p, li {
+            font-size: 15px;
+            margin-bottom: 12px;
+        }
+        ul {
+            padding-left: 24px;
+            margin-bottom: 16px;
+        }
+        li { margin-bottom: 6px; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+            font-size: 14px;
+        }
+        th, td {
+            border: 1px solid #dfe6e9;
+            padding: 10px 14px;
+            text-align: left;
+        }
+        th {
+            background: #f1f2f6;
+            font-weight: 600;
+        }
+        a { color: #1a73e8; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .back {
+            display: inline-block;
+            margin-top: 32px;
+            padding: 10px 24px;
+            background: #1a73e8;
+            color: #fff;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .back:hover { background: #1557b0; text-decoration: none; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="lang-switcher">
+        <a href="/privacy">RU</a>
+        <span>·</span>
+        <a href="/privacy/en" class="active">EN</a>
+    </div>
+
+    <h1>Privacy Policy</h1>
+    <p class="date">Effective date: March 17, 2026</p>
+
+    <p>This Privacy Policy (the "Policy") describes how personal data of users is collected, processed, and protected on the "Todo List" service (the "Service"), available at <a href="https://todo.keepware.ru">todo.keepware.ru</a> and through the mobile application.</p>
+
+    <h2>1. Data Controller</h2>
+    <p>The data controller is Maksim Gerasimenko (the "Controller").</p>
+    <p>Contact email: <a href="mailto:mngeras@yandex.ru">mngeras@yandex.ru</a></p>
+
+    <h2>2. Data we collect</h2>
+    <table>
+        <tr><th>Data</th><th>Purpose</th><th>Legal basis</th></tr>
+        <tr><td>Email</td><td>Account registration, verification, password reset</td><td>User consent</td></tr>
+        <tr><td>Username</td><td>Identification in shared lists</td><td>User consent</td></tr>
+        <tr><td>Password (hash)</td><td>Authentication</td><td>Performance of contract</td></tr>
+        <tr><td>Tasks and task lists</td><td>Providing the core Service functionality</td><td>Performance of contract</td></tr>
+        <tr><td>IP address</td><td>Protection from abuse (rate limiting)</td><td>Legitimate interest</td></tr>
+    </table>
+
+    <h2>3. Purpose of processing</h2>
+    <p>Personal data is processed solely for the following purposes:</p>
+    <ul>
+        <li>Providing access to the Service and its features</li>
+        <li>Enabling collaboration between users on shared task lists</li>
+        <li>Email verification and account recovery</li>
+        <li>Security and abuse prevention</li>
+    </ul>
+
+    <h2>4. Data storage</h2>
+    <p>Personal data is stored on a server located in the Russian Federation, in compliance with applicable data protection laws (including Federal Law No. 152-FZ "On Personal Data").</p>
+    <p>Passwords are stored as BCrypt hashes and cannot be recovered in plain form.</p>
+    <p>Email verification and password reset tokens are stored as SHA-256 hashes.</p>
+
+    <h2>5. Retention period</h2>
+    <p>Personal data is retained until the user deletes their account. Upon account deletion, all user data (including tasks, list memberships, and personal settings) is permanently erased.</p>
+
+    <h2>6. Disclosure to third parties</h2>
+    <p>The Controller <strong>does not share</strong> personal data with third parties, except where required by the laws of the Russian Federation.</p>
+    <p>The Service does not use third-party analytics, advertising networks, or tracking systems.</p>
+
+    <h2>7. Data protection</h2>
+    <p>The following safeguards are in place:</p>
+    <ul>
+        <li>Encrypted connection (HTTPS / TLS 1.2+)</li>
+        <li>JWT authentication with limited token lifetime</li>
+        <li>BCrypt password hashing</li>
+        <li>Rate limiting to protect against brute-force attacks</li>
+        <li>Daily database backups</li>
+    </ul>
+
+    <h2>8. User rights</h2>
+    <p>The user has the right to:</p>
+    <ul>
+        <li>Access their personal data (via the API or the application interface)</li>
+        <li>Modify their data (email, username, password)</li>
+        <li>Delete their account and all associated data</li>
+        <li>Withdraw consent to data processing (by deleting the account)</li>
+    </ul>
+
+    <h2>9. Account deletion</h2>
+    <p>A user may delete their account by:</p>
+    <ul>
+        <li>Using the mobile application (Settings → Delete account)</li>
+        <li>Contacting the Controller at <a href="mailto:mngeras@yandex.ru">mngeras@yandex.ru</a></li>
+    </ul>
+
+    <h2>10. Cookies</h2>
+    <p>The Service does not use cookies for tracking. Authentication is implemented via JWT tokens stored locally on the user's device.</p>
+
+    <h2>11. Changes to this Policy</h2>
+    <p>The Controller reserves the right to amend this Policy. The current version is always available at <a href="https://todo.keepware.ru/privacy/en">todo.keepware.ru/privacy/en</a>.</p>
+
+    <a class="back" href="https://todo.keepware.ru">← Back to home</a>
+</div>
+</body>
+</html>
