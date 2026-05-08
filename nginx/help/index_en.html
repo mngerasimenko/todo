@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Помощь — Список задач</title>
+    <title>Help — Todo List</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -107,28 +107,28 @@
 <body>
 <div class="container">
     <div class="lang-switcher">
-        <a href="/help" class="active">RU</a>
+        <a href="/help">RU</a>
         <span>·</span>
-        <a href="/help/en">EN</a>
+        <a href="/help/en" class="active">EN</a>
     </div>
 
-    <h1>Помощь</h1>
-    <p class="subtitle">Выберите платформу</p>
+    <h1>Help</h1>
+    <p class="subtitle">Choose your platform</p>
 
     <div class="platforms">
-        <a href="/help/android" class="platform-card">
+        <a href="/help/android/en" class="platform-card">
             <span class="icon">📱</span>
             <span class="name">Android</span>
-            <span class="status">Руководство пользователя</span>
+            <span class="status">User guide</span>
         </a>
         <div class="platform-card disabled">
             <span class="icon">🌐</span>
             <span class="name">Web</span>
-            <span class="status">В разработке</span>
+            <span class="status">Coming soon</span>
         </div>
     </div>
 
-    <a class="back" href="https://todo.keepware.ru">← На главную</a>
+    <a class="back" href="https://todo.keepware.ru">← Home</a>
 </div>
 </body>
 </html>
