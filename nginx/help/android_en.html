@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Help — Android — Todo List</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', 'Segoe UI', Roboto, -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #f5f6fa;
+            color: #2d3436;
+            line-height: 1.7;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 24px 80px;
+        }
+        .lang-switcher {
+            text-align: right;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+        .lang-switcher a {
+            color: #636e72;
+            padding: 4px 8px;
+            border-radius: 4px;
+            text-decoration: none;
+        }
+        .lang-switcher a.active {
+            color: #2e7d32;
+            font-weight: 600;
+            background: rgba(46, 125, 50, 0.08);
+        }
+        .lang-switcher span {
+            color: #b2bec3;
+            font-size: 12px;
+        }
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #2e7d32;
+        }
+        .subtitle {
+            color: #636e72;
+            font-size: 14px;
+            margin-bottom: 32px;
+        }
+        h2 {
+            font-size: 22px;
+            font-weight: 600;
+            margin-top: 48px;
+            margin-bottom: 16px;
+            color: #2e7d32;
+            padding-top: 16px;
+            border-top: 1px solid #dfe6e9;
+        }
+        h3 {
+            font-size: 17px;
+            font-weight: 600;
+            margin-top: 24px;
+            margin-bottom: 8px;
+            color: #2d3436;
+        }
+        p, li {
+            font-size: 15px;
+            margin-bottom: 12px;
+        }
+        ul {
+            padding-left: 24px;
+            margin-bottom: 16px;
+        }
+        li { margin-bottom: 6px; }
+        .screenshot {
+            display: block;
+            max-width: 280px;
+            margin: 16px auto;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+        }
+        .screenshot-row {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin: 16px 0;
+        }
+        .screenshot-row img {
+            max-width: 220px;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+        }
+        .tip {
+            background: #e8f5e9;
+            border-left: 4px solid #2e7d32;
+            padding: 12px 16px;
+            border-radius: 0 8px 8px 0;
+            margin: 16px 0;
+            font-size: 14px;
+        }
+        .toc {
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px 24px;
+            margin-bottom: 32px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .toc h3 {
+            margin-top: 0;
+            margin-bottom: 12px;
+            color: #2e7d32;
+        }
+        .toc ol {
+            padding-left: 20px;
+        }
+        .toc li {
+            margin-bottom: 4px;
+        }
+        .toc a {
+            color: #2e7d32;
+            text-decoration: none;
+        }
+        .toc a:hover { text-decoration: underline; }
+        a { color: #2e7d32; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .back {
+            display: inline-block;
+            margin-top: 32px;
+            padding: 10px 24px;
+            background: #2e7d32;
+            color: #fff;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+        }
+        .back:hover { background: #1b5e20; text-decoration: none; }
+        .nav-top {
+            margin-bottom: 24px;
+        }
+        .nav-top a {
+            color: #636e72;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="lang-switcher">
+        <a href="/help/android">RU</a>
+        <span>·</span>
+        <a href="/help/android/en" class="active">EN</a>
+    </div>
+
+    <div class="nav-top">
+        <a href="/help/en">← Help</a>
+    </div>
+
+    <h1>User Guide</h1>
+    <p class="subtitle">Todo List Android app</p>
+
+    <div class="toc">
+        <h3>Contents</h3>
+        <ol>
+            <li><a href="#start">Getting started</a></li>
+            <li><a href="#lists">Task lists</a></li>
+            <li><a href="#tasks">Working with tasks</a></li>
+            <li><a href="#invite">Collaboration</a></li>
+            <li><a href="#filters">Filters and grouping</a></li>
+            <li><a href="#design">Personalization</a></li>
+            <li><a href="#offline">Offline mode</a></li>
+            <li><a href="#notifications">Notifications</a></li>
+            <li><a href="#web">Web version</a></li>
+            <li><a href="#account">Account and security</a></li>
+            <li><a href="#menu">App menu</a></li>
+        </ol>
+    </div>
+
+    <!-- 1. Getting started -->
+    <h2 id="start">1. Getting started</h2>
+
+    <h3>Sign up</h3>
+    <p>Open the app and tap "No account? Sign up". Enter your email, name, and password. After registration, a confirmation email is sent — verify your address.</p>
+
+    <h3>Sign in</h3>
+    <p>Enter your email and password on the sign-in screen. If you forgot your password, tap "Forgot password?" and follow the instructions in the email.</p>
+
+    <div class="screenshot-row">
+        <img src="/help/img/login_light.jpg" alt="Sign-in screen" class="screenshot">
+    </div>
+
+    <!-- 2. Task lists -->
+    <h2 id="lists">2. Task lists</h2>
+
+    <p>Lists are containers for tasks. You can create several lists for different purposes: "Groceries", "Renovation", "Work".</p>
+
+    <h3>Creating a list</h3>
+    <p>On the "My lists" screen, tap the <strong>"+ Create"</strong> button. Enter a name and tap "Create". You automatically become the list administrator.</p>
+
+    <h3>Choosing a list</h3>
+    <p>Tap a list name to open its tasks. To switch between lists, tap the ↔ icon at the top of the screen.</p>
+
+    <div class="screenshot-row">
+        <img src="/help/img/list_selection_light.jpg" alt="My lists">
+    </div>
+
+    <h3>Deleting a list</h3>
+    <p>Only the administrator can delete a list. Open the menu (⋮) → "Delete list". All tasks and members will be removed.</p>
+
+    <div class="tip">If the list has other members, you will see a warning showing how many.</div>
+
+    <!-- 3. Working with tasks -->
+    <h2 id="tasks">3. Working with tasks</h2>
+
+    <h3>Creating a task</h3>
+    <p>Enter text in the "New task..." field and tap <strong>+</strong>. The task appears in the list.</p>
+
+    <h3>Completing</h3>
+    <p>Tap the circle to the left of a task to mark it as done. Tap again to uncheck it.</p>
+
+    <h3>Renaming</h3>
+    <p><strong>Long-press</strong> a task to open the rename dialog.</p>
+
+    <div class="screenshot-row">
+        <img src="/help/img/tasks_light_1.jpg" alt="Tasks (light theme)">
+        <img src="/help/img/rename_task_dark.jpg" alt="Renaming a task">
+    </div>
+
+    <h3>Deleting</h3>
+    <p><strong>Swipe left</strong> on a task to delete it.</p>
+
+    <h3>Private tasks</h3>
+    <p>Tap the lock icon next to the input field before creating a task. A private task is visible only to you, even in a shared list.</p>
+
+    <div class="screenshot-row">
+        <img src="/help/img/sync_status.jpg" alt="Lock icon for private tasks">
+    </div>
+
+    <div class="tip">Useful for adding gifts to a shared family shopping list.</div>
+
+    <!-- 4. Collaboration -->
+    <h2 id="invite">4. Collaboration</h2>
+
+    <h3>Inviting members</h3>
+    <p>The list administrator can invite other users. Open the menu (⋮) → "Invite to list". An invite link valid for 24 hours will be generated.</p>
+
+    <div class="screenshot-row">
+        <img src="/help/img/invite_dialog.jpg" alt="Invite dialog">
+        <img src="/help/img/invite_accept.jpg" alt="Accepting an invite">
+    </div>
+
+    <p>Send the link via a messenger ("Share" button) or copy it ("Copy" button).</p>
+
+    <h3>Accepting an invite</h3>
+    <p>The recipient taps the link — the app opens on the invite screen. Tap "Accept invitation".</p>
+
+    <h3>Roles</h3>
+    <ul>
+        <li><strong>Administrator</strong> — the list creator. Can invite members and delete the list.</li>
+        <li><strong>Member</strong> — can create, complete, and delete tasks.</li>
+    </ul>
+
+    <h3>Leaving a list</h3>
+    <p>Menu (⋮) → "Leave list". Your private tasks in this list will be deleted.</p>
+
+    <!-- 5. Filters and grouping -->
+    <h2 id="filters">5. Filters and grouping</h2>
+
+    <h3>Filters</h3>
+    <p>Filters are shown above the task list:</p>
+    <ul>
+        <li><strong>All</strong> — every task</li>
+        <li><strong>Active</strong> — unfinished (default)</li>
+        <li><strong>Done</strong> — completed</li>
+    </ul>
+
+    <h3>Grouping</h3>
+    <p>Tasks can be grouped by date or by author:</p>
+    <ul>
+        <li><strong>By date</strong> — Today, Yesterday, This week, Earlier</li>
+        <li><strong>By author</strong> — tasks are grouped by creator's name</li>
+    </ul>
+
+    <div class="screenshot-row">
+        <img src="/help/img/tasks_light_2.jpg" alt="Grouping by date">
+    </div>
+
+    <!-- 6. Personalization -->
+    <h2 id="design">6. Personalization</h2>
+
+    <h3>App color</h3>
+    <p>Menu (⋮) → "App color". Choose one of 9 colors or "System" (Material You — colors adapt to your wallpaper, Android 12+).</p>
+
+    <div class="screenshot-row">
+        <img src="/help/img/color_picker.jpg" alt="Color picker">
+    </div>
+
+    <h3>Dark theme</h3>
+    <p>The app automatically switches between light and dark theme based on system settings.</p>
+
+    <div class="screenshot-row">
+        <img src="/help/img/tasks_light_3.jpg" alt="Light theme">
+        <img src="/help/img/tasks_dark_2.jpg" alt="Dark theme">
+    </div>
+
+    <!-- 7. Offline mode -->
+    <h2 id="offline">7. Offline mode</h2>
+
+    <p>The app works without an internet connection. You can create and complete tasks — they are saved locally.</p>
+
+    <p>When the network is available, data is automatically synchronized with the server. The status is shown at the top of the screen:</p>
+    <ul>
+        <li><strong>"No network connection"</strong> — working offline</li>
+        <li><strong>"No network. N changes will sync when connected"</strong> — there are unsaved changes</li>
+        <li><strong>"Synchronizing..."</strong> — sending changes to the server</li>
+    </ul>
+
+    <div class="screenshot-row">
+        <img src="/help/img/offline_no_network.jpg" alt="No network connection">
+        <img src="/help/img/offline_pending.jpg" alt="Pending changes">
+        <img src="/help/img/sync_status.jpg" alt="Synchronizing">
+    </div>
+
+    <div class="tip">All data is cached on your device. When opening the app without a network, you will see the most recently loaded tasks.</div>
+
+    <!-- 8. Notifications -->
+    <h2 id="notifications">8. Notifications</h2>
+
+    <p>The app sends push notifications about events in shared lists:</p>
+    <ul>
+        <li><strong>New task</strong> — when a member adds a task to a shared list</li>
+        <li><strong>Task completed</strong> — when a member marks a task as done</li>
+        <li><strong>New member</strong> — when someone joins your list</li>
+    </ul>
+
+    <div class="tip">Notifications are sent only for shared lists. Personal lists (where you are the only member) do not produce notifications.</div>
+
+    <!-- 9. Web version -->
+    <h2 id="web">9. Web version</h2>
+
+    <p>All your lists and tasks are available in your browser at <a href="https://todo.keepware.ru" target="_blank">todo.keepware.ru</a>. Data syncs automatically — start on your phone and continue in the browser.</p>
+
+    <!-- 10. Account -->
+    <h2 id="account">10. Account and security</h2>
+
+    <h3>Email verification</h3>
+    <p>After registration, an "Email not verified" banner appears on the screen. Tap "Resend" — a confirmation email will be sent. Tap the link — your email will be verified inside the app.</p>
+
+    <h3>Password reset</h3>
+    <p>On the sign-in screen, tap "Forgot password?". Enter your email — you will receive a link to set a new password.</p>
+
+    <h3>Sign out</h3>
+    <p>Menu (⋮) → "Sign out".</p>
+
+    <h3>Deleting an account</h3>
+    <p>Menu (⋮) → "Delete account". All your data will be permanently removed. Public tasks in shared lists will remain under the name "Deleted user".</p>
+
+    <!-- 11. App menu -->
+    <h2 id="menu">11. App menu</h2>
+
+    <p>Tap the three dots (⋮) in the top-right corner of the tasks screen:</p>
+
+    <img src="/help/img/menu_overflow.jpg" alt="App menu" class="screenshot">
+
+    <ul>
+        <li><strong>Subscription</strong> — current subscription type (FREE / PRO)</li>
+        <li><strong>App color</strong> — choose a color theme</li>
+        <li><strong>Invite to list</strong> — generate an invite link (administrator only)</li>
+        <li><strong>Leave list</strong> — exit the current list</li>
+        <li><strong>Delete list</strong> — remove the list (administrator only)</li>
+        <li><strong>Sign out</strong> — leave the app</li>
+        <li><strong>Delete account</strong> — permanent removal</li>
+    </ul>
+
+    <a class="back" href="/help/en">← Help</a>
+</div>
+</body>
+</html>
