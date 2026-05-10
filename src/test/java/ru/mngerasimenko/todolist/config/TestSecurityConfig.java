@@ -72,11 +72,18 @@ public class TestSecurityConfig {
     @Bean
     public RateLimitFilter rateLimitFilter() {
         RateLimitProperties props = new RateLimitProperties();
-        props.setLogin(new RateLimitProperties.EndpointLimit(1000, 1));
-        props.setRegister(new RateLimitProperties.EndpointLimit(1000, 1));
-        props.setRefresh(new RateLimitProperties.EndpointLimit(1000, 1));
-        props.setGeneral(new RateLimitProperties.EndpointLimit(1000, 1));
-        props.setChangeEmail(new RateLimitProperties.EndpointLimit(1000, 1));
+        // Permissive лимит на все endpoint'ы из RateLimitProperties — фильтр не должен мешать unit-тестам
+        RateLimitProperties.EndpointLimit permissive = new RateLimitProperties.EndpointLimit(1000, 1);
+        props.setLogin(permissive);
+        props.setRegister(permissive);
+        props.setRefresh(permissive);
+        props.setGeneral(permissive);
+        props.setChangeEmail(permissive);
+        props.setForgotPassword(permissive);
+        props.setVerifyEmail(permissive);
+        props.setResetPassword(permissive);
+        props.setResendVerification(permissive);
+        props.setLogout(permissive);
         // В тестах flagStore всегда возвращает true для RATE_LIMIT — фильтр пропускает все запросы через свой rate-limit
         ru.mngerasimenko.todolist.featureflags.FeatureFlagStore flagStore =
                 org.mockito.Mockito.mock(ru.mngerasimenko.todolist.featureflags.FeatureFlagStore.class);

@@ -16,8 +16,10 @@ import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.dto.TodoResponse;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.dto.list.CreateListRequest;
+import ru.mngerasimenko.todolist.dto.list.InviteRequest;
 import ru.mngerasimenko.todolist.dto.list.ListMemberResponse;
 import ru.mngerasimenko.todolist.dto.list.ListResponse;
+import ru.mngerasimenko.todolist.dto.validation.EmailValidation;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
 import ru.mngerasimenko.todolist.security.ApiSecurityConfig;
 import ru.mngerasimenko.todolist.service.TaskListService;
@@ -414,5 +416,28 @@ class TaskListControllerTest {
     void deleteList_InvalidIdFormat_ReturnsBadRequest() throws Exception {
         mockMvc.perform(delete("/api/lists/abc"))
                 .andExpect(status().isBadRequest());
+    }
+
+    // === POST /api/lists/{id}/invite — приглашение по email ===
+
+    @Test
+    @WithMockUser(username = "user@mail.ru")
+    void createInvite_TooLongEmail_ReturnsBadRequest() throws Exception {
+        // Arrange — email длиной MAX_LENGTH+1 (точно превышает @Size).
+        // Local-part 64 (макс по RFC 5321), чтобы пройти @Email и сработал именно @Size.
+        String overlongEmail = "a".repeat(64) + "@" + "b".repeat(EmailValidation.MAX_LENGTH - 67) + ".io";
+        String expectedMessage = "Email must not exceed " + EmailValidation.MAX_LENGTH + " characters";
+        InviteRequest request = InviteRequest.builder()
+                .email(overlongEmail)
+                .build();
+
+        // Act & Assert
+        mockMvc.perform(post("/api/lists/1/invite")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message.email").value(expectedMessage));
+
+        verifyNoInteractions(taskListService);
     }
 }

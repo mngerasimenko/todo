@@ -8,6 +8,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import ru.mngerasimenko.todolist.dto.validation.EmailValidation;
 
 /**
  * DTO для запроса регистрации пользователя
@@ -23,7 +24,7 @@ public class RegisterRequest {
      */
     @NotBlank(message = "Email is required")
     @Email(message = "Invalid email format")
-    @Size(max = 128, message = "Email must not exceed 128 characters")
+    @Size(max = EmailValidation.MAX_LENGTH, message = EmailValidation.MAX_LENGTH_MESSAGE)
     private String email;
 
     public void setEmail(String email) {
