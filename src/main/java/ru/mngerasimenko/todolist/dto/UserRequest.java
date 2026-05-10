@@ -9,6 +9,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import ru.mngerasimenko.todolist.dto.validation.EmailValidation;
 
 /**
  * DTO входящего запроса на создание/обновление пользователя.
@@ -28,7 +29,7 @@ public class UserRequest {
 
     @Email(message = "Invalid email format")
     @NotBlank(message = "Email is required")
-    @Size(max = 128)
+    @Size(max = EmailValidation.MAX_LENGTH, message = EmailValidation.MAX_LENGTH_MESSAGE)
     private String email;
 
     @NotBlank(message = "Password is required")

@@ -21,6 +21,7 @@ import ru.mngerasimenko.todolist.config.TestSecurityConfig;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.dto.UserResponse;
 import ru.mngerasimenko.todolist.dto.auth.*;
+import ru.mngerasimenko.todolist.dto.validation.EmailValidation;
 import ru.mngerasimenko.todolist.exception.TokenExpiredException;
 import ru.mngerasimenko.todolist.mapper.UserMapper;
 import ru.mngerasimenko.todolist.security.ApiSecurityConfig;
@@ -700,6 +701,24 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.message.email").exists());
     }
 
+    @Test
+    void forgotPassword_TooLongEmail_ReturnsBadRequest() throws Exception {
+        // Arrange — email длиной MAX_LENGTH+1 (точно превышает @Size).
+        // Local-part 64 (макс по RFC 5321), чтобы пройти @Email и сработал именно @Size.
+        String overlongEmail = "a".repeat(64) + "@" + "b".repeat(EmailValidation.MAX_LENGTH - 67) + ".io";
+        String expectedMessage = "Email must not exceed " + EmailValidation.MAX_LENGTH + " characters";
+        ForgotPasswordRequest request = new ForgotPasswordRequest(overlongEmail);
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message.email").value(expectedMessage));
+
+        verifyNoInteractions(userService);
+    }
+
     // ==================== RESET PASSWORD TESTS ====================
 
     @Test
@@ -845,6 +864,25 @@ class AuthControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message.email").exists());
+    }
+
+    @Test
+    @WithMockUser(username = "test@example.com")
+    void changeEmail_TooLongEmail_ReturnsBadRequest() throws Exception {
+        // Arrange — email длиной MAX_LENGTH+1 (точно превышает @Size).
+        // Local-part 64 (макс по RFC 5321), чтобы пройти @Email и сработал именно @Size.
+        String overlongEmail = "a".repeat(64) + "@" + "b".repeat(EmailValidation.MAX_LENGTH - 67) + ".io";
+        String expectedMessage = "Email must not exceed " + EmailValidation.MAX_LENGTH + " characters";
+        ChangeEmailRequest request = new ChangeEmailRequest(overlongEmail);
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/change-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message.email").value(expectedMessage));
+
+        verifyNoInteractions(userService);
     }
 
     // ==================== LOGOUT TESTS ====================
