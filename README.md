@@ -142,7 +142,7 @@ docker compose down
 ### Тесты
 
 ```bash
-# Unit-тесты (439 тестов, без Docker)
+# Unit-тесты (без Docker)
 mvn test
 
 # С отчётом покрытия
@@ -162,7 +162,7 @@ mvn test -Pintegration
 Проект использует пайплайн `.github/workflows/deploy.yml`:
 
 **Этап 1 — Тесты** (все PR и push в master):
-- 439 unit-тестов + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
+- Unit-тесты + проверка покрытия JaCoCo (70% инструкций, 70% строк, 60% ветвлений, 80% методов)
 - Нагрузочные тесты (3 шт.) запускаются отдельно: `mvn test -Pintegration` (требуют Docker)
 
 **Этап 2 — Деплой** (push в master → staging автоматически, production только вручную):
