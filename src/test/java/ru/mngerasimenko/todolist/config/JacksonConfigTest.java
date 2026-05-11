@@ -61,6 +61,13 @@ class JacksonConfigTest {
     }
 
     @Test
+    void deserializesIsoWithNegativeOffsetNormalizedToUtc() throws Exception {
+        // 01:26-05:00 = 06:26 UTC — симметрия с MSK, проверяет нормализацию в обе стороны
+        LocalDateTime parsed = mapper.readValue("\"2026-04-26T01:26:06-05:00\"", LocalDateTime.class);
+        assertThat(parsed).isEqualTo(LocalDateTime.of(2026, 4, 26, 6, 26, 6));
+    }
+
+    @Test
     void roundTripPreservesValue() throws Exception {
         LocalDateTime original = LocalDateTime.of(2026, 4, 26, 6, 26, 6);
         String json = mapper.writeValueAsString(original);
