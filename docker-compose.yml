@@ -70,6 +70,8 @@ services:
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
       - SPRING_PROFILES_ACTIVE=production
+      # JacksonConfig serializes LocalDateTime as "...Z" assuming the container runs in UTC. Keep this explicit.
+      - TZ=UTC
       - JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS:--Xmx768m -Xms768m}
       - APP_VERSION=${APP_VERSION:-0.0.1}
       - MIN_ANDROID_VERSION=${MIN_ANDROID_VERSION:-1}
@@ -153,6 +155,9 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=todo
       - POSTGRES_USER=postgres
+      # Hibernate maps TIMESTAMP WITHOUT TIME ZONE to LocalDateTime — keep the DB process in UTC for consistent values.
+      - TZ=UTC
+      - PGTZ=UTC
 
     # PostgreSQL performance tuning (configured for 4GB RAM server)
     command: >
