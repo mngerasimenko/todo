@@ -1,6 +1,6 @@
 #!/bin/bash
 # Автоматическая отправка статистики использования в VK
-# Cron: 0 9 * * * /root/monitoring/stats-report.sh  (daily at 09:00)
+# Cron: 0 4 * * * /root/monitoring/stats-report.sh  (daily at 04:00)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/monitor.conf"
@@ -52,7 +52,7 @@ print(f'''📈 Статистика (за {period}ч)
    Среднее на пользователя: {t.get('avg_tasks_per_user', 0):.1f}
    Среднее на список: {t.get('avg_tasks_per_list', 0):.1f}
 
-🔥 Активность: {a.get('active_users_last_24h', '?')} за 24ч, {a.get('active_users_last_7d', '?')} за 7д
+🔥 Активность: {a.get('active_users_last_24h', '?')} за 24ч, {a.get('active_users_last_3d', '?')} за 3д, {a.get('active_users_last_7d', '?')} за 7д
 🔗 Приглашения: {a.get('active_invite_tokens', '?')} активных''')
 " 2>/dev/null)
 

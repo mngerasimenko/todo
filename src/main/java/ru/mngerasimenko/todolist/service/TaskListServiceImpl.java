@@ -100,7 +100,7 @@ public class TaskListServiceImpl implements TaskListService {
     @Transactional(readOnly = true)
     public List<ListMemberResponse> getMembers(Long listId, Long requestingUserId) {
         if (!taskListRepository.existsById(listId)) {
-            throw new ListNotFoundException("Список не найден. Возможно, он был удалён");
+            throw new ListNotFoundException("List not found. It may have been deleted");
         }
         if (!taskListUserRepository.existsByIdListIdAndIdUserId(listId, requestingUserId)) {
             throw new IllegalArgumentException("Вы не являетесь участником данного списка");
@@ -116,7 +116,7 @@ public class TaskListServiceImpl implements TaskListService {
     @Transactional(readOnly = true)
     public List<TodoDto> getTodosByList(Long listId, Long requestingUserId) {
         if (!taskListRepository.existsById(listId)) {
-            throw new ListNotFoundException("Список не найден. Возможно, он был удалён");
+            throw new ListNotFoundException("List not found. It may have been deleted");
         }
         if (!taskListUserRepository.existsByIdListIdAndIdUserId(listId, requestingUserId)) {
             throw new IllegalArgumentException("Вы не являетесь участником данного списка");
@@ -243,9 +243,12 @@ public class TaskListServiceImpl implements TaskListService {
 
         String inviteLink = emailProperties.getBaseUrl() + "/invite/" + rawToken;
 
-        // Отправка email, если указан получатель
+        // Отправка email, если указан получатель.
+        // Локаль берём от inviter — приглашаемый может ещё не иметь аккаунта,
+        // и эвристика "у inviter и invitee одинаковый язык" обычно срабатывает.
         if (recipientEmail != null && !recipientEmail.isBlank()) {
-            emailService.sendInviteEmail(recipientEmail, inviteLink, taskList.getName(), inviter.getName());
+            emailService.sendInviteEmail(recipientEmail, inviteLink, taskList.getName(),
+                    inviter.getName(), inviter.getPreferredEmailLocale());
         }
 
         log.info("Создано приглашение: listId={}, inviterId={}, email={}", listId, userId, maskEmail(recipientEmail));

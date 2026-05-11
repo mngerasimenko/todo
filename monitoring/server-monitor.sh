@@ -17,16 +17,20 @@ send_alert() {
         -d "v=${VK_API_VERSION}" > /dev/null 2>&1
 }
 
-# Не спамить одинаковыми алертами — отправлять повторно не чаще чем раз в 30 минут
+# Не спамить одинаковыми алертами.
+# Аргументы:
+#   $1 — alert_key (обязательный)
+#   $2 — cooldown в секундах (опционально, по умолчанию ALERT_COOLDOWN или 1800)
 should_alert() {
     local alert_key="$1"
+    local cooldown="${2:-${ALERT_COOLDOWN:-1800}}"
     local state_file="${ALERT_STATE_FILE}_${alert_key}"
     local now=$(date +%s)
 
     if [ -f "$state_file" ]; then
         local last_alert=$(cat "$state_file")
         local diff=$((now - last_alert))
-        if [ "$diff" -lt "${ALERT_COOLDOWN:-1800}" ]; then
+        if [ "$diff" -lt "$cooldown" ]; then
             return 1  # Ещё рано повторять
         fi
     fi
@@ -125,6 +129,14 @@ if [ "$http_code" = "200" ]; then
         if should_alert "firebase"; then
             alerts="${alerts}
 🔴 Firebase: push-уведомления недоступны"
+        fi
+    fi
+
+    redis_healthy=$(echo "$api_json" | grep -o '"redis_healthy":[a-z]*' | grep -c 'true')
+    if [ "$redis_healthy" -eq 0 ]; then
+        if should_alert "redis" 86400; then
+            alerts="${alerts}
+🔴 Redis: недоступен (cache fallback на Postgres работает, но медленнее; повтор алерта раз в сутки)"
         fi
     fi
 fi

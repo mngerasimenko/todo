@@ -67,7 +67,8 @@ public class InactiveReminderScheduler {
             // Email — только если email подтверждён
             if (user.isEmailVerified()) {
                 try {
-                    emailService.sendInactiveReminderEmail(user.getEmail(), user.getName(), user.getId());
+                    emailService.sendInactiveReminderEmail(
+                            user.getEmail(), user.getName(), user.getId(), user.getPreferredEmailLocale());
                     sentEmails++;
                 } catch (Exception e) {
                     log.warn("[inactive-reminder] Ошибка отправки email userId={}: {}", user.getId(), e.getMessage());

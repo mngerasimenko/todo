@@ -7,7 +7,13 @@ import org.springframework.stereotype.Component;
 import ru.mngerasimenko.todolist.service.EmailService;
 
 /**
- * Фоновая проверка SMTP каждые 15 минут.
+ * Фоновая проверка SMTP. Интервал по умолчанию — 60 минут, настраивается
+ * через property {@code app.smtp-health-check.interval-ms}. SMTP — не критическая
+ * зависимость (используется для верификации email и сброса пароля), частая
+ * проверка не нужна; раз в час даёт достаточную гранулярность для алертов
+ * и не создаёт шума в логах WARN при длительных инцидентах у провайдера
+ * (например, плановые работы Jino 27 апр 2026 — несколько часов недоступности).
+ *
  * Результат кешируется в EmailServiceImpl — /api/status отдаёт мгновенно.
  * Отключается в тестах через app.smtp-health-check.enabled=false.
  */
@@ -18,7 +24,7 @@ public class SmtpHealthScheduler {
 
     private final EmailService emailService;
 
-    @Scheduled(fixedRate = 900_000, initialDelay = 10_000)
+    @Scheduled(fixedRateString = "${app.smtp-health-check.interval-ms:3600000}", initialDelay = 10_000)
     public void checkSmtpHealth() {
         emailService.checkSmtpHealth();
     }

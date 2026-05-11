@@ -110,6 +110,9 @@ public class UsageStatisticsResponse {
         @JsonProperty("active_users_last_24h")
         private long activeUsersLast24h;
 
+        @JsonProperty("active_users_last_3d")
+        private long activeUsersLast3d;
+
         @JsonProperty("active_users_last_7d")
         private long activeUsersLast7d;
 

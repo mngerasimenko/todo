@@ -3,6 +3,7 @@ package ru.mngerasimenko.todolist.service;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -640,11 +641,14 @@ class UserServiceImplTest {
 
     @Test
     void resendVerificationEmail_WithUnverifiedUser_GeneratesNewTokenAndSendsEmail() {
-        // Пользователь найден, email не подтверждён
+        // Пользователь найден, email не подтверждён.
+        // preferredEmailLocale явно "en" — sanity-check что сервис прокидывает
+        // именно сохранённую у юзера локаль в EmailService (не fallback "ru").
         User foundUser = new User();
         foundUser.setId(1L);
         foundUser.setEmail("user@mail.ru");
         foundUser.setEmailVerified(false);
+        foundUser.setPreferredEmailLocale("en");
 
         when(repository.findById(1L)).thenReturn(Optional.of(foundUser));
         when(emailProperties.getVerificationTokenTtlHours()).thenReturn(24);
@@ -658,7 +662,13 @@ class UserServiceImplTest {
         assertThat(foundUser.getEmailVerificationExpiresAt()).isAfter(LocalDateTime.now());
         verify(repository, times(1)).findById(1L);
         verify(repository, times(1)).save(foundUser);
-        verify(emailService, times(1)).sendVerificationEmail(eq("user@mail.ru"), anyString());
+
+        // Captor: гарантируем что user.preferredEmailLocale прокинулась в EmailService.
+        // Если кто-то в будущем замёнит вызов на hardcoded "ru" или null — этот тест упадёт.
+        ArgumentCaptor<String> localeCaptor = ArgumentCaptor.forClass(String.class);
+        verify(emailService, times(1))
+                .sendVerificationEmail(eq("user@mail.ru"), anyString(), localeCaptor.capture());
+        assertThat(localeCaptor.getValue()).isEqualTo("en");
     }
 
     @Test
@@ -670,7 +680,7 @@ class UserServiceImplTest {
                 .hasMessage("User not found with id: 999");
 
         verify(repository, never()).save(any(User.class));
-        verify(emailService, never()).sendVerificationEmail(anyString(), anyString());
+        verify(emailService, never()).sendVerificationEmail(anyString(), anyString(), anyString());
     }
 
     @Test
@@ -688,7 +698,7 @@ class UserServiceImplTest {
                 .hasMessage("Email уже подтверждён");
 
         verify(repository, never()).save(any(User.class));
-        verify(emailService, never()).sendVerificationEmail(anyString(), anyString());
+        verify(emailService, never()).sendVerificationEmail(anyString(), anyString(), anyString());
     }
 
     // ===== initiatePasswordReset =====
@@ -713,7 +723,7 @@ class UserServiceImplTest {
         assertThat(foundUser.getPasswordResetExpiresAt()).isAfter(LocalDateTime.now());
         verify(repository, times(1)).findByEmailHash("user@mail.ru");
         verify(repository, times(1)).save(foundUser);
-        verify(emailService, times(1)).sendPasswordResetEmail(eq("user@mail.ru"), anyString());
+        verify(emailService, times(1)).sendPasswordResetEmail(eq("user@mail.ru"), anyString(), anyString());
     }
 
     @Test
@@ -725,7 +735,7 @@ class UserServiceImplTest {
 
         verify(repository, times(1)).findByEmailHash("unknown@mail.ru");
         verify(repository, never()).save(any(User.class));
-        verify(emailService, never()).sendPasswordResetEmail(anyString(), anyString());
+        verify(emailService, never()).sendPasswordResetEmail(anyString(), anyString(), anyString());
     }
 
     @Test
@@ -742,7 +752,7 @@ class UserServiceImplTest {
 
         verify(repository, times(1)).findByEmailHash("user@mail.ru");
         verify(repository, never()).save(any(User.class));
-        verify(emailService, never()).sendPasswordResetEmail(anyString(), anyString());
+        verify(emailService, never()).sendPasswordResetEmail(anyString(), anyString(), anyString());
     }
 
     // ===== resetPassword =====
@@ -833,7 +843,7 @@ class UserServiceImplTest {
         assertThat(foundUser.getEmailVerificationExpiresAt()).isAfter(LocalDateTime.now());
         verify(repository, times(1)).findById(1L);
         verify(repository, times(1)).saveAndFlush(foundUser);
-        verify(emailService, times(1)).sendVerificationEmail(eq("new@mail.ru"), anyString());
+        verify(emailService, times(1)).sendVerificationEmail(eq("new@mail.ru"), anyString(), anyString());
     }
 
     @Test
@@ -855,7 +865,7 @@ class UserServiceImplTest {
                 .hasMessage("Email taken@mail.ru уже используется");
 
         verify(repository, never()).saveAndFlush(any(User.class));
-        verify(emailService, never()).sendVerificationEmail(anyString(), anyString());
+        verify(emailService, never()).sendVerificationEmail(anyString(), anyString(), anyString());
     }
 
     @Test
@@ -877,7 +887,7 @@ class UserServiceImplTest {
         assertThat(foundUser.getEmail()).isEqualTo("same@mail.ru");
         assertThat(foundUser.isEmailVerified()).isFalse();
         verify(repository, times(1)).saveAndFlush(foundUser);
-        verify(emailService, times(1)).sendVerificationEmail(eq("same@mail.ru"), anyString());
+        verify(emailService, times(1)).sendVerificationEmail(eq("same@mail.ru"), anyString(), anyString());
     }
 
     @Test
@@ -890,7 +900,7 @@ class UserServiceImplTest {
                 .hasMessage("User not found with id: 999");
 
         verify(repository, never()).saveAndFlush(any(User.class));
-        verify(emailService, never()).sendVerificationEmail(anyString(), anyString());
+        verify(emailService, never()).sendVerificationEmail(anyString(), anyString(), anyString());
     }
 
     // ===== updateLastActiveAt =====

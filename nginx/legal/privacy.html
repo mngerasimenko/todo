@@ -17,6 +17,26 @@
             margin: 0 auto;
             padding: 40px 24px 80px;
         }
+        .lang-switcher {
+            text-align: right;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+        .lang-switcher a {
+            color: #636e72;
+            padding: 4px 8px;
+            border-radius: 4px;
+            text-decoration: none;
+        }
+        .lang-switcher a.active {
+            color: #1a73e8;
+            font-weight: 600;
+            background: rgba(26, 115, 232, 0.08);
+        }
+        .lang-switcher span {
+            color: #b2bec3;
+            font-size: 12px;
+        }
         h1 {
             font-size: 28px;
             font-weight: 700;
@@ -76,6 +96,12 @@
 </head>
 <body>
 <div class="container">
+    <div class="lang-switcher">
+        <a href="/privacy" class="active">RU</a>
+        <span>·</span>
+        <a href="/privacy/en">EN</a>
+    </div>
+
     <h1>Политика конфиденциальности</h1>
     <p class="date">Дата вступления в силу: 17 марта 2026 г.</p>
 

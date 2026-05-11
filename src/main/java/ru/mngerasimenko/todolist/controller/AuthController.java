@@ -3,6 +3,7 @@ package ru.mngerasimenko.todolist.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -91,14 +92,20 @@ public class AuthController {
      * @return JWT токены и информация о новом пользователе
      */
     @PostMapping("/register")
-    public ResponseEntity<LoginResponse> register(@Valid @RequestBody RegisterRequest registerRequest) {
+    public ResponseEntity<LoginResponse> register(
+            @Valid @RequestBody RegisterRequest registerRequest,
+            @RequestHeader(value = HttpHeaders.ACCEPT_LANGUAGE, required = false) String acceptLanguage) {
         log.info("Попытка регистрации пользователя: {}", registerRequest.getName());
+
+        // Резолвим язык писем: явное поле RegisterRequest.locale → Accept-Language → "ru"
+        String emailLocale = resolveEmailLocale(registerRequest.getLocale(), acceptLanguage);
 
         // Создание нового пользователя
         UserDto newUserDto = UserDto.builder()
                 .email(registerRequest.getEmail())
                 .name(registerRequest.getName())
                 .password(registerRequest.getPassword())
+                .preferredEmailLocale(emailLocale)
                 .build();
 
         UserDto createdUser = userService.createUser(newUserDto);
@@ -233,5 +240,36 @@ public class AuthController {
         Long userId = userService.getUserByEmail(userDetails.getUsername()).getId();
         userService.changeEmail(userId, request.getEmail());
         return ResponseEntity.ok(Map.of("message", "Письмо подтверждения отправлено на новый email"));
+    }
+
+    /**
+     * Резолв языка писем при регистрации:
+     *   1. Если клиент явно прислал {@code RegisterRequest.locale} (короче 8 символов) — берём его.
+     *   2. Иначе парсим первый язык из {@code Accept-Language} (e.g. "en-US,en;q=0.9,ru;q=0.8" → "en-US").
+     *      Обрезаем до 8 символов на случай длинных тэгов вроде "zh-Hant-TW".
+     *      Wildcard "*" игнорируется (бессмысленен как локаль).
+     *   3. Fallback "ru" — если ни клиент, ни header ничего не дали.
+     * <p>
+     * Package-private для unit-тестирования.
+     */
+    String resolveEmailLocale(String requested, String acceptLanguage) {
+        if (requested != null && !requested.isBlank()) {
+            return requested.length() > 8 ? requested.substring(0, 8) : requested;
+        }
+        if (acceptLanguage != null && !acceptLanguage.isBlank()) {
+            try {
+                var ranges = java.util.Locale.LanguageRange.parse(acceptLanguage);
+                if (!ranges.isEmpty()) {
+                    String range = ranges.get(0).getRange();
+                    if ("*".equals(range)) {
+                        return "ru"; // Wildcard как локаль не имеет смысла
+                    }
+                    return range.length() > 8 ? range.substring(0, 8) : range;
+                }
+            } catch (IllegalArgumentException ignored) {
+                // Битый Accept-Language — fallback ниже
+            }
+        }
+        return "ru";
     }
 }

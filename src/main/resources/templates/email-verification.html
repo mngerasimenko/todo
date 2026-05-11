@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html xmlns:th="http://www.thymeleaf.org" th:lang="${#locale.language}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Подтверждение email</title>
+    <title th:text="#{email.verify.title}">Подтверждение email</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f4f4f5;">
     <table width="100%" cellpadding="0" cellspacing="0" style="padding: 40px 20px;">
@@ -13,33 +13,33 @@
                     <!-- Шапка -->
                     <tr>
                         <td style="background-color: #18181b; padding: 32px 40px; text-align: center;">
-                            <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">Список задач</h1>
+                            <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;" th:text="#{app.name}">Список задач</h1>
                         </td>
                     </tr>
                     <!-- Контент -->
                     <tr>
                         <td style="padding: 40px;">
-                            <h2 style="color: #18181b; margin: 0 0 16px; font-size: 20px;">Подтвердите ваш email</h2>
-                            <p style="color: #52525b; margin: 0 0 24px; font-size: 16px; line-height: 1.5;">
+                            <h2 style="color: #18181b; margin: 0 0 16px; font-size: 20px;" th:text="#{email.verify.title}">Подтвердите ваш email</h2>
+                            <p style="color: #52525b; margin: 0 0 24px; font-size: 16px; line-height: 1.5;" th:text="#{email.verify.intro}">
                                 Вы зарегистрировались в приложении «Список задач». Нажмите кнопку ниже, чтобы подтвердить ваш email-адрес.
                             </p>
-                            <table cellpadding="0" cellspacing="0" style="margin: 0 0 24px;">
+                            <table cellpadding="0" cellspacing="0" align="center" style="margin: 0 auto 24px;">
                                 <tr>
                                     <td style="background-color: #18181b; border-radius: 8px;">
-                                        <a href="{{link}}" style="display: inline-block; padding: 14px 32px; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 500;">
+                                        <a th:href="${link}" href="#" style="display: inline-block; padding: 14px 32px; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 500;" th:text="#{email.verify.button}">
                                             Подтвердить email
                                         </a>
                                     </td>
                                 </tr>
                             </table>
-                            <p style="color: #71717a; margin: 0 0 8px; font-size: 14px;">
+                            <p style="color: #71717a; margin: 0 0 8px; font-size: 14px;" th:text="#{email.common.fallback}">
                                 Если кнопка не работает, скопируйте ссылку в браузер:
                             </p>
-                            <p style="color: #3b82f6; margin: 0 0 24px; font-size: 14px; word-break: break-all;">
-                                {{link}}
+                            <p style="color: #3b82f6; margin: 0 0 24px; font-size: 14px; word-break: break-all;" th:text="${link}">
+                                https://example/link
                             </p>
-                            <p style="color: #a1a1aa; margin: 0; font-size: 13px;">
-                                Ссылка действительна {{ttlHours}} ч. Если вы не регистрировались — просто проигнорируйте это письмо.
+                            <p style="color: #a1a1aa; margin: 0; font-size: 13px;" th:text="#{email.verify.expires(${ttlHours})}">
+                                Ссылка действительна 24 ч. Если вы не регистрировались — просто проигнорируйте это письмо.
                             </p>
                         </td>
                     </tr>

@@ -4,20 +4,24 @@ import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.BucketConfiguration;
 import io.github.bucket4j.ConsumptionProbe;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import ru.mngerasimenko.todolist.config.RedisCacheConfig;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
+import ru.mngerasimenko.todolist.service.RedisHealthService;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.Optional;
 
 /**
  * Фильтр rate limiting на основе Bucket4j (алгоритм token bucket).
@@ -27,13 +31,40 @@ import java.time.Duration;
  * Включение/выключение — через {@link FeatureFlag#RATE_LIMIT} (runtime + env).
  */
 @Component
-@RequiredArgsConstructor
 @Slf4j
 public class RateLimitFilter extends OncePerRequestFilter {
 
     private final RateLimitProperties properties;
     private final BucketProvider bucketProvider;
     private final FeatureFlagStore flagStore;
+    private final RedisHealthService redisHealthService;
+    private final MeterRegistry meterRegistry;
+
+    /**
+     * In-memory fallback для случая, когда основной {@link BucketProvider} — Redis,
+     * и он становится недоступен. Активен только в Redis-режиме (создаётся через
+     * {@code BucketRedisConfig.bucket4jInMemoryFallback}). В memory-режиме отсутствует —
+     * там основной провайдер сам in-memory, fallback не нужен.
+     */
+    private final Optional<BucketProviderInMemory> inMemoryFallback;
+
+    public RateLimitFilter(RateLimitProperties properties,
+                           BucketProvider bucketProvider,
+                           FeatureFlagStore flagStore,
+                           @Autowired(required = false) BucketProviderInMemory inMemoryFallback,
+                           RedisHealthService redisHealthService,
+                           MeterRegistry meterRegistry) {
+        this.properties = properties;
+        this.bucketProvider = bucketProvider;
+        this.flagStore = flagStore;
+        this.redisHealthService = redisHealthService;
+        this.meterRegistry = meterRegistry;
+        // В memory-режиме основной провайдер сам in-memory — fallback не нужен (передаём пустой Optional).
+        // В redis-режиме сюда инжектится отдельный bean из BucketRedisConfig.
+        this.inMemoryFallback = (bucketProvider instanceof BucketProviderInMemory)
+                ? Optional.empty()
+                : Optional.ofNullable(inMemoryFallback);
+    }
 
     @Override
     protected void doFilterInternal(
@@ -65,8 +96,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        Bucket bucket = bucketProvider.resolveBucket(bucketKey, buildConfiguration(uri, request.getMethod()));
-        ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
+        BucketConfiguration config = buildConfiguration(uri, request.getMethod());
+        Bucket bucket = resolveBucketWithFallback(bucketKey, config);
+        ConsumptionProbe probe = tryConsumeWithFallback(bucket, bucketKey, config);
 
         if (probe.isConsumed()) {
             response.setHeader("X-Rate-Limit-Remaining", String.valueOf(probe.getRemainingTokens()));
@@ -145,6 +177,69 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
 
         return "general:" + clientIp;
+    }
+
+    /**
+     * Резолвит bucket через основной {@link BucketProvider} с защитой от сбоев Redis.
+     *
+     * Двухуровневая защита:
+     *   1. Circuit breaker: если {@link RedisHealthService} уже знает что Redis down,
+     *      сразу идём в in-memory без попытки Lettuce-запроса (минус 300мс timeout).
+     *   2. Try/catch: если circuit breaker ещё не сработал, ловим исключение,
+     *      помечаем Redis unhealthy для следующих запросов, и переключаемся на in-memory.
+     *
+     * В текущей версии bucket4j-lettuce {@code LettuceBasedProxyManager.getProxy(...)}
+     * ленивый и Redis-вызов не делает — но это implementation detail. Защита bulletproof
+     * на случай будущих изменений.
+     */
+    Bucket resolveBucketWithFallback(String bucketKey, BucketConfiguration config) {
+        if (inMemoryFallback.isPresent() && !redisHealthService.isRedisHealthy()) {
+            RedisCacheConfig.incrementFallbackCounter(meterRegistry, "rate_limit");
+            return inMemoryFallback.get().resolveBucket(bucketKey, config);
+        }
+        try {
+            return bucketProvider.resolveBucket(bucketKey, config);
+        } catch (RuntimeException ex) {
+            if (inMemoryFallback.isEmpty()) {
+                throw ex;
+            }
+            log.warn("Rate-limit Redis недоступен на resolveBucket, fallback in-memory для key={}: {}",
+                    bucketKey, ex.toString());
+            redisHealthService.markUnhealthy();
+            RedisCacheConfig.incrementFallbackCounter(meterRegistry, "rate_limit");
+            return inMemoryFallback.get().resolveBucket(bucketKey, config);
+        }
+    }
+
+    /**
+     * Дёргает {@code bucket.tryConsumeAndReturnRemaining(1)} с защитой от сбоев Redis.
+     *
+     * Двухуровневая защита (см. {@link #resolveBucketWithFallback}):
+     *   1. Если circuit breaker уже знает что Redis down — резолвим in-memory bucket
+     *      и работаем с ним.
+     *   2. Иначе пробуем основной bucket; при ошибке — markUnhealthy + fallback.
+     *
+     * Если fallback недоступен (memory-режим — основной провайдер сам in-memory,
+     * никаких дополнительных fallback'ов нет), exception пробрасывается дальше.
+     */
+    ConsumptionProbe tryConsumeWithFallback(Bucket bucket, String bucketKey, BucketConfiguration config) {
+        if (inMemoryFallback.isPresent() && !redisHealthService.isRedisHealthy()) {
+            RedisCacheConfig.incrementFallbackCounter(meterRegistry, "rate_limit");
+            Bucket memBucket = inMemoryFallback.get().resolveBucket(bucketKey, config);
+            return memBucket.tryConsumeAndReturnRemaining(1);
+        }
+        try {
+            return bucket.tryConsumeAndReturnRemaining(1);
+        } catch (RuntimeException ex) {
+            if (inMemoryFallback.isEmpty()) {
+                throw ex;
+            }
+            log.warn("Rate-limit Redis недоступен, fallback in-memory для key={}: {}", bucketKey, ex.toString());
+            redisHealthService.markUnhealthy();
+            RedisCacheConfig.incrementFallbackCounter(meterRegistry, "rate_limit");
+            Bucket memBucket = inMemoryFallback.get().resolveBucket(bucketKey, config);
+            return memBucket.tryConsumeAndReturnRemaining(1);
+        }
     }
 
     private BucketConfiguration buildConfiguration(String uri, String method) {

@@ -8,6 +8,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import ru.mngerasimenko.todolist.dto.validation.EmailValidation;
 
 /**
  * DTO для запроса регистрации пользователя
@@ -21,9 +22,9 @@ public class RegisterRequest {
     /**
      * Email пользователя
      */
-    @NotBlank(message = "Email не может быть пустым")
-    @Email(message = "Некорректный формат email")
-    @Size(max = 128, message = "Email не должен превышать 128 символов")
+    @NotBlank(message = "Email is required")
+    @Email(message = "Invalid email format")
+    @Size(max = EmailValidation.MAX_LENGTH, message = EmailValidation.MAX_LENGTH_MESSAGE)
     private String email;
 
     public void setEmail(String email) {
@@ -33,15 +34,23 @@ public class RegisterRequest {
     /**
      * Имя пользователя
      */
-    @NotBlank(message = "Имя пользователя не может быть пустым")
-    @Size(min = 2, max = 128, message = "Имя пользователя должно содержать от 2 до 128 символов")
-    @Pattern(regexp = "^[^<>]*$", message = "Имя содержит недопустимые символы")
+    @NotBlank(message = "Name is required")
+    @Size(min = 2, max = 128, message = "Name must be between 2 and 128 characters")
+    @Pattern(regexp = "^[^<>]*$", message = "Name contains invalid characters")
     private String name;
 
     /**
      * Пароль
      */
-    @NotBlank(message = "Пароль не может быть пустым")
-    @Size(min = 5, max = 128, message = "Пароль должен содержать от 5 до 128 символов")
+    @NotBlank(message = "Password is required")
+    @Size(min = 5, max = 128, message = "Password must be between 5 and 128 characters")
     private String password;
+
+    /**
+     * Язык писем для нового пользователя в формате BCP-47 (e.g. "ru", "en").
+     * Опциональное поле — если не указано, сервер использует Accept-Language
+     * заголовок запроса, fallback "ru" (см. UserServiceImpl.createUser).
+     */
+    @Size(max = 8, message = "Locale must not exceed 8 characters")
+    private String locale;
 }

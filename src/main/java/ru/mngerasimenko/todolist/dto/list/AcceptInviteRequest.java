@@ -15,6 +15,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class AcceptInviteRequest {
 
-    @NotBlank(message = "Токен приглашения обязателен")
+    @NotBlank(message = "Invite token is required")
     private String token;
 }

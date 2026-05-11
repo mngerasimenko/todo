@@ -2,9 +2,15 @@ package ru.mngerasimenko.todolist.service;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.support.ResourceBundleMessageSource;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
+import org.thymeleaf.spring6.SpringTemplateEngine;
+import org.thymeleaf.spring6.templateresolver.SpringResourceTemplateResolver;
+import org.thymeleaf.templatemode.TemplateMode;
 import ru.mngerasimenko.todolist.settings.EmailProperties;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.Properties;
 import java.util.UUID;
 
@@ -19,14 +25,14 @@ class SmtpSendTest {
     void sendTestVerificationEmail() {
         EmailServiceImpl emailService = createEmailService();
         String token = UUID.randomUUID().toString();
-        emailService.sendVerificationEmail("mngerasimenko@gmail.com", token);
+        emailService.sendVerificationEmail("mngerasimenko@gmail.com", token, "ru");
     }
 
     @Test
     void sendTestPasswordResetEmail() {
         EmailServiceImpl emailService = createEmailService();
         String token = UUID.randomUUID().toString();
-        emailService.sendPasswordResetEmail("mngeras@yandex.ru", token);
+        emailService.sendPasswordResetEmail("mngeras@yandex.ru", token, "ru");
     }
 
     private EmailServiceImpl createEmailService() {
@@ -51,6 +57,27 @@ class SmtpSendTest {
         emailProperties.setVerificationTokenTtlHours(24);
         emailProperties.setResetTokenTtlHours(1);
 
-        return new EmailServiceImpl(mailSender, emailProperties);
+        // MessageSource — те же бандлы, что в проде
+        ResourceBundleMessageSource messageSource = new ResourceBundleMessageSource();
+        messageSource.setBasename("messages");
+        messageSource.setDefaultEncoding(StandardCharsets.UTF_8.name());
+        messageSource.setDefaultLocale(Locale.forLanguageTag("ru"));
+        messageSource.setFallbackToSystemLocale(false);
+
+        // Thymeleaf engine — конфигурация совпадает с продовым autoconfig (см. application.properties)
+        SpringResourceTemplateResolver templateResolver = new SpringResourceTemplateResolver();
+        templateResolver.setPrefix("classpath:/templates/");
+        templateResolver.setSuffix(".html");
+        templateResolver.setTemplateMode(TemplateMode.HTML);
+        templateResolver.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        templateResolver.setCacheable(true);
+
+        SpringTemplateEngine templateEngine = new SpringTemplateEngine();
+        templateEngine.setTemplateResolver(templateResolver);
+        templateEngine.setTemplateEngineMessageSource(messageSource);
+
+        MessageService messageService = new MessageService(messageSource);
+
+        return new EmailServiceImpl(mailSender, emailProperties, templateEngine, messageService);
     }
 }

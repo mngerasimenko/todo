@@ -3,6 +3,7 @@ package ru.mngerasimenko.todolist.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -15,10 +16,12 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+import static org.assertj.core.api.Assertions.assertThat;
 import ru.mngerasimenko.todolist.config.TestSecurityConfig;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.dto.UserResponse;
 import ru.mngerasimenko.todolist.dto.auth.*;
+import ru.mngerasimenko.todolist.dto.validation.EmailValidation;
 import ru.mngerasimenko.todolist.exception.TokenExpiredException;
 import ru.mngerasimenko.todolist.mapper.UserMapper;
 import ru.mngerasimenko.todolist.security.ApiSecurityConfig;
@@ -152,7 +155,7 @@ class AuthControllerTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.status").value(401))
                 .andExpect(jsonPath("$.error").value("Unauthorized"))
-                .andExpect(jsonPath("$.message").value("Неверный email или пароль"));
+                .andExpect(jsonPath("$.message").value("Invalid email or password"));
     }
 
     @Test
@@ -241,6 +244,89 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.user.id").value(2))
                 .andExpect(jsonPath("$.user.email").value("new@example.com"))
                 .andExpect(jsonPath("$.user.name").value("newUser"));
+    }
+
+    // === preferredEmailLocale resolution: locale в DTO → Accept-Language → "ru" ===
+
+    @Test
+    void register_WithExplicitLocale_PassesLocaleToService() throws Exception {
+        RegisterRequest registerRequest = RegisterRequest.builder()
+                .email("explicit@example.com").name("user").password("password123")
+                .locale("en")
+                .build();
+        UserDto stubDto = UserDto.builder().id(2L).email("explicit@example.com").name("user").build();
+        when(userService.createUser(any(UserDto.class))).thenReturn(stubDto);
+        when(userMapper.toResponse(any(UserDto.class))).thenReturn(UserResponse.builder().id(2L).build());
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Accept-Language", "ru") // Accept-Language игнорируется когда locale явный
+                        .content(objectMapper.writeValueAsString(registerRequest)))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<UserDto> captor = ArgumentCaptor.forClass(UserDto.class);
+        verify(userService).createUser(captor.capture());
+        assertThat(captor.getValue().getPreferredEmailLocale()).isEqualTo("en");
+    }
+
+    @Test
+    void register_WithoutLocale_UsesAcceptLanguageHeader() throws Exception {
+        RegisterRequest registerRequest = RegisterRequest.builder()
+                .email("header@example.com").name("user").password("password123")
+                .build();
+        UserDto stubDto = UserDto.builder().id(2L).email("header@example.com").name("user").build();
+        when(userService.createUser(any(UserDto.class))).thenReturn(stubDto);
+        when(userMapper.toResponse(any(UserDto.class))).thenReturn(UserResponse.builder().id(2L).build());
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Accept-Language", "en-US,en;q=0.9,ru;q=0.8")
+                        .content(objectMapper.writeValueAsString(registerRequest)))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<UserDto> captor = ArgumentCaptor.forClass(UserDto.class);
+        verify(userService).createUser(captor.capture());
+        // LanguageRange.parse возвращает первый range; Accept-Language нормализуется в lowercase
+        assertThat(captor.getValue().getPreferredEmailLocale()).isEqualToIgnoringCase("en-US");
+    }
+
+    @Test
+    void register_WithoutLocaleAndHeader_DefaultsToRu() throws Exception {
+        RegisterRequest registerRequest = RegisterRequest.builder()
+                .email("default@example.com").name("user").password("password123")
+                .build();
+        UserDto stubDto = UserDto.builder().id(2L).email("default@example.com").name("user").build();
+        when(userService.createUser(any(UserDto.class))).thenReturn(stubDto);
+        when(userMapper.toResponse(any(UserDto.class))).thenReturn(UserResponse.builder().id(2L).build());
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(registerRequest)))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<UserDto> captor = ArgumentCaptor.forClass(UserDto.class);
+        verify(userService).createUser(captor.capture());
+        assertThat(captor.getValue().getPreferredEmailLocale()).isEqualTo("ru");
+    }
+
+    @Test
+    void register_WildcardAcceptLanguage_DefaultsToRu() throws Exception {
+        RegisterRequest registerRequest = RegisterRequest.builder()
+                .email("wild@example.com").name("user").password("password123")
+                .build();
+        UserDto stubDto = UserDto.builder().id(2L).email("wild@example.com").name("user").build();
+        when(userService.createUser(any(UserDto.class))).thenReturn(stubDto);
+        when(userMapper.toResponse(any(UserDto.class))).thenReturn(UserResponse.builder().id(2L).build());
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Accept-Language", "*")
+                        .content(objectMapper.writeValueAsString(registerRequest)))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<UserDto> captor = ArgumentCaptor.forClass(UserDto.class);
+        verify(userService).createUser(captor.capture());
+        assertThat(captor.getValue().getPreferredEmailLocale()).isEqualTo("ru");
     }
 
     @Test
@@ -615,6 +701,24 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.message.email").exists());
     }
 
+    @Test
+    void forgotPassword_TooLongEmail_ReturnsBadRequest() throws Exception {
+        // Arrange — email длиной MAX_LENGTH+1 (точно превышает @Size).
+        // Local-part 64 (макс по RFC 5321), чтобы пройти @Email и сработал именно @Size.
+        String overlongEmail = "a".repeat(64) + "@" + "b".repeat(EmailValidation.MAX_LENGTH - 67) + ".io";
+        String expectedMessage = "Email must not exceed " + EmailValidation.MAX_LENGTH + " characters";
+        ForgotPasswordRequest request = new ForgotPasswordRequest(overlongEmail);
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message.email").value(expectedMessage));
+
+        verifyNoInteractions(userService);
+    }
+
     // ==================== RESET PASSWORD TESTS ====================
 
     @Test
@@ -760,6 +864,25 @@ class AuthControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message.email").exists());
+    }
+
+    @Test
+    @WithMockUser(username = "test@example.com")
+    void changeEmail_TooLongEmail_ReturnsBadRequest() throws Exception {
+        // Arrange — email длиной MAX_LENGTH+1 (точно превышает @Size).
+        // Local-part 64 (макс по RFC 5321), чтобы пройти @Email и сработал именно @Size.
+        String overlongEmail = "a".repeat(64) + "@" + "b".repeat(EmailValidation.MAX_LENGTH - 67) + ".io";
+        String expectedMessage = "Email must not exceed " + EmailValidation.MAX_LENGTH + " characters";
+        ChangeEmailRequest request = new ChangeEmailRequest(overlongEmail);
+
+        // Act & Assert
+        mockMvc.perform(post("/api/auth/change-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message.email").value(expectedMessage));
+
+        verifyNoInteractions(userService);
     }
 
     // ==================== LOGOUT TESTS ====================

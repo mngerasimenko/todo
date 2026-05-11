@@ -146,6 +146,32 @@ newman run TodoList_API.postman_collection.json \
   --reporter-html-export report.html
 ```
 
+### ⚠️ Подготовка к повторному прогону
+
+Коллекция тестирует rate-limit-эндпоинты (`Auth → Register` 3/час, `Auth → Login` 5/мин) и каскадное удаление аккаунта. При повторных прогонах **на той же БД** счётчики rate-limit в Redis и созданные пользователи переживают рестарт newman → начиная со 2-го прогона часть запросов получит 429 или 400 (email уже занят).
+
+**Перед каждым повторным прогоном** на свежей или dirty-БД:
+
+```bash
+# 1. Очистить Redis (rate-limit, кэши)
+docker exec staging-redis redis-cli -a "<REDIS_PASSWORD>" FLUSHALL
+
+# 2. Очистить БД (с restart identity, чтобы id начались с 1)
+docker exec staging-db psql -U postgres -d todo -c \
+  "TRUNCATE todo_users, task_list, task_list_user, todo, refresh_token, invite_token, push_token RESTART IDENTITY CASCADE;"
+
+# 3. Восстановить системного пользователя «Удалённый пользователь» (id=0).
+#    TRUNCATE удалит его, и при следующем delete account сервер бросит
+#    IllegalStateException("Системный пользователь (id=0) не найден").
+docker exec staging-db psql -U postgres -d todo -c \
+  "INSERT INTO todo_users (id, auth_id, email, password, name, created_task_color, completed_task_color, email_verified, created_at) \
+   VALUES (0, 'system-deleted', 'deleted@system.local', \
+           '\$2a\$10\$000000000000000000000uGhISe1rVFSqGGSm0pLdCNOJGOi6jjG', \
+           'Удалённый пользователь', '#9E9E9E', '#9E9E9E', true, CURRENT_TIMESTAMP);"
+```
+
+Альтернатива — пересоздать БД-volume через `docker compose down -v` + `up -d`. Тогда Liquibase повторно применит все миграции, включая seed системного пользователя (`008-add-deleted-user.yaml`), и шаги 1-3 выше не нужны.
+
 ## 🔧 Переменные
 
 ### Collection Variables (автоматически заполняются)
@@ -180,7 +206,7 @@ newman run TodoList_API.postman_collection.json \
 **Решение:**
 1. Выполните `Auth → Login`
 2. Проверьте, что переменная `accessToken` заполнена
-3. Если токен истёк (1 час), используйте `Auth → Refresh Token`
+3. Если токен истёк (4 часа), используйте `Auth → Refresh Token`
 
 ### "400 Bad Request" при создании задачи/пользователя
 
@@ -229,7 +255,7 @@ POST /api/auth/register
 {
   "access_token": "eyJhbGci...",
   "refresh_token": "eyJhbGci...",
-  "expires_in": 3600,
+  "expires_in": 14400,
   "token_type": "Bearer",
   "user": {
     "id": 1,
@@ -272,6 +298,6 @@ Authorization: Bearer <access_token>
 
 ---
 
-**Версия коллекции:** 1.0
-**Последнее обновление:** 2026-02-17
+**Версия коллекции:** 1.2
+**Последнее обновление:** 2026-05-07
 **API версия:** Spring Boot 3.5.6 + JWT

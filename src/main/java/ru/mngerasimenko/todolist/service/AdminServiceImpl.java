@@ -34,7 +34,8 @@ public class AdminServiceImpl implements AdminService {
         boolean emailSent = false;
         if (Boolean.TRUE.equals(user.getEmailVerified())) {
             try {
-                emailService.sendInactiveReminderEmail(user.getEmail(), user.getName(), user.getId());
+                emailService.sendInactiveReminderEmail(
+                        user.getEmail(), user.getName(), user.getId(), user.getPreferredEmailLocale());
                 emailSent = true;
             } catch (Exception e) {
                 log.warn("[admin] Ошибка отправки email userId={}: {}", user.getId(), e.getMessage());

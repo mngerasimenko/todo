@@ -9,6 +9,7 @@ import ru.mngerasimenko.todolist.model.Todo;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Репозиторий для работы с задачами (таблица todo).
@@ -107,8 +108,9 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
     long countByCompletedAtAfter(LocalDateTime since);
 
     /**
-     * Количество уникальных пользователей, создавших задачи после указанной даты.
+     * ID уникальных пользователей, создавших или выполнивших задачи после указанной даты.
+     * Используется для расчёта метрики «активные пользователи» в статистике.
      */
-    @Query("SELECT COUNT(DISTINCT t.user.id) FROM Todo t WHERE t.createdAt > :since")
-    long countDistinctActiveUsersSince(@Param("since") LocalDateTime since);
+    @Query("SELECT DISTINCT t.user.id FROM Todo t WHERE t.createdAt > :since OR t.completedAt > :since")
+    Set<Long> findActiveUserIdsSince(@Param("since") LocalDateTime since);
 }

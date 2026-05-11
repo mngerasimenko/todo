@@ -2,12 +2,28 @@ package ru.mngerasimenko.todolist.config;
 
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.config.MeterFilter;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.actuate.metrics.cache.CacheMeterBinderProvider;
+import org.springframework.boot.actuate.metrics.cache.RedisCacheMetrics;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+import org.springframework.data.redis.cache.RedisCache;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import ru.mngerasimenko.todolist.service.RedisHealthService;
+
+import java.util.Collection;
+import java.util.concurrent.Callable;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext.SerializationPair;
 import org.springframework.data.redis.serializer.RedisSerializer;
@@ -47,7 +63,8 @@ import java.util.List;
  */
 @Configuration
 @EnableCaching
-public class RedisCacheConfig {
+@Slf4j
+public class RedisCacheConfig implements CachingConfigurer {
 
     public static final String USERS_ME = "users-me";
     public static final String TASK_LISTS = "task-lists";
@@ -60,9 +77,29 @@ public class RedisCacheConfig {
     public static final String CACHE_CONDITION =
             "@featureFlagStore.isEnabled(T(ru.mngerasimenko.todolist.featureflags.FeatureFlag).RESPONSE_CACHE)";
 
+    private final MeterRegistry meterRegistry;
+    private final RedisHealthService redisHealthService;
+
+    public RedisCacheConfig(MeterRegistry meterRegistry, RedisHealthService redisHealthService) {
+        this.meterRegistry = meterRegistry;
+        this.redisHealthService = redisHealthService;
+    }
+
+    /**
+     * RedisCacheManager регистрируется как самостоятельный bean, чтобы Spring сам
+     * вызвал {@link RedisCacheManager#afterPropertiesSet()} и подгрузил initialCaches
+     * (USERS_ME / TASK_LISTS / USER_AUTH со своими Jackson-сериализаторами).
+     *
+     * Раньше builder().build() вызывался внутри метода cacheManager(), результат
+     * не был bean'ом, afterPropertiesSet() не вызывался — initialCaches оставались
+     * незагруженными, и при getCache(name) Spring создавал кэши через
+     * cacheDefaults без serializeValuesWith → дефолтный JdkSerializationRedisSerializer
+     * пытался сериализовать DTO без Serializable → SerializationException на каждом
+     * cache PUT.
+     */
     @Bean
-    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory,
-                                          ObjectMapper appObjectMapper) {
+    public RedisCacheManager redisCacheManager(RedisConnectionFactory connectionFactory,
+                                               ObjectMapper appObjectMapper) {
         RedisCacheConfiguration base = RedisCacheConfiguration.defaultCacheConfig()
                 .disableCachingNullValues()
                 .serializeKeysWith(SerializationPair.fromSerializer(new StringRedisSerializer()));
@@ -79,7 +116,11 @@ public class RedisCacheConfig {
         RedisSerializer<List<ListResponse>> taskListsSerializer =
                 (RedisSerializer) new Jackson2JsonRedisSerializer<>(appObjectMapper, listResponseType);
 
+        // enableStatistics() обязателен для cache.gets/puts/evictions Micrometer-метрик:
+        // без него RedisCache.getStatistics() возвращает no-op-объект с нулями,
+        // и панель «Cache Hit Rate» в Grafana показывает «No data».
         return RedisCacheManager.builder(connectionFactory)
+                .enableStatistics()
                 .cacheDefaults(base)
                 .withCacheConfiguration(USERS_ME, base
                         .entryTtl(Duration.ofSeconds(60))
@@ -91,5 +132,317 @@ public class RedisCacheConfig {
                         .entryTtl(Duration.ofSeconds(60))
                         .serializeValuesWith(SerializationPair.fromSerializer(authUserDtoSerializer)))
                 .build();
+    }
+
+    /**
+     * @Primary — Spring видит два бина типа CacheManager (RedisCacheManager и
+     * HealthAwareCacheManager-обёртка), и для разрешения @Cacheable должен выбрать
+     * именно обёртку с circuit breaker'ом, а не голый RedisCacheManager.
+     */
+    @Bean
+    @Primary
+    public CacheManager cacheManager(RedisCacheManager redisCacheManager,
+                                     RedisHealthService redisHealthService) {
+        // Оборачиваем в circuit breaker: при !redisHealthService.isRedisHealthy()
+        // все cache-операции no-op без обращения к Redis. Это убирает 4 timeout-ожидания
+        // (по 300мс каждое) на каждом запросе во время сбоя Redis — суммарно ~2 сек/запрос.
+        return new HealthAwareCacheManager(redisCacheManager, redisHealthService, meterRegistry);
+    }
+
+    /**
+     * Подсказывает Spring Boot {@code CacheMetricsAutoConfiguration}, как извлечь
+     * Micrometer-метрики ({@code cache.gets}, {@code cache.puts}, {@code cache.evictions})
+     * из обёртки {@link HealthAwareCache}.
+     *
+     * Стандартный {@code RedisCacheMeterBinderProvider} принимает только
+     * {@link RedisCache}, а у нас Spring видит {@code HealthAwareCache} → ни один
+     * провайдер не подходит → метрики никогда не регистрируются → Grafana-дашборд
+     * пуст. Здесь разворачиваем обёртку и отдаём родной {@link RedisCacheMetrics}
+     * на underlying {@link RedisCache}.
+     */
+    @Bean
+    public CacheMeterBinderProvider<HealthAwareCache> healthAwareCacheMeterBinderProvider() {
+        return (cache, tags) -> {
+            Cache d = cache.getDelegate();
+            return d instanceof RedisCache rc ? new RedisCacheMetrics(rc, tags) : null;
+        };
+    }
+
+    /**
+     * Spring Boot {@code CacheMetricsAutoConfiguration} регистрирует {@code cache.*}
+     * метрики для каждого {@link CacheManager}-bean. У нас их два: основной
+     * {@link HealthAwareCacheManager} (под именем {@code cacheManager}) и внутренний
+     * {@link RedisCacheManager} (под именем {@code redis}, после strip суффикса
+     * «CacheManager»). В итоге каждая операция даёт две одинаковых серии — и
+     * Prometheus-функции {@code rate()}/{@code increase()} удваивают значения,
+     * что ломает алерты на cache hit rate.
+     *
+     * Отбрасываем дубликат от внутреннего bean'а — остаётся только обёртка
+     * с circuit breaker'ом, через которую и идут реальные cache-операции.
+     *
+     * <p><b>Важно: метод {@code static}.</b> {@code MeterFilter} применяется при
+     * инициализации {@link MeterRegistry}, а сам RedisCacheConfig инжектит
+     * {@code MeterRegistry} в конструкторе → circular dependency. Static-метод
+     * создаётся до instance config'а и обходит цикл (см. Spring Boot Actuator docs).
+     */
+    @Bean
+    public static MeterFilter denyDuplicateCacheManagerMetrics() {
+        return MeterFilter.deny(id -> "redis".equals(id.getTag("cache.manager")));
+    }
+
+    /**
+     * CacheErrorHandler — graceful degradation при недоступности Redis.
+     *
+     * Все 4 callback'а логируют WARN и инкрементируют counter "cache.errors"
+     * с тегами {@code cache} (имя кэша) и {@code operation} (get/put/evict/clear).
+     * Тегирование позволяет в Grafana/Prometheus разделять ошибки по типу кэша
+     * (например, ошибка в "user-auth" критичнее, чем в "task-lists").
+     *
+     * Исключения НЕ пробрасываются:
+     *   - get-error → Spring трактует как cache miss → метод выполняется (медленнее, но работает).
+     *   - put-error → результат метода возвращается клиенту, в кэш не попадает.
+     *   - evict-error → stale-данные живут максимум до TTL=60 сек.
+     *   - clear-error → аналогично evict.
+     *
+     * Подключается через {@link CachingConfigurer#errorHandler()} — глобально на все CacheManager.
+     */
+    @Bean
+    public CacheErrorHandler cacheErrorHandler(MeterRegistry meterRegistry) {
+        return new CacheErrorHandler() {
+            // SLF4J trick: если последний параметр — Throwable и плейсхолдеров {} столько же,
+            // сколько остальных параметров, Logback не подставляет его в {}, а печатает
+            // полный stack trace с caused-by. Так не теряется реальная причина
+            // (например, JsonMappingException из Jackson при сериализации DTO).
+            @Override
+            public void handleCacheGetError(RuntimeException ex, Cache cache, Object key) {
+                log.warn("Redis cache GET error in '{}' for key={}", cache.getName(), key, ex);
+                incrementErrorCounter(meterRegistry, cache.getName(), "get");
+                markRedisUnhealthyIfPossible();
+            }
+
+            @Override
+            public void handleCachePutError(RuntimeException ex, Cache cache, Object key, Object value) {
+                log.warn("Redis cache PUT error in '{}' for key={}", cache.getName(), key, ex);
+                incrementErrorCounter(meterRegistry, cache.getName(), "put");
+                markRedisUnhealthyIfPossible();
+            }
+
+            @Override
+            public void handleCacheEvictError(RuntimeException ex, Cache cache, Object key) {
+                log.warn("Redis cache EVICT error in '{}' for key={}", cache.getName(), key, ex);
+                incrementErrorCounter(meterRegistry, cache.getName(), "evict");
+                markRedisUnhealthyIfPossible();
+            }
+
+            @Override
+            public void handleCacheClearError(RuntimeException ex, Cache cache) {
+                log.warn("Redis cache CLEAR error in '{}'", cache.getName(), ex);
+                incrementErrorCounter(meterRegistry, cache.getName(), "clear");
+                markRedisUnhealthyIfPossible();
+            }
+
+            // Помечает Redis как недоступный, если RedisHealthService инжектирован.
+            // null-проверка — защита для unit-тестов, где этот сервис может не передаваться.
+            private void markRedisUnhealthyIfPossible() {
+                if (redisHealthService != null) {
+                    redisHealthService.markUnhealthy();
+                }
+            }
+        };
+    }
+
+    /**
+     * Регистрирует (или находит уже зарегистрированный) counter "cache.errors"
+     * с тегами cache+operation и инкрементирует его. Micrometer кеширует counter
+     * по name+tags, повторный вызов не создаёт нового объекта.
+     */
+    private static void incrementErrorCounter(MeterRegistry registry, String cacheName, String operation) {
+        Counter.builder("cache.errors")
+                .description("Ошибки операций Spring Cache (Redis недоступен и т.п.)")
+                .tag("cache", cacheName)
+                .tag("operation", operation)
+                .register(registry)
+                .increment();
+    }
+
+    /**
+     * Override CachingConfigurer.errorHandler() — Spring подключит handler глобально
+     * ко всем CacheManager. Создаём новый instance через bean-метод (Micrometer counter
+     * идемпотентен при повторной регистрации по имени, поэтому безопасно).
+     * Не self-inject bean, чтобы избежать circular initialization.
+     */
+    @Override
+    public CacheErrorHandler errorHandler() {
+        return cacheErrorHandler(meterRegistry);
+    }
+
+    /**
+     * Общий counter "redis.fallback" для всех компонентов resilience-стека.
+     * Тег {@code component} = {@code rate_limit | blacklist | cache} — позволяет в
+     * Grafana строить агрегированный график «сколько fallback'ов в секунду» с
+     * разбивкой и алертить на anomaly.
+     */
+    public static void incrementFallbackCounter(MeterRegistry registry, String component) {
+        Counter.builder("redis.fallback")
+                .description("Срабатывания fallback-механизмов при недоступности Redis")
+                .tag("component", component)
+                .register(registry)
+                .increment();
+    }
+
+    /**
+     * Decorator над основным {@link CacheManager}, реализующий circuit breaker
+     * на основе {@link RedisHealthService}. Когда Redis помечен как down,
+     * возвращает {@link HealthAwareCache} в режиме no-op — без обращения к Redis.
+     *
+     * Эффект: при недоступности Redis 4 cache-операции на запрос
+     * (get/put для user-auth + users-me) выполняются мгновенно вместо timeout
+     * 300мс на каждой → суммарно ~1.2 сек экономии на запрос.
+     */
+    static class HealthAwareCacheManager implements CacheManager {
+
+        private final CacheManager delegate;
+        private final RedisHealthService health;
+        private final MeterRegistry meterRegistry;
+
+        HealthAwareCacheManager(CacheManager delegate, RedisHealthService health, MeterRegistry meterRegistry) {
+            this.delegate = delegate;
+            this.health = health;
+            this.meterRegistry = meterRegistry;
+        }
+
+        @Override
+        public Cache getCache(String name) {
+            Cache underlying = delegate.getCache(name);
+            return underlying == null ? null : new HealthAwareCache(underlying, health, meterRegistry);
+        }
+
+        @Override
+        public Collection<String> getCacheNames() {
+            return delegate.getCacheNames();
+        }
+    }
+
+    /**
+     * Decorator над {@link Cache}, который при {@code !health.isRedisHealthy()}
+     * пропускает обращения к Redis: {@code get} → null (cache miss → метод выполнится),
+     * {@code put}/{@code evict}/{@code clear} → no-op.
+     *
+     * При cache miss из-за circuit breaker инкрементируется counter
+     * {@code redis.fallback{component=cache}}.
+     */
+    static class HealthAwareCache implements Cache {
+
+        private final Cache delegate;
+        private final RedisHealthService health;
+        private final MeterRegistry meterRegistry;
+
+        HealthAwareCache(Cache delegate, RedisHealthService health, MeterRegistry meterRegistry) {
+            this.delegate = delegate;
+            this.health = health;
+            this.meterRegistry = meterRegistry;
+        }
+
+        /**
+         * Доступ к обёрнутому Cache — нужен только для {@code CacheMeterBinderProvider}
+         * в том же {@link RedisCacheConfig}, поэтому package-private.
+         *
+         * <p><b>Предположение:</b> delegate — это {@link RedisCache}. Если когда-либо
+         * появится дополнительная обёртка между {@code HealthAwareCache} и
+         * {@code RedisCache}, провайдер метрик молча отдаст {@code null} и Grafana
+         * снова потеряет {@code cache.*}. В этом случае нужен второй unwrap.
+         */
+        Cache getDelegate() {
+            return delegate;
+        }
+
+        @Override
+        public String getName() {
+            return delegate.getName();
+        }
+
+        @Override
+        public Object getNativeCache() {
+            return delegate.getNativeCache();
+        }
+
+        @Override
+        public ValueWrapper get(Object key) {
+            if (!health.isRedisHealthy()) {
+                incrementFallbackCounter(meterRegistry, "cache");
+                return null;
+            }
+            return delegate.get(key);
+        }
+
+        @Override
+        public <T> T get(Object key, Class<T> type) {
+            if (!health.isRedisHealthy()) {
+                incrementFallbackCounter(meterRegistry, "cache");
+                return null;
+            }
+            return delegate.get(key, type);
+        }
+
+        @Override
+        public <T> T get(Object key, Callable<T> valueLoader) {
+            if (!health.isRedisHealthy()) {
+                incrementFallbackCounter(meterRegistry, "cache");
+                try {
+                    return valueLoader.call();
+                } catch (Exception ex) {
+                    throw new ValueRetrievalException(key, valueLoader, ex);
+                }
+            }
+            return delegate.get(key, valueLoader);
+        }
+
+        @Override
+        public void put(Object key, Object value) {
+            if (!health.isRedisHealthy()) {
+                return;
+            }
+            delegate.put(key, value);
+        }
+
+        @Override
+        public ValueWrapper putIfAbsent(Object key, Object value) {
+            if (!health.isRedisHealthy()) {
+                return null;
+            }
+            return delegate.putIfAbsent(key, value);
+        }
+
+        @Override
+        public void evict(Object key) {
+            if (!health.isRedisHealthy()) {
+                return;
+            }
+            delegate.evict(key);
+        }
+
+        @Override
+        public boolean evictIfPresent(Object key) {
+            if (!health.isRedisHealthy()) {
+                return false;
+            }
+            return delegate.evictIfPresent(key);
+        }
+
+        @Override
+        public void clear() {
+            if (!health.isRedisHealthy()) {
+                return;
+            }
+            delegate.clear();
+        }
+
+        @Override
+        public boolean invalidate() {
+            if (!health.isRedisHealthy()) {
+                return false;
+            }
+            return delegate.invalidate();
+        }
     }
 }

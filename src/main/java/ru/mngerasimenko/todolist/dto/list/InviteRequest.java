@@ -1,10 +1,12 @@
 package ru.mngerasimenko.todolist.dto.list;
 
 import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import ru.mngerasimenko.todolist.dto.validation.EmailValidation;
 
 /**
  * DTO запроса на создание приглашения в список.
@@ -17,7 +19,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class InviteRequest {
 
-    @Email(message = "Некорректный формат email")
+    @Email(message = "Invalid email format")
+    @Size(max = EmailValidation.MAX_LENGTH, message = EmailValidation.MAX_LENGTH_MESSAGE)
     private String email;
 
     public void setEmail(String email) {

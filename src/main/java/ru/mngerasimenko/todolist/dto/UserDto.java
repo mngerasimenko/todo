@@ -9,6 +9,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import ru.mngerasimenko.todolist.dto.validation.EmailValidation;
 
 import java.time.LocalDateTime;
 
@@ -30,7 +31,7 @@ public class UserDto {
 
     @Email
     @NotBlank
-    @Size(max = 128)
+    @Size(max = EmailValidation.MAX_LENGTH, message = EmailValidation.MAX_LENGTH_MESSAGE)
     private String email;
 
     @JsonIgnore
@@ -61,4 +62,12 @@ public class UserDto {
 
     @JsonProperty("is_beta_tester")
     private Boolean betaTester;
+
+    /**
+     * Язык писем пользователя в формате BCP-47 (e.g. "ru", "en").
+     * Устанавливается при регистрации, меняется через PATCH /api/users/me/email-locale.
+     */
+    @JsonProperty("preferred_email_locale")
+    @Size(max = 8)
+    private String preferredEmailLocale;
 }

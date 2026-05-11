@@ -82,7 +82,7 @@ class InactiveReminderSchedulerTest {
         scheduler.sendReminders();
 
         verify(pushNotificationService).sendInactiveReminderPush(1L, "Иван");
-        verify(emailService).sendInactiveReminderEmail("ivan@mail.ru", "Иван", 1L);
+        verify(emailService).sendInactiveReminderEmail(eq("ivan@mail.ru"), eq("Иван"), eq(1L), anyString());
         verify(userService).markReminderSent(1L);
     }
 
@@ -93,7 +93,7 @@ class InactiveReminderSchedulerTest {
         scheduler.sendReminders();
 
         verify(pushNotificationService).sendInactiveReminderPush(2L, "Пётр");
-        verify(emailService, never()).sendInactiveReminderEmail(anyString(), anyString(), anyLong());
+        verify(emailService, never()).sendInactiveReminderEmail(anyString(), anyString(), anyLong(), anyString());
         verify(userService).markReminderSent(2L);
     }
 
@@ -106,7 +106,7 @@ class InactiveReminderSchedulerTest {
 
         scheduler.sendReminders();
 
-        verify(emailService).sendInactiveReminderEmail("ivan@mail.ru", "Иван", 1L);
+        verify(emailService).sendInactiveReminderEmail(eq("ivan@mail.ru"), eq("Иван"), eq(1L), anyString());
         verify(userService).markReminderSent(1L);
     }
 
@@ -121,7 +121,7 @@ class InactiveReminderSchedulerTest {
 
         when(userService.findInactiveUsersForReminder(7)).thenReturn(List.of(verifiedUser, secondUser));
         doThrow(new RuntimeException("SMTP error"))
-                .when(emailService).sendInactiveReminderEmail(eq("ivan@mail.ru"), anyString(), anyLong());
+                .when(emailService).sendInactiveReminderEmail(eq("ivan@mail.ru"), anyString(), anyLong(), anyString());
 
         scheduler.sendReminders();
 

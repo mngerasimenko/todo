@@ -20,6 +20,7 @@ import ru.mngerasimenko.todolist.repository.UserRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Реализация сервиса push-уведомлений через Firebase Cloud Messaging.
@@ -36,31 +37,36 @@ public class PushNotificationServiceImpl implements PushNotificationService {
     private final UserRepository userRepository;
     private final ru.mngerasimenko.todolist.repository.TaskListRepository taskListRepository;
     private final FeatureFlagStore flagStore;
+    private final MessageService messageService;
 
     /** Кешированный результат проверки Firebase */
     private volatile boolean firebaseHealthyCache = false;
 
     @Override
     @Transactional
-    public void registerToken(Long userId, String fcmToken, String deviceId) {
+    public void registerToken(Long userId, String fcmToken, String deviceId, String locale) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found: " + userId));
+
+        // Fallback на "ru" для старых Android-клиентов, которые не шлют поле locale
+        String effectiveLocale = (locale == null || locale.isBlank()) ? "ru" : locale;
 
         PushToken pushToken = pushTokenRepository.findByDeviceId(deviceId)
                 .orElse(null);
 
         if (pushToken != null) {
-            // Обновляем существующий токен (устройство могло сменить пользователя или токен)
+            // Обновляем существующий токен (устройство могло сменить пользователя, токен или язык)
             pushToken.setUser(user);
             pushToken.setFcmToken(fcmToken);
+            pushToken.setLocale(effectiveLocale);
             pushToken.setUpdatedAt(LocalDateTime.now());
             pushTokenRepository.save(pushToken);
-            log.info("Обновлён push-токен для устройства: deviceId={}, userId={}", deviceId, userId);
+            log.info("Обновлён push-токен для устройства: deviceId={}, userId={}, locale={}", deviceId, userId, effectiveLocale);
         } else {
             // Новое устройство
-            pushToken = new PushToken(user, fcmToken, deviceId);
+            pushToken = new PushToken(user, fcmToken, deviceId, effectiveLocale);
             pushTokenRepository.save(pushToken);
-            log.info("Зарегистрирован push-токен: deviceId={}, userId={}", deviceId, userId);
+            log.info("Зарегистрирован push-токен: deviceId={}, userId={}, locale={}", deviceId, userId, effectiveLocale);
         }
     }
 
@@ -80,11 +86,14 @@ public class PushNotificationServiceImpl implements PushNotificationService {
     public void notifyNewTodo(Long listId, Long authorUserId, String authorName, String todoName) {
         if (pushDisabled()) return;
         log.info("Отправка push: новая задача '{}' в списке {}, автор userId={}", todoName, listId, authorUserId);
-        List<String> tokens = pushTokenRepository.findFcmTokensByListIdExcludingUser(listId, authorUserId);
+        List<PushToken> tokens = pushTokenRepository.findByListIdExcludingUser(listId, authorUserId);
         log.info("Найдено {} push-токенов для уведомления", tokens.size());
         if (tokens.isEmpty()) return;
 
-        sendToMultiple(tokens, "Новая задача", authorName + " добавил: \"" + todoName + "\"", listId);
+        sendLocalized(tokens,
+                "push.todo.created.title", new Object[]{},
+                "push.todo.created.body", new Object[]{authorName, todoName},
+                listId);
     }
 
     @Override
@@ -92,11 +101,14 @@ public class PushNotificationServiceImpl implements PushNotificationService {
     public void notifyTodoCompleted(Long completorUserId, Long listId, String completorName, String todoName) {
         if (pushDisabled()) return;
         log.info("Отправка push: задача '{}' выполнена пользователем '{}' в списке {}", todoName, completorName, listId);
-        List<String> tokens = pushTokenRepository.findFcmTokensByListIdExcludingUser(listId, completorUserId);
+        List<PushToken> tokens = pushTokenRepository.findByListIdExcludingUser(listId, completorUserId);
         log.info("Найдено {} push-токенов для уведомления", tokens.size());
         if (tokens.isEmpty()) return;
 
-        sendToMultiple(tokens, "Задача выполнена ✓", completorName + " выполнил: \"" + todoName + "\"", listId);
+        sendLocalized(tokens,
+                "push.todo.done.title", new Object[]{},
+                "push.todo.done.body", new Object[]{completorName, todoName},
+                listId);
     }
 
     @Override
@@ -104,11 +116,14 @@ public class PushNotificationServiceImpl implements PushNotificationService {
     public void notifyNewMember(Long listId, Long newUserId, String newUserName, String listName) {
         if (pushDisabled()) return;
         log.info("Отправка push: новый участник '{}' в списке {} ('{}')", newUserName, listId, listName);
-        List<String> tokens = pushTokenRepository.findFcmTokensByListIdExcludingUser(listId, newUserId);
+        List<PushToken> tokens = pushTokenRepository.findByListIdExcludingUser(listId, newUserId);
         log.info("Найдено {} push-токенов для уведомления", tokens.size());
         if (tokens.isEmpty()) return;
 
-        sendToMultiple(tokens, "Новый участник", newUserName + " присоединился к списку \"" + listName + "\"", listId);
+        sendLocalized(tokens,
+                "push.member.added.title", new Object[]{},
+                "push.member.added.body", new Object[]{newUserName, listName},
+                listId);
     }
 
     @Override
@@ -131,18 +146,28 @@ public class PushNotificationServiceImpl implements PushNotificationService {
     }
 
     /**
-     * Отправить push на несколько устройств с данными о списке.
+     * Отправить локализованный push на несколько устройств. Title/body для каждого
+     * токена рендерятся через {@link MessageService} с использованием его персональной
+     * {@code locale} (BCP-47, см. {@link PushToken#getLocale()}).
+     * <p>
      * Невалидные токены (UNREGISTERED) автоматически удаляются.
      */
-    private void sendToMultiple(List<String> fcmTokens, String title, String body, Long listId) {
+    private void sendLocalized(List<PushToken> tokens,
+                               String titleKey, Object[] titleArgs,
+                               String bodyKey, Object[] bodyArgs,
+                               Long listId) {
         String listName = listId != null
                 ? taskListRepository.findById(listId).map(list -> list.getName()).orElse("")
                 : "";
 
-        for (String token : fcmTokens) {
+        for (PushToken pt : tokens) {
+            Locale locale = Locale.forLanguageTag(pt.getLocale());
+            String title = messageService.getMessage(titleKey, locale, titleArgs);
+            String body = messageService.getMessage(bodyKey, locale, bodyArgs);
+            String fcmToken = pt.getFcmToken();
             try {
                 Message.Builder messageBuilder = Message.builder()
-                        .setToken(token)
+                        .setToken(fcmToken)
                         .setAndroidConfig(com.google.firebase.messaging.AndroidConfig.builder()
                                 .setNotification(com.google.firebase.messaging.AndroidNotification.builder()
                                         .setTitle(title)
@@ -162,9 +187,9 @@ public class PushNotificationServiceImpl implements PushNotificationService {
             } catch (FirebaseMessagingException e) {
                 if (e.getMessagingErrorCode() == MessagingErrorCode.UNREGISTERED) {
                     // Токен невалиден — устройство удалило приложение или токен обновился
-                    pushTokenRepository.findByFcmToken(token).ifPresent(pt -> {
-                        pushTokenRepository.delete(pt);
-                        log.info("Удалён невалидный push-токен для устройства: {}", pt.getDeviceId());
+                    pushTokenRepository.findByFcmToken(fcmToken).ifPresent(deadToken -> {
+                        pushTokenRepository.delete(deadToken);
+                        log.info("Удалён невалидный push-токен для устройства: {}", deadToken.getDeviceId());
                     });
                 } else {
                     log.warn("Ошибка отправки push: {}", e.getMessage());
@@ -177,17 +202,27 @@ public class PushNotificationServiceImpl implements PushNotificationService {
     @Async
     public void sendInactiveReminderPush(Long userId, String userName) {
         if (pushDisabled()) return;
-        String displayName = userName != null ? userName : "друг";
-        String title = "Мы скучаем! ✅";
-        String body = displayName + ", ваши списки ждут — загляните!";
 
-        List<String> tokens = pushTokenRepository.findFcmTokensByUserId(userId);
+        List<PushToken> tokens = pushTokenRepository.findByUserId(userId);
         if (tokens.isEmpty()) {
             log.debug("Нет push-токенов для userId={}, напоминание не отправлено", userId);
             return;
         }
 
-        sendToMultiple(tokens, title, body, null);
+        // Имя локализуется per-token: если userName == null, fallback name берётся
+        // на языке каждого устройства (push.fallback.name). Поэтому для каждого
+        // токена строим body отдельно через одиночный sendLocalized.
+        for (PushToken pt : tokens) {
+            Locale locale = Locale.forLanguageTag(pt.getLocale());
+            String displayName = userName != null
+                    ? userName
+                    : messageService.getMessage("push.fallback.name", locale);
+            sendLocalized(
+                    List.of(pt),
+                    "push.inactive.title", new Object[]{},
+                    "push.inactive.body", new Object[]{displayName},
+                    null);
+        }
         log.info("Push-напоминание отправлено userId={} на {} устройств(а)", userId, tokens.size());
     }
 

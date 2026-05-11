@@ -19,7 +19,7 @@ public class RefreshTokenRequest {
     /**
      * Refresh токен для получения нового access токена
      */
-    @NotBlank(message = "Refresh токен не может быть пустым")
+    @NotBlank(message = "Refresh token is required")
     @JsonProperty("refresh_token")
     private String refreshToken;
 }

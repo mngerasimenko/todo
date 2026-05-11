@@ -47,14 +47,14 @@ jobs:
         with:
           name: jacoco-report
           path: target/site/jacoco/
-          retention-days: 30
+          retention-days: 7
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
         with:
           name: test-results
           path: target/surefire-reports/
-          retention-days: 30
+          retention-days: 7
 
   # ============================================
   # Этап 2: Сборка Docker-образа
@@ -92,6 +92,7 @@ jobs:
         with:
           name: todo-app-jar
           path: target/*.jar
+          retention-days: 7
 
       - name: Build Docker image
         run: docker build -t mngerasimenko/todo-app:${{ github.sha }} .
@@ -156,8 +157,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      MIN_ANDROID_VERSION: 3
-      LATEST_ANDROID_VERSION: 12
+      MIN_ANDROID_VERSION: 7
+      LATEST_ANDROID_VERSION: 19
       APP_VERSION_MAJOR: 0
       APP_VERSION_MINOR: 2
       APP_VERSION_PATCH_OFFSET: 251
@@ -240,9 +241,24 @@ jobs:
             # Ротация: храним 5 последних pre-deploy дампов
             ls -1t backups/pre-deploy/*.dump 2>/dev/null | tail -n +6 | xargs -r rm -f
 
-            # Pull and restart app
-            docker compose pull todo-app prometheus grafana
-            docker compose up -d todo-app prometheus grafana
+            # Pull and restart app.
+            # Явный pull по SHA-тегу (а не :latest) — гарантирует, что мы возьмём
+            # именно ту сборку, что только что запушил build job. Наблюдалось
+            # 27 апр 2026: `docker compose pull todo-app` не обновил local :latest
+            # (digest на DockerHub был свежий, на сервере оставался от предыдущего
+            # деплоя), контейнер пересоздался на старом образе, в /api/status
+            # отсутствовали новые поля. Pull по SHA — deterministic, не зависит
+            # от состояния local manifest cache.
+            #
+            # Pre-deploy блок выше (deploy-prev.txt) уже сохранил digest текущего
+            # running контейнера до этого pull — rollback на эту версию по-прежнему
+            # работает через `mngerasimenko/todo-app@sha256:...`.
+            docker pull mngerasimenko/todo-app:${{ github.sha }}
+            docker tag mngerasimenko/todo-app:${{ github.sha }} mngerasimenko/todo-app:latest
+
+            docker compose pull prometheus grafana
+            docker compose up -d --force-recreate --no-deps todo-app
+            docker compose up -d prometheus grafana
 
             # Ensure external configs dir exists — volume bind-mount нуждается в существующем каталоге
             # (Docker создаст сам, но с правами root; лучше явно).

@@ -12,6 +12,7 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import ru.mngerasimenko.todolist.dto.SubscriptionStatusResponse;
 import ru.mngerasimenko.todolist.dto.UpdateColorsRequest;
+import ru.mngerasimenko.todolist.dto.UpdateEmailLocaleRequest;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.dto.UserRequest;
 import ru.mngerasimenko.todolist.dto.UserResponse;
@@ -468,6 +469,54 @@ class UserRestControllerTest {
 
         verify(userService, times(1)).getUserDtoForResponse("test@mail.ru");
         verify(userMapper, times(1)).toResponse(testUserDto);
+    }
+
+    // === PATCH /me/email-locale ===
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void updateEmailLocale_ValidLocale_Returns204() throws Exception {
+        when(userService.getUserByEmail("test@mail.ru")).thenReturn(testUserDto);
+
+        mockMvc.perform(patch("/api/users/me/email-locale")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"locale\": \"en\"}"))
+                .andExpect(status().isNoContent());
+
+        verify(userService).updateEmailLocale(1L, "en");
+    }
+
+    @Test
+    void updateEmailLocale_NoAuth_Returns401() throws Exception {
+        mockMvc.perform(patch("/api/users/me/email-locale")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"locale\": \"en\"}"))
+                .andExpect(status().isUnauthorized());
+
+        verify(userService, never()).updateEmailLocale(any(), any());
+    }
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void updateEmailLocale_BlankLocale_Returns400() throws Exception {
+        mockMvc.perform(patch("/api/users/me/email-locale")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"locale\": \"\"}"))
+                .andExpect(status().isBadRequest());
+
+        verify(userService, never()).updateEmailLocale(any(), any());
+    }
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void updateEmailLocale_TooLongLocale_Returns400() throws Exception {
+        // 9 символов > @Size(max=8)
+        mockMvc.perform(patch("/api/users/me/email-locale")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"locale\": \"123456789\"}"))
+                .andExpect(status().isBadRequest());
+
+        verify(userService, never()).updateEmailLocale(any(), any());
     }
 
     // === Тест create + get ===

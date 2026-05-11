@@ -7,8 +7,12 @@ public interface PushNotificationService {
 
     /**
      * Зарегистрировать/обновить FCM-токен устройства.
+     *
+     * @param locale язык push-уведомлений на этом устройстве (BCP-47).
+     *               Если null/blank — используется fallback "ru" (для совместимости
+     *               со старыми Android-клиентами, не поддерживающими per-token locale).
      */
-    void registerToken(Long userId, String fcmToken, String deviceId);
+    void registerToken(Long userId, String fcmToken, String deviceId, String locale);
 
     /**
      * Удалить токен устройства (при logout). Только владелец может удалить свой токен.
