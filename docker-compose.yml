@@ -19,6 +19,8 @@ services:
       # Включаются в nginx/nginx.conf директивой `include /etc/nginx/external/*.conf;`.
       # Каталог на проде — /home/deploy/nginx-external, каждый проект сам кладёт туда свой .conf через свой CI.
       - /home/deploy/nginx-external:/etc/nginx/external:ro
+      # Static content for keepware.ru landing (managed by the `site` user, see nginx-external/keepware.ru.conf).
+      - /home/site/www:/var/www/keepware:ro
       - certbot-conf:/etc/letsencrypt:ro
       - certbot-www:/var/www/certbot:ro
 
