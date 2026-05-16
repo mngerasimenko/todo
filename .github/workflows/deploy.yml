@@ -158,7 +158,7 @@ jobs:
     environment: production
     env:
       MIN_ANDROID_VERSION: 7
-      LATEST_ANDROID_VERSION: 19
+      LATEST_ANDROID_VERSION: 20
       APP_VERSION_MAJOR: 0
       APP_VERSION_MINOR: 2
       APP_VERSION_PATCH_OFFSET: 251
