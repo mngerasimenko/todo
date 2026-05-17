@@ -61,4 +61,23 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * Используется на GET /api/users/unsubscribe-reminder?token=...
      */
     User findByUnsubscribeToken(String unsubscribeToken);
+
+    /**
+     * Кандидаты на 3-дневное onboarding-напоминание (Phase 3.3).
+     * Условия:
+     *   - не системный юзер (id > 0)
+     *   - зарегистрирован {@code :threshold} назад или раньше (createdAt < threshold)
+     *   - не возвращался с момента регистрации (lastActiveAt IS NULL или < threshold)
+     *   - email подтверждён (без него не получит письмо, а push без email-уведомлений
+     *     слишком слабый сигнал, чтобы тратить FCM-квоту)
+     *   - ещё не получал onboarding-reminder (onboardingReminderSent = false)
+     *   - не отписан от reminder'ов (reminderOptOut = false)
+     */
+    @Query("SELECT u FROM User u WHERE u.id > 0 " +
+            "AND u.createdAt < :threshold " +
+            "AND (u.lastActiveAt IS NULL OR u.lastActiveAt < :threshold) " +
+            "AND u.emailVerified = true " +
+            "AND u.onboardingReminderSent = false " +
+            "AND u.reminderOptOut = false")
+    List<User> findOnboardingReminderCandidates(@Param("threshold") LocalDateTime threshold);
 }

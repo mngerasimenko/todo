@@ -493,6 +493,21 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<User> findOnboardingReminderCandidates(int days) {
+        LocalDateTime threshold = LocalDateTime.now().minusDays(days);
+        return repository.findOnboardingReminderCandidates(threshold);
+    }
+
+    @Override
+    @Transactional
+    public void markOnboardingReminderSent(Long userId) {
+        User user = repository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + userId));
+        user.setOnboardingReminderSent(true);
+    }
+
+    @Override
     @Transactional
     public String unsubscribeFromReminders(String unsubscribeToken) {
         if (unsubscribeToken == null || unsubscribeToken.isBlank()) {

@@ -94,4 +94,16 @@ public interface UserService {
      *         невалиден или уже использован.
      */
     String unsubscribeFromReminders(String unsubscribeToken);
+
+    /**
+     * Кандидаты на 3-дневное onboarding-напоминание (Phase 3.3).
+     * @param days сколько дней должно пройти с регистрации без возврата (обычно 3).
+     */
+    List<User> findOnboardingReminderCandidates(int days);
+
+    /**
+     * Пометить, что 3-дневное onboarding-напоминание отправлено. Однократно.
+     * После этого пользователь не попадёт в {@link #findOnboardingReminderCandidates(int)}.
+     */
+    void markOnboardingReminderSent(Long userId);
 }
