@@ -48,6 +48,8 @@ class InactiveReminderSchedulerTest {
     void setUp() {
         // Флаг включён — существующие сценарии пропускают через дефолтное поведение
         lenient().when(flagStore.isEnabled(FeatureFlag.INACTIVE_REMINDER)).thenReturn(true);
+        // Token issuance stub: scheduler issues a fresh unsubscribe-token before email
+        lenient().when(userService.issueUnsubscribeToken(anyLong())).thenReturn("test-token");
 
         verifiedUser = new User();
         verifiedUser.setId(1L);
@@ -82,7 +84,7 @@ class InactiveReminderSchedulerTest {
         scheduler.sendReminders();
 
         verify(pushNotificationService).sendInactiveReminderPush(1L, "Иван");
-        verify(emailService).sendInactiveReminderEmail(eq("ivan@mail.ru"), eq("Иван"), eq(1L), anyString());
+        verify(emailService).sendInactiveReminderEmail(eq("ivan@mail.ru"), eq("Иван"), eq(1L), anyString(), eq("test-token"));
         verify(userService).markReminderSent(1L);
     }
 
@@ -93,7 +95,7 @@ class InactiveReminderSchedulerTest {
         scheduler.sendReminders();
 
         verify(pushNotificationService).sendInactiveReminderPush(2L, "Пётр");
-        verify(emailService, never()).sendInactiveReminderEmail(anyString(), anyString(), anyLong(), anyString());
+        verify(emailService, never()).sendInactiveReminderEmail(anyString(), anyString(), anyLong(), anyString(), anyString());
         verify(userService).markReminderSent(2L);
     }
 
@@ -106,7 +108,7 @@ class InactiveReminderSchedulerTest {
 
         scheduler.sendReminders();
 
-        verify(emailService).sendInactiveReminderEmail(eq("ivan@mail.ru"), eq("Иван"), eq(1L), anyString());
+        verify(emailService).sendInactiveReminderEmail(eq("ivan@mail.ru"), eq("Иван"), eq(1L), anyString(), eq("test-token"));
         verify(userService).markReminderSent(1L);
     }
 
@@ -121,7 +123,7 @@ class InactiveReminderSchedulerTest {
 
         when(userService.findInactiveUsersForReminder(7)).thenReturn(List.of(verifiedUser, secondUser));
         doThrow(new RuntimeException("SMTP error"))
-                .when(emailService).sendInactiveReminderEmail(eq("ivan@mail.ru"), anyString(), anyLong(), anyString());
+                .when(emailService).sendInactiveReminderEmail(eq("ivan@mail.ru"), anyString(), anyLong(), anyString(), anyString());
 
         scheduler.sendReminders();
 
@@ -144,5 +146,19 @@ class InactiveReminderSchedulerTest {
         verify(pushNotificationService).sendInactiveReminderPush(1L, "Иван");
         verify(pushNotificationService).sendInactiveReminderPush(2L, "Пётр");
         verify(userService).markReminderSent(2L);
+    }
+
+    @Test
+    void sendReminders_SendsEmailWithoutTokenWhenTokenIssueFails() {
+        // issueUnsubscribeToken падает — email всё равно отправляется, но с null-токеном
+        // (footer-link не отрендерится — degraded, не broken).
+        when(userService.findInactiveUsersForReminder(7)).thenReturn(List.of(verifiedUser));
+        when(userService.issueUnsubscribeToken(1L)).thenThrow(new RuntimeException("DB write failed"));
+
+        scheduler.sendReminders();
+
+        verify(emailService).sendInactiveReminderEmail(
+                eq("ivan@mail.ru"), eq("Иван"), eq(1L), anyString(), isNull());
+        verify(userService).markReminderSent(1L);
     }
 }
