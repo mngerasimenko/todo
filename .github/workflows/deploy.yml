@@ -256,9 +256,36 @@ jobs:
             docker pull mngerasimenko/todo-app:${{ github.sha }}
             docker tag mngerasimenko/todo-app:${{ github.sha }} mngerasimenko/todo-app:latest
 
+            # === Detect docker-compose.yml changes in this deploy ===
+            # Без этой проверки `up -d --no-deps todo-app` ниже скрывает изменения
+            # секций других сервисов в docker-compose.yml. Инцидент 2026-05-17:
+            # фикс bind-mount для nginx (N.2) не применился, потому что nginx-proxy
+            # не пересоздавался; postgres-db настройки из 563f0d0 (parallel_workers)
+            # тоже висели "тенью" до случайного manual force-recreate.
+            # HEAD@{1} = предыдущее значение HEAD до `git reset --hard origin/master`
+            # выше — это и есть "что было задеплоено в прошлый раз".
+            COMPOSE_CHANGED=0
+            if git diff --name-only 'HEAD@{1}' HEAD 2>/dev/null | grep -qx 'docker-compose.yml'; then
+              COMPOSE_CHANGED=1
+            fi
+            if [ "$COMPOSE_CHANGED" = "1" ]; then
+              echo "[deploy] docker-compose.yml changed — will reconcile non-app services"
+              echo "[deploy] diff for docker-compose.yml:"
+              git diff 'HEAD@{1}' HEAD -- docker-compose.yml || true
+            fi
+
             docker compose pull prometheus grafana
             docker compose up -d --force-recreate --no-deps todo-app
-            docker compose up -d prometheus grafana
+
+            if [ "$COMPOSE_CHANGED" = "1" ]; then
+              # Без --no-deps: compose увидит config drift и пересоздаст затронутые
+              # сервисы. todo-app уже пересоздан выше — не задеваем.
+              # nginx-proxy сюда не включён — у него ниже своя ветка с защитой
+              # от битого external-конфига.
+              docker compose up -d postgres-db redis prometheus grafana
+            else
+              docker compose up -d prometheus grafana
+            fi
 
             # Ensure external configs dir exists — volume bind-mount нуждается в существующем каталоге
             # (Docker создаст сам, но с правами root; лучше явно).
@@ -283,8 +310,11 @@ jobs:
                   && echo "WARN: quarantined bad external config: $(basename "$f")"
               done
             }
-            if docker inspect nginx-proxy --format '{{range .Mounts}}{{.Destination}} {{end}}' 2>/dev/null | grep -q '/etc/nginx/external'; then
-              # Volume уже смонтирован — можно тестировать на живом контейнере
+            # COMPOSE_CHANGED=1: изменения volumes/env у nginx-proxy не подхватятся через
+            # `nginx -s reload` — нужен force-recreate. Прыгаем сразу в else-ветку.
+            if [ "$COMPOSE_CHANGED" = "0" ] \
+               && docker inspect nginx-proxy --format '{{range .Mounts}}{{.Destination}} {{end}}' 2>/dev/null | grep -q '/etc/nginx/external'; then
+              # Volume уже смонтирован и compose-file не менялся — можно reload.
               if ! nginx_config_test; then
                 echo "WARN: nginx config test failed, last output:"; cat /tmp/nginx-t.log
                 quarantine_external
@@ -298,9 +328,17 @@ jobs:
               docker exec nginx-proxy nginx -s reload 2>/dev/null || \
                 docker compose up -d --force-recreate nginx-proxy 2>/dev/null || true
             else
-              # Первый деплой с новым volume — старый контейнер без /etc/nginx/external,
-              # тестировать негде, делаем force-recreate и проверяем health.
-              echo "External configs volume not yet mounted — force-recreating nginx-proxy"
+              # Сюда попадаем в трёх случаях:
+              #   1) Первый деплой с новым volume (старый контейнер без /etc/nginx/external).
+              #   2) compose-file изменился (COMPOSE_CHANGED=1) — reload не подхватит
+              #      новые volumes/env, нужен пересоздать.
+              #   3) docker inspect не нашёл external mount по другой причине.
+              # Тестировать конфиг негде до старта — force-recreate и проверяем health.
+              if [ "$COMPOSE_CHANGED" = "1" ]; then
+                echo "docker-compose.yml changed — force-recreating nginx-proxy"
+              else
+                echo "External configs volume not yet mounted — force-recreating nginx-proxy"
+              fi
               docker compose up -d --force-recreate nginx-proxy
               sleep 3
               if ! docker ps --filter "name=nginx-proxy" --filter "status=running" --format '{{.Names}}' | grep -q '^nginx-proxy$'; then
