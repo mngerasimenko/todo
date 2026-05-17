@@ -106,4 +106,15 @@ public interface UserService {
      * После этого пользователь не попадёт в {@link #findOnboardingReminderCandidates(int)}.
      */
     void markOnboardingReminderSent(Long userId);
+
+    /**
+     * Сгенерировать новый одноразовый unsubscribe-токен (256 бит, hex) и сохранить
+     * его в {@code user.unsubscribeToken}. Возвращает токен для подстановки в email-footer.
+     * <p>
+     * Перезаписывает предыдущий токен — гарантирует, что в БД одновременно живёт только
+     * один активный токен на пользователя (это позволяет UNIQUE-constraint в миграции 022b).
+     *
+     * @throws ru.mngerasimenko.todolist.exception.UserNotFoundException если userId не существует
+     */
+    String issueUnsubscribeToken(Long userId);
 }

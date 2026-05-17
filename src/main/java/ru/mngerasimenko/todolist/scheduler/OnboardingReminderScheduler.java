@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.model.User;
+import ru.mngerasimenko.todolist.service.EmailService;
 import ru.mngerasimenko.todolist.service.PushNotificationService;
 import ru.mngerasimenko.todolist.service.UserService;
 
@@ -19,8 +20,7 @@ import java.util.List;
  * Один раз на пользователя (флаг {@code onboarding_reminder_sent}). После этого
  * пользователь подхватывается основным {@link InactiveReminderScheduler} на 7-й день.
  * <p>
- * Email-канал добавляется в следующем коммите (template + footer-link + unsubscribe-token).
- * Сейчас scheduler шлёт только push.
+ * Шлёт push (если у юзера есть FCM-токен) и email (если email подтверждён).
  * <p>
  * Включение/выключение — через {@link FeatureFlag#ONBOARDING_REMINDER}.
  */
@@ -33,6 +33,7 @@ public class OnboardingReminderScheduler {
 
     private final UserService userService;
     private final PushNotificationService pushNotificationService;
+    private final EmailService emailService;
     private final FeatureFlagStore flagStore;
 
     /**
@@ -53,6 +54,7 @@ public class OnboardingReminderScheduler {
         }
 
         int sentPushes = 0;
+        int sentEmails = 0;
         for (User user : candidates) {
             try {
                 pushNotificationService.sendOnboardingReminderPush(user.getId(), user.getName());
@@ -62,9 +64,27 @@ public class OnboardingReminderScheduler {
                         user.getId(), e.getMessage());
             }
 
-            // TODO commit 4: добавить sendOnboardingReminderEmail с footer-link + token generation.
-            //   Сейчас scheduler шлёт только push — без email юзер увидит напоминание лишь если
-            //   у него есть FCM-токен. После commit 4 пайплайн станет push + email.
+            // Email — только если email подтверждён. Query из findOnboardingReminderCandidates
+            // уже фильтрует по emailVerified=true, но проверяем здесь для defensive (если
+            // кто-то изменит query в будущем).
+            if (user.isEmailVerified()) {
+                String unsubToken = null;
+                try {
+                    unsubToken = userService.issueUnsubscribeToken(user.getId());
+                } catch (Exception e) {
+                    log.warn("[onboarding-reminder] Не удалось сгенерировать unsubscribe-токен userId={}: {}",
+                            user.getId(), e.getMessage());
+                }
+                try {
+                    emailService.sendOnboardingReminderEmail(
+                            user.getEmail(), user.getName(), user.getId(),
+                            user.getPreferredEmailLocale(), unsubToken);
+                    sentEmails++;
+                } catch (Exception e) {
+                    log.warn("[onboarding-reminder] Ошибка отправки email userId={}: {}",
+                            user.getId(), e.getMessage());
+                }
+            }
 
             try {
                 userService.markOnboardingReminderSent(user.getId());
@@ -74,7 +94,7 @@ public class OnboardingReminderScheduler {
             }
         }
 
-        log.info("[onboarding-reminder] Onboarding-напоминание отправлено: push={}, всего пользователей={}",
-                sentPushes, candidates.size());
+        log.info("[onboarding-reminder] Onboarding-напоминание отправлено: push={}, email={}, всего пользователей={}",
+                sentPushes, sentEmails, candidates.size());
     }
 }

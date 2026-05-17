@@ -509,6 +509,16 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
+    public String issueUnsubscribeToken(Long userId) {
+        User user = repository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + userId));
+        String token = ru.mngerasimenko.todolist.util.TokenUtils.secureRandomHex(32);
+        user.setUnsubscribeToken(token);
+        return token;
+    }
+
+    @Override
+    @Transactional
     public String unsubscribeFromReminders(String unsubscribeToken) {
         if (unsubscribeToken == null || unsubscribeToken.isBlank()) {
             throw new UserNotFoundException("Unsubscribe token is required");
