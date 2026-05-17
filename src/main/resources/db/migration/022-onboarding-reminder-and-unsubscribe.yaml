@@ -1,0 +1,32 @@
+databaseChangeLog:
+  - changeSet:
+      id: 022-onboarding-reminder-and-unsubscribe
+      author: mngerasimenko
+      comment: "Phase 3.3 + unsubscribe: onboarding_reminder_sent (3d reminder one-shot flag), reminder_opt_out (forward-looking opt-out for both 3d and 7d), unsubscribe_token (one-shot token issued at reminder send, consumed on /api/users/unsubscribe-reminder hit)"
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: todo_users
+                columnName: onboarding_reminder_sent
+      changes:
+        - addColumn:
+            tableName: todo_users
+            columns:
+              - column:
+                  name: onboarding_reminder_sent
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: reminder_opt_out
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: unsubscribe_token
+                  type: varchar(64)
+                  constraints:
+                    nullable: true
