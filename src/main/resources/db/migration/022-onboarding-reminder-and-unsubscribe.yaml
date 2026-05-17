@@ -30,3 +30,19 @@ databaseChangeLog:
                   type: varchar(64)
                   constraints:
                     nullable: true
+
+  - changeSet:
+      id: 022b-add-unsubscribe-token-unique
+      author: mngerasimenko
+      comment: "Belt-and-braces unique constraint on todo_users.unsubscribe_token so a 256-bit hex collision can never produce IncorrectResultSizeDataAccessException on findByUnsubscribeToken. Two active tokens can never coexist anyway — the token is cleared on unsubscribe and reissued per reminder send — but the DB-level guarantee is cheap."
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - indexExists:
+                tableName: todo_users
+                indexName: uq_todo_users_unsubscribe_token
+      changes:
+        - addUniqueConstraint:
+            tableName: todo_users
+            columnNames: unsubscribe_token
+            constraintName: uq_todo_users_unsubscribe_token

@@ -492,6 +492,24 @@ public class UserServiceImpl implements UserService {
         user.setReminderCount(user.getReminderCount() + 1);
     }
 
+    @Override
+    @Transactional
+    public String unsubscribeFromReminders(String unsubscribeToken) {
+        if (unsubscribeToken == null || unsubscribeToken.isBlank()) {
+            throw new UserNotFoundException("Unsubscribe token is required");
+        }
+        User user = repository.findByUnsubscribeToken(unsubscribeToken);
+        if (user == null) {
+            // Токен невалиден или уже использован — отдаём тот же ответ что для несуществующего,
+            // чтобы не различать "не существовал" и "уже использован" (anti-enumeration).
+            throw new UserNotFoundException("Invalid or expired unsubscribe token");
+        }
+        user.setReminderOptOut(true);
+        user.setUnsubscribeToken(null);
+        log.info("[unsubscribe] Пользователь отписался от reminder-напоминаний: userId={}", user.getId());
+        return user.getPreferredEmailLocale();
+    }
+
     /**
      * SHA-256 хеш строки (делегирует в TokenUtils для переиспользования).
      */

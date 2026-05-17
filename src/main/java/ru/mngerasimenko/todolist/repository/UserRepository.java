@@ -46,11 +46,19 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     /**
      * Найти пользователей, неактивных с указанной даты, которым отправлено менее maxReminders напоминаний.
+     * Фильтр reminderOptOut=false добавлен 2026-05-17 (forward-looking opt-out, Phase 3.3 unsubscribe).
      */
     @Query("SELECT u FROM User u WHERE u.id > 0 " +
             "AND (u.lastActiveAt IS NULL OR u.lastActiveAt < :inactiveSince) " +
-            "AND u.reminderCount < :maxReminders")
+            "AND u.reminderCount < :maxReminders " +
+            "AND u.reminderOptOut = false")
     List<User> findInactiveUsersForReminder(
             @Param("inactiveSince") LocalDateTime inactiveSince,
             @Param("maxReminders") int maxReminders);
+
+    /**
+     * Найти пользователя по unsubscribe-токену (одноразовый токен из email-footer).
+     * Используется на GET /api/users/unsubscribe-reminder?token=...
+     */
+    User findByUnsubscribeToken(String unsubscribeToken);
 }

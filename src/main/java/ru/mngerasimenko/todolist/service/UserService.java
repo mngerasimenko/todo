@@ -83,4 +83,15 @@ public interface UserService {
 
     /** Отметить что напоминание отправлено */
     void markReminderSent(Long userId);
+
+    /**
+     * Отписать пользователя от reminder-напоминаний (3d + 7d) по одноразовому токену.
+     * Ставит reminderOptOut=true и очищает unsubscribeToken.
+     *
+     * @return BCP-47 локаль пользователя (preferredEmailLocale) — для рендеринга
+     *         success-HTML на нужном языке в контроллере.
+     * @throws ru.mngerasimenko.todolist.exception.UserNotFoundException если токен
+     *         невалиден или уже использован.
+     */
+    String unsubscribeFromReminders(String unsubscribeToken);
 }
