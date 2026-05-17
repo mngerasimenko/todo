@@ -10,7 +10,10 @@ services:
       - "443:443"
 
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # Bind-mount каталога (а не одиночного файла) — иначе git pull на проде
+      # создаёт файл с новым inode, и nginx внутри контейнера продолжает читать
+      # старый inode до явного `docker compose restart` (инцидент 2026-05-16, PR #67).
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./nginx/legal:/usr/share/nginx/legal:ro
       - ./nginx/help:/usr/share/nginx/help:ro
       - ./nginx/well-known:/usr/share/nginx/well-known:ro
