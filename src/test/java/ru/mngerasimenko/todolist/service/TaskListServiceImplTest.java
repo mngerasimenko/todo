@@ -3,6 +3,7 @@ package ru.mngerasimenko.todolist.service;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -12,6 +13,7 @@ import ru.mngerasimenko.todolist.dto.list.InviteInfoResponse;
 import ru.mngerasimenko.todolist.dto.list.InviteResponse;
 import ru.mngerasimenko.todolist.dto.list.ListMemberResponse;
 import ru.mngerasimenko.todolist.dto.list.ListResponse;
+import ru.mngerasimenko.todolist.dto.list.ReorderItem;
 import ru.mngerasimenko.todolist.exception.TokenExpiredException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.TaskListMapper;
@@ -39,6 +41,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
@@ -153,11 +156,14 @@ class TaskListServiceImplTest {
 
     @Test
     void getListsByUserId_ReturnsListOfLists() {
+        // testTaskListUser.position инициализируется = 0 (field initializer на entity) —
+        // маппер вызывается с (taskList, role, 0). Защита от NOT NULL constraint
+        // violation при INSERT в task_list_user, см. комментарий в TaskListUser.position.
         ListResponse response = ListResponse.builder()
                 .id(10L).name("TestList").role("ADMIN").build();
 
         when(taskListUserRepository.findByUserId(1L)).thenReturn(List.of(testTaskListUser));
-        when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN)).thenReturn(response);
+        when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN, 0)).thenReturn(response);
 
         List<ListResponse> result = taskListService.getListsByUserId(1L);
 
@@ -463,6 +469,236 @@ class TaskListServiceImplTest {
 
         verify(todoRepository, never()).deleteByListId(anyLong());
         verify(taskListRepository, never()).deleteByListId(anyLong());
+    }
+
+    // --- updateList ---
+
+    @Test
+    void updateList_WhenAdmin_UpdatesNameAndColorAndReturnsResponse() {
+        // ADMIN меняет одновременно name и color; кеш task-lists евиктится для всех участников
+        User user2 = new User(); user2.setId(2L); user2.setName("user2");
+        TaskListUser otherMember = new TaskListUser();
+        otherMember.setId(new TaskListUserId(10L, 2L));
+        otherMember.setRole(TaskListRole.USER);
+        otherMember.setUser(user2);
+
+        ListResponse expectedResponse = ListResponse.builder()
+                .id(10L).name("Новое имя").color("#22C55E")
+                .creatorName("testuser").role("ADMIN").build();
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
+                .thenReturn(Optional.of(testTaskListUser));
+        when(taskListRepository.saveAndFlush(any(TaskList.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(taskListUserRepository.findByIdListId(10L))
+                .thenReturn(List.of(testTaskListUser, otherMember));
+        when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN)).thenReturn(expectedResponse);
+
+        ListResponse result = taskListService.updateList(10L, 1L, "Новое имя", "#22C55E");
+
+        assertThat(result).isNotNull();
+        assertThat(result.getName()).isEqualTo("Новое имя");
+        assertThat(result.getColor()).isEqualTo("#22C55E");
+        // Поля action: попали в entity до save
+        assertThat(testTaskList.getName()).isEqualTo("Новое имя");
+        assertThat(testTaskList.getColor()).isEqualTo("#22C55E");
+        verify(taskListRepository).saveAndFlush(testTaskList);
+        // Собрали userIds всех участников для evict'а (включая ADMIN'а)
+        verify(taskListUserRepository).findByIdListId(10L);
+    }
+
+    @Test
+    void updateList_WhenNotAdmin_ThrowsIllegalArgumentException() {
+        TaskListUser memberUser = new TaskListUser();
+        memberUser.setId(new TaskListUserId(10L, 2L));
+        memberUser.setRole(TaskListRole.USER);
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 2L))
+                .thenReturn(Optional.of(memberUser));
+
+        assertThatThrownBy(() -> taskListService.updateList(10L, 2L, "Новое имя", "#000000"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("администратор");
+
+        verify(taskListRepository, never()).saveAndFlush(any());
+    }
+
+    // --- reorderLists ---
+
+    @Test
+    void reorderLists_validInput_bulkUpdatesPositionForUserOnly_evictsCache() {
+        // Two lists user is in (positions 0 и 1) — переупорядочиваем их (меняем местами)
+        Long userId = 1L;
+        Long listAId = 10L, listBId = 11L;
+
+        TaskListUser linkA = new TaskListUser();
+        linkA.setId(new TaskListUserId(listAId, userId));
+        linkA.setPosition(0);
+        TaskListUser linkB = new TaskListUser();
+        linkB.setId(new TaskListUserId(listBId, userId));
+        linkB.setPosition(1);
+
+        when(taskListUserRepository.findByIdUserIdAndIdListIdIn(userId, List.of(listAId, listBId)))
+                .thenReturn(List.of(linkA, linkB));
+        when(taskListUserRepository.saveAllAndFlush(anyList()))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        taskListService.reorderLists(userId, List.of(
+                new ReorderItem(listAId, 1),
+                new ReorderItem(listBId, 0)
+        ));
+
+        assertThat(linkA.getPosition()).isEqualTo(1);
+        assertThat(linkB.getPosition()).isEqualTo(0);
+
+        // ArgumentCaptor вместо identity-сравнения List — устойчиво к refactor'у,
+        // в котором сервис создал бы новую коллекцию перед save.
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<TaskListUser>> captor = ArgumentCaptor.forClass(List.class);
+        verify(taskListUserRepository).saveAllAndFlush(captor.capture());
+        assertThat(captor.getValue())
+                .hasSize(2)
+                .extracting(TaskListUser::getPosition)
+                .containsExactly(1, 0);
+    }
+
+    @Test
+    void reorderLists_unknownListId_throwsIllegalArgument() {
+        // Юзер пытается переупорядочить список, в котором не состоит — IllegalArgument, без saveAll
+        Long userId = 1L;
+        when(taskListUserRepository.findByIdUserIdAndIdListIdIn(userId, List.of(999L)))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> taskListService.reorderLists(userId, List.of(new ReorderItem(999L, 0))))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(taskListUserRepository, never()).saveAllAndFlush(any());
+    }
+
+    @Test
+    void reorderLists_duplicateIds_throwsIllegalArgument() {
+        // Дубликаты id в запросе — malformed input, fail-fast до похода в БД.
+        // Без этой проверки Collectors.toMap бросил бы IllegalStateException → HTTP 500.
+        assertThatThrownBy(() -> taskListService.reorderLists(1L, List.of(
+                new ReorderItem(10L, 0),
+                new ReorderItem(10L, 1)
+        )))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Duplicate");
+
+        verify(taskListUserRepository, never()).saveAllAndFlush(any());
+        // findByIdUserIdAndIdListIdIn НЕ должен вызываться — проверка до DB
+        verify(taskListUserRepository, never()).findByIdUserIdAndIdListIdIn(anyLong(), any());
+    }
+
+    @Test
+    void reorderLists_duplicatePositions_throwsIllegalArgument() {
+        // Симметрия с duplicate-id: два списка не могут иметь одинаковую позицию.
+        assertThatThrownBy(() -> taskListService.reorderLists(1L, List.of(
+                new ReorderItem(10L, 0),
+                new ReorderItem(11L, 0)
+        )))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Duplicate positions");
+
+        verify(taskListUserRepository, never()).saveAllAndFlush(any());
+        verify(taskListUserRepository, never()).findByIdUserIdAndIdListIdIn(anyLong(), any());
+    }
+
+    // --- reorderTodos ---
+
+    @Test
+    void reorderTodos_userIsParticipant_bulkUpdatesAllTodosInList() {
+        // Любой участник списка может реордерить задачи; позиция общая per-список.
+        Long listId = 42L;
+        Long userId = 1L;
+        Long todoAId = 100L, todoBId = 101L;
+
+        Todo todoA = new Todo();
+        todoA.setId(todoAId);
+        todoA.setListId(listId);
+        todoA.setPosition(0);
+        Todo todoB = new Todo();
+        todoB.setId(todoBId);
+        todoB.setListId(listId);
+        todoB.setPosition(1);
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(listId, userId))
+                .thenReturn(Optional.of(new TaskListUser()));
+        when(todoRepository.findByIdInAndListId(List.of(todoAId, todoBId), listId))
+                .thenReturn(List.of(todoA, todoB));
+        when(todoRepository.saveAllAndFlush(anyList()))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        taskListService.reorderTodos(listId, userId, List.of(
+                new ReorderItem(todoAId, 1),
+                new ReorderItem(todoBId, 0)
+        ));
+
+        assertThat(todoA.getPosition()).isEqualTo(1);
+        assertThat(todoB.getPosition()).isEqualTo(0);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Todo>> captor = ArgumentCaptor.forClass(List.class);
+        verify(todoRepository).saveAllAndFlush(captor.capture());
+        assertThat(captor.getValue())
+                .hasSize(2)
+                .extracting(Todo::getPosition)
+                .containsExactly(1, 0);
+    }
+
+    @Test
+    void reorderTodos_userNotParticipant_throwsIllegalArgument() {
+        // Доступ через членство в списке — не-участник получает 400 (IllegalArgument → GlobalExceptionHandler)
+        when(taskListUserRepository.findByIdListIdAndIdUserId(42L, 99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> taskListService.reorderTodos(42L, 99L, List.of(new ReorderItem(100L, 0))))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(todoRepository, never()).saveAllAndFlush(any());
+    }
+
+    @Test
+    void reorderTodos_todoNotInList_throwsIllegalArgument() {
+        // Если хоть один todo.id не из этого списка — реордер отклоняется целиком (атомарность)
+        when(taskListUserRepository.findByIdListIdAndIdUserId(42L, 1L))
+                .thenReturn(Optional.of(new TaskListUser()));
+        when(todoRepository.findByIdInAndListId(List.of(999L), 42L))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> taskListService.reorderTodos(42L, 1L, List.of(new ReorderItem(999L, 0))))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(todoRepository, never()).saveAllAndFlush(any());
+    }
+
+    @Test
+    void reorderTodos_duplicateIds_throwsIllegalArgument() {
+        // Fail-fast до похода в БД: дубликаты id — malformed input.
+        // Без проверки Collectors.toMap бросил бы IllegalStateException → HTTP 500.
+        assertThatThrownBy(() -> taskListService.reorderTodos(42L, 1L, List.of(
+                new ReorderItem(100L, 0),
+                new ReorderItem(100L, 1)
+        )))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Duplicate");
+
+        verify(todoRepository, never()).saveAllAndFlush(any());
+        verify(todoRepository, never()).findByIdInAndListId(any(), any());
+    }
+
+    @Test
+    void reorderTodos_duplicatePositions_throwsIllegalArgument() {
+        // Симметрия с duplicate-id: две задачи не могут иметь одинаковую позицию.
+        assertThatThrownBy(() -> taskListService.reorderTodos(42L, 1L, List.of(
+                new ReorderItem(100L, 0),
+                new ReorderItem(101L, 0)
+        )))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Duplicate positions");
+
+        verify(todoRepository, never()).saveAllAndFlush(any());
+        verify(todoRepository, never()).findByIdInAndListId(any(), any());
     }
 
     // --- createInvite ---

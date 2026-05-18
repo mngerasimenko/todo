@@ -1,6 +1,7 @@
 package ru.mngerasimenko.todolist.service;
 
 import ru.mngerasimenko.todolist.dto.AuthUserDto;
+import ru.mngerasimenko.todolist.dto.SortPreferencesRequest;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.model.User;
 
@@ -117,4 +118,18 @@ public interface UserService {
      * @throws ru.mngerasimenko.todolist.exception.UserNotFoundException если userId не существует
      */
     String issueUnsubscribeToken(Long userId);
+
+    /**
+     * Частичное обновление 4 sort-настроек юзера (lists и todos × mode и direction).
+     * Только не-null поля из request обновляются. Если все поля null — no-op,
+     * сохранение в БД не выполняется.
+     * Кеши USER_AUTH и USERS_ME инвалидируются по ключу = email.toLowerCase().
+     *
+     * @param userId  ID пользователя
+     * @param email   email текущего пользователя — используется как key для cache-evict
+     * @param request DTO с опциональными полями
+     * @return обновлённый UserDto
+     * @throws ru.mngerasimenko.todolist.exception.UserNotFoundException если userId не существует
+     */
+    UserDto updateSortPreferences(Long userId, String email, SortPreferencesRequest request);
 }

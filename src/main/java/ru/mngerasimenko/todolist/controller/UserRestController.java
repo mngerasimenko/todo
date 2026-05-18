@@ -11,6 +11,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import ru.mngerasimenko.todolist.dto.SortPreferencesRequest;
 import ru.mngerasimenko.todolist.dto.SubscriptionStatusResponse;
 import ru.mngerasimenko.todolist.dto.UpdateColorsRequest;
 import ru.mngerasimenko.todolist.dto.UpdateEmailLocaleRequest;
@@ -170,6 +171,20 @@ public class UserRestController {
         UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
         userService.updateEmailLocale(currentUser.getId(), request.getLocale());
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Частично обновить sort-настройки текущего пользователя
+     * (lists / todos × mode / direction). Все 4 поля опциональные.
+     */
+    @PatchMapping("/me/sort-preferences")
+    public ResponseEntity<UserResponse> updateSortPreferences(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @Valid @RequestBody SortPreferencesRequest request) {
+        UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
+        UserDto updated = userService.updateSortPreferences(
+                currentUser.getId(), userDetails.getUsername(), request);
+        return ResponseEntity.ok(userMapper.toResponse(updated));
     }
 
     /**

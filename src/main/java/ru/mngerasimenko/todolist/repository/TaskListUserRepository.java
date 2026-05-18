@@ -46,6 +46,12 @@ public interface TaskListUserRepository extends JpaRepository<TaskListUser, Task
     Optional<TaskListUser> findByIdListIdAndIdUserId(Long listId, Long userId);
 
     /**
+     * Bulk-выборка связок (listId, userId) по конкретному юзеру и набору listId'ов.
+     * Используется в reorderLists для атомарного обновления position нескольких списков.
+     */
+    List<TaskListUser> findByIdUserIdAndIdListIdIn(Long userId, List<Long> listIds);
+
+    /**
      * Загружает участников списка вместе с данными пользователей (JOIN FETCH).
      * Избегает N+1 запросов при обращении к user.name в маппере.
      */

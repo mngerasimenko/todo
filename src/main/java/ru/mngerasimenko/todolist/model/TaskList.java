@@ -44,6 +44,13 @@ public class TaskList {
     private List<TaskListUser> taskListUsers = new ArrayList<>();
 
     /**
+     * Цвет списка в формате #RRGGBB (опционально, может быть null).
+     * Используется клиентами для персонализации UI (отзыв Надежды #4 из RuStore).
+     */
+    @Column(name = "color", length = 7)
+    private String color;
+
+    /**
      * Версия записи для оптимистичной блокировки.
      * Hibernate автоматически инкрементирует при каждом UPDATE.
      */
@@ -121,6 +128,14 @@ public class TaskList {
 
     public void setTaskListUsers(List<TaskListUser> taskListUsers) {
         this.taskListUsers = taskListUsers;
+    }
+
+    public String getColor() {
+        return color;
+    }
+
+    public void setColor(String color) {
+        this.color = color;
     }
 
     public Long getVersion() {

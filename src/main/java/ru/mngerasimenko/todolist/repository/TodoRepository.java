@@ -51,6 +51,13 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
     List<Todo> findByListIdAndIsPrivateFalse(Long listId);
 
     /**
+     * Возвращает задачи по id, отфильтрованные по конкретному listId.
+     * Используется в bulk-reorder для проверки, что все переданные id принадлежат указанному списку
+     * (PATCH /api/lists/{id}/todos/reorder).
+     */
+    List<Todo> findByIdInAndListId(List<Long> ids, Long listId);
+
+    /**
      * Возвращает задачи из указанных списков, видимые пользователю:
      * - публичные задачи (isPrivate = false)
      * - приватные задачи текущего пользователя (isPrivate = true AND user_id = userId)

@@ -24,6 +24,18 @@ public class ListResponse {
     private String name;
 
     /**
+     * Цвет списка в формате #RRGGBB (опционально, может быть null).
+     */
+    private String color;
+
+    /**
+     * Позиция списка в персональной сортировке текущего юзера (per-user).
+     * Может быть {@code null} в single-list ответах (createList/updateList/acceptInvite),
+     * где клиент эту позицию не использует.
+     */
+    private Integer position;
+
+    /**
      * Имя создателя списка.
      */
     @JsonProperty("creator_name")

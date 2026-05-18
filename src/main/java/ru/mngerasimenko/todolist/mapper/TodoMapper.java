@@ -35,6 +35,7 @@ public class TodoMapper {
                 .completorUserName(todo.getCompletorUser() != null ? todo.getCompletorUser().getName() : null)
                 .completorColor(todo.getCompletorUser() != null ? todo.getCompletorUser().getCompletedTaskColor() : null)
                 .listId(todo.getTaskList() != null ? todo.getTaskList().getId() : null)
+                .position(todo.getPosition())
                 .build();
     }
 
@@ -108,6 +109,7 @@ public class TodoMapper {
                 .listId(todoDto.getListId())
                 .creatorColor(todoDto.getCreatorColor())
                 .completorColor(todoDto.getCompletorColor())
+                .position(todoDto.getPosition())
                 .build();
     }
 }

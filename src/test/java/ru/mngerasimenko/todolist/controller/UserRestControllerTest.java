@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+import ru.mngerasimenko.todolist.dto.SortPreferencesRequest;
 import ru.mngerasimenko.todolist.dto.SubscriptionStatusResponse;
 import ru.mngerasimenko.todolist.dto.UpdateColorsRequest;
 import ru.mngerasimenko.todolist.dto.UpdateEmailLocaleRequest;
@@ -552,5 +553,74 @@ class UserRestControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(3))
                 .andExpect(jsonPath("$.name").value("createduser"));
+    }
+
+    // === PATCH /me/sort-preferences (Task 5) ===
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void updateSortPreferences_ValidRequest_Returns200() throws Exception {
+        when(userService.getUserByEmail("test@mail.ru")).thenReturn(testUserDto);
+
+        UserDto updatedDto = new UserDto();
+        updatedDto.setId(1L);
+        updatedDto.setListsSortMode("ALPHABETICAL");
+        updatedDto.setListsSortDirection("ASC");
+        updatedDto.setTodosSortMode("CREATED_AT");
+        updatedDto.setTodosSortDirection("DESC");
+
+        UserResponse response = UserResponse.builder()
+                .id(1L)
+                .listsSortMode("ALPHABETICAL")
+                .listsSortDirection("ASC")
+                .todosSortMode("CREATED_AT")
+                .todosSortDirection("DESC")
+                .build();
+
+        when(userService.updateSortPreferences(eq(1L), eq("test@mail.ru"),
+                any(SortPreferencesRequest.class))).thenReturn(updatedDto);
+        when(userMapper.toResponse(updatedDto)).thenReturn(response);
+
+        mockMvc.perform(patch("/api/users/me/sort-preferences")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"listsSortMode\":\"ALPHABETICAL\",\"listsSortDirection\":\"ASC\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lists_sort_mode").value("ALPHABETICAL"))
+                .andExpect(jsonPath("$.lists_sort_direction").value("ASC"));
+
+        verify(userService).updateSortPreferences(eq(1L), eq("test@mail.ru"),
+                any(SortPreferencesRequest.class));
+    }
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void updateSortPreferences_InvalidSortMode_Returns400() throws Exception {
+        mockMvc.perform(patch("/api/users/me/sort-preferences")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"listsSortMode\":\"INVALID_MODE\"}"))
+                .andExpect(status().isBadRequest());
+
+        verify(userService, never()).updateSortPreferences(any(), any(), any());
+    }
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void updateSortPreferences_InvalidDirection_Returns400() throws Exception {
+        mockMvc.perform(patch("/api/users/me/sort-preferences")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"listsSortDirection\":\"UP\"}"))
+                .andExpect(status().isBadRequest());
+
+        verify(userService, never()).updateSortPreferences(any(), any(), any());
+    }
+
+    @Test
+    void updateSortPreferences_NoAuth_Returns401() throws Exception {
+        mockMvc.perform(patch("/api/users/me/sort-preferences")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"listsSortMode\":\"ALPHABETICAL\"}"))
+                .andExpect(status().isUnauthorized());
+
+        verify(userService, never()).updateSortPreferences(any(), any(), any());
     }
 }

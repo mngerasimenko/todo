@@ -67,6 +67,12 @@ public class TodoResponse {
     private String completorColor;
 
     /**
+     * Позиция задачи в списке (общая per-список). Используется клиентом
+     * для отображения порядка после bulk-reorder (PATCH /api/lists/{id}/todos/reorder).
+     */
+    private Integer position;
+
+    /**
      * Возвращает значение done с null-safety (false при null).
      * Используется в Java-коде, не для JSON-сериализации.
      */

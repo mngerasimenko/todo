@@ -17,6 +17,7 @@ import ru.mngerasimenko.todolist.dto.list.InviteInfoResponse;
 import ru.mngerasimenko.todolist.dto.list.InviteResponse;
 import ru.mngerasimenko.todolist.dto.list.ListMemberResponse;
 import ru.mngerasimenko.todolist.dto.list.ListResponse;
+import ru.mngerasimenko.todolist.dto.list.ReorderItem;
 import ru.mngerasimenko.todolist.exception.ListNotFoundException;
 import ru.mngerasimenko.todolist.exception.TokenExpiredException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
@@ -27,6 +28,7 @@ import ru.mngerasimenko.todolist.model.InviteToken;
 import ru.mngerasimenko.todolist.model.TaskList;
 import ru.mngerasimenko.todolist.model.TaskListRole;
 import ru.mngerasimenko.todolist.model.TaskListUser;
+import ru.mngerasimenko.todolist.model.Todo;
 import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.repository.InviteTokenRepository;
 import ru.mngerasimenko.todolist.repository.TaskListRepository;
@@ -39,8 +41,10 @@ import ru.mngerasimenko.todolist.util.TokenUtils;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -92,7 +96,7 @@ public class TaskListServiceImpl implements TaskListService {
     public List<ListResponse> getListsByUserId(Long userId) {
         List<TaskListUser> taskListUsers = taskListUserRepository.findByUserId(userId);
         return taskListUsers.stream()
-                .map(tlu -> taskListMapper.toResponse(tlu.getTaskList(), tlu.getRole()))
+                .map(tlu -> taskListMapper.toResponse(tlu.getTaskList(), tlu.getRole(), tlu.getPosition()))
                 .toList();
     }
 
@@ -218,6 +222,120 @@ public class TaskListServiceImpl implements TaskListService {
 
         log.info("Список удалён: listId={}, userId={}", listId, userId);
         evictTaskListsCache(affectedUserIds);
+    }
+
+    @Override
+    @Transactional
+    public ListResponse updateList(Long listId, Long requesterId, String name, String color) {
+        TaskListUser membership = taskListUserRepository.findByIdListIdAndIdUserId(listId, requesterId)
+                .orElseThrow(() -> new IllegalArgumentException("Вы не являетесь участником данного списка"));
+
+        if (membership.getRole() != TaskListRole.ADMIN) {
+            throw new IllegalArgumentException("Только администратор может изменять список");
+        }
+
+        // Оба поля null — no-op: возвращаем текущее состояние без записи/инвалидации кеша
+        if (name == null && color == null) {
+            return taskListMapper.toResponse(membership.getTaskList(), membership.getRole());
+        }
+
+        TaskList list = membership.getTaskList();
+
+        // PATCH-семантика: null — поле не трогаем
+        if (name != null) {
+            list.setName(name);
+        }
+        if (color != null) {
+            list.setColor(color);
+        }
+
+        TaskList saved = taskListRepository.saveAndFlush(list);
+
+        // Меняются name/color — кеш task-lists неактуален для всех участников.
+        List<Long> affectedUserIds = taskListUserRepository.findByIdListId(listId).stream()
+                .map(m -> m.getUser().getId())
+                .toList();
+        evictTaskListsCache(affectedUserIds);
+
+        log.info("Список обновлён: listId={}, userId={}, name={}, color={}",
+                listId, requesterId, name != null, color != null);
+        return taskListMapper.toResponse(saved, TaskListRole.ADMIN);
+    }
+
+    @Override
+    @Transactional
+    public void reorderLists(Long userId, List<ReorderItem> items) {
+        List<Long> listIds = items.stream().map(ReorderItem::id).toList();
+
+        // Fail-fast: дубликаты id в запросе клиента — это malformed input.
+        // Без этой проверки Collectors.toMap ниже бросит IllegalStateException → HTTP 500;
+        // с проверкой получаем IllegalArgumentException → HTTP 400 через GlobalExceptionHandler.
+        if (listIds.stream().distinct().count() != listIds.size()) {
+            throw new IllegalArgumentException("Duplicate list ids in reorder request");
+        }
+
+        // Симметричная проверка: дубликаты position'ов — UX-баг клиента, после reorder
+        // два списка имели бы одинаковый position и порядок не стабилизировался бы.
+        List<Integer> positions = items.stream().map(ReorderItem::position).toList();
+        if (positions.stream().distinct().count() != positions.size()) {
+            throw new IllegalArgumentException("Duplicate positions in reorder request");
+        }
+
+        List<TaskListUser> links = taskListUserRepository.findByIdUserIdAndIdListIdIn(userId, listIds);
+
+        // Все id из запроса должны принадлежать юзеру — иначе reorder отклоняется целиком
+        if (links.size() != items.size()) {
+            throw new IllegalArgumentException("Some lists do not belong to user " + userId);
+        }
+
+        Map<Long, Integer> newPositions = items.stream()
+                .collect(Collectors.toMap(ReorderItem::id, ReorderItem::position));
+
+        links.forEach(link -> link.setPosition(newPositions.get(link.getId().getListId())));
+
+        taskListUserRepository.saveAllAndFlush(links);
+
+        // Reorder затрагивает только текущего юзера — evict его кеш task-lists
+        evictTaskListsCache(List.of(userId));
+
+        log.info("Списки переупорядочены: userId={}, count={}", userId, items.size());
+    }
+
+    @Override
+    @Transactional
+    public void reorderTodos(Long listId, Long requesterId, List<ReorderItem> items) {
+        // Fail-fast: дубликаты id — malformed input. Без этой проверки Collectors.toMap
+        // ниже бросит IllegalStateException → HTTP 500.
+        List<Long> todoIds = items.stream().map(ReorderItem::id).toList();
+        if (todoIds.stream().distinct().count() != todoIds.size()) {
+            throw new IllegalArgumentException("Duplicate todo ids in reorder request");
+        }
+
+        // Симметричная проверка: дубликаты position'ов — UX-баг клиента.
+        List<Integer> positions = items.stream().map(ReorderItem::position).toList();
+        if (positions.stream().distinct().count() != positions.size()) {
+            throw new IllegalArgumentException("Duplicate positions in reorder request");
+        }
+
+        // Проверка участия — любой участник списка может реордерить (не только ADMIN)
+        taskListUserRepository.findByIdListIdAndIdUserId(listId, requesterId)
+                .orElseThrow(() -> new IllegalArgumentException("Вы не являетесь участником данного списка"));
+
+        List<Todo> todos = todoRepository.findByIdInAndListId(todoIds, listId);
+
+        if (todos.size() != items.size()) {
+            throw new IllegalArgumentException("Some todos do not belong to list " + listId);
+        }
+
+        Map<Long, Integer> newPositions = items.stream()
+                .collect(Collectors.toMap(ReorderItem::id, ReorderItem::position));
+
+        todos.forEach(t -> t.setPosition(newPositions.get(t.getId())));
+
+        todoRepository.saveAllAndFlush(todos);
+        // Кеш todos в проекте не используется (TodoServiceImpl без @Cacheable) — evict не нужен.
+
+        log.info("Задачи переупорядочены: listId={}, userId={}, count={}", listId, requesterId, items.size());
     }
 
     @Override

@@ -5,6 +5,7 @@ import ru.mngerasimenko.todolist.dto.list.InviteInfoResponse;
 import ru.mngerasimenko.todolist.dto.list.InviteResponse;
 import ru.mngerasimenko.todolist.dto.list.ListMemberResponse;
 import ru.mngerasimenko.todolist.dto.list.ListResponse;
+import ru.mngerasimenko.todolist.dto.list.ReorderItem;
 
 import java.util.List;
 
@@ -43,6 +44,32 @@ public interface TaskListService {
      * Удаляются все задачи, все участники и сам список.
      */
     void deleteList(Long listId, Long userId);
+
+    /**
+     * Частично обновить список задач (PATCH-семантика). Только ADMIN списка.
+     * Поля {@code name} и {@code color} опциональные: {@code null} — поле не изменяется.
+     * Кеш {@code task-lists} инвалидируется для всех участников списка.
+     *
+     * @return ответ с обновлёнными полями и ролью текущего пользователя (ADMIN)
+     */
+    ListResponse updateList(Long listId, Long requesterId, String name, String color);
+
+    /**
+     * Bulk-reorder списков для пользователя (per-user position).
+     * Атомарно обновляет task_list_user.position. Кеш task-lists юзера инвалидируется.
+     *
+     * @throws IllegalArgumentException если хоть один listId не принадлежит юзеру
+     */
+    void reorderLists(Long userId, List<ReorderItem> items);
+
+    /**
+     * Bulk-reorder задач внутри списка (общий per-список position).
+     * Любой участник списка может вызвать. Кеш todo не используется в проекте — evict не нужен.
+     *
+     * @throws IllegalArgumentException если юзер не участник списка, если есть дубликаты id/position,
+     *                                   или если хоть один todo.id не принадлежит указанному listId
+     */
+    void reorderTodos(Long listId, Long requesterId, List<ReorderItem> items);
 
     /**
      * Создать приглашение в список. Только ADMIN списка.

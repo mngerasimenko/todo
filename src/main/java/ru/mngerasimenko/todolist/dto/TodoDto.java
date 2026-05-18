@@ -86,6 +86,11 @@ public class TodoDto {
     private String completorColor;
 
     /**
+     * Позиция задачи в списке (общая per-список).
+     */
+    private Integer position;
+
+    /**
      * Возвращает значение done с null-safety (false при null).
      */
     @JsonIgnore

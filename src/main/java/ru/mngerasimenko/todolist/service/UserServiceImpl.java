@@ -5,7 +5,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -15,6 +14,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import ru.mngerasimenko.todolist.config.RedisCacheConfig;
 import ru.mngerasimenko.todolist.dto.AuthUserDto;
+import ru.mngerasimenko.todolist.dto.SortPreferencesRequest;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.exception.TokenExpiredException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
@@ -294,7 +294,6 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    @CacheEvict(value = {RedisCacheConfig.USERS_ME, RedisCacheConfig.USER_AUTH}, key = "#result.email.toLowerCase()")
     public UserDto updateColors(Long id, String createdTaskColor, String completedTaskColor) {
         User user = repository.findById(id)
                 .orElseThrow(() -> new UserNotFoundException("User not found with id: " + id));
@@ -302,6 +301,8 @@ public class UserServiceImpl implements UserService {
         user.setCompletedTaskColor(completedTaskColor);
         User savedUser = repository.save(user);
         log.info("Обновлены цвета пользователя: id={}", id);
+        // afterCommit-synchronization — strong consistency: при rollback кэш не чистим
+        evictUserCache(savedUser.getEmail());
         return mapper.toDto(savedUser);
     }
 
@@ -515,6 +516,43 @@ public class UserServiceImpl implements UserService {
         String token = ru.mngerasimenko.todolist.util.TokenUtils.secureRandomHex(32);
         user.setUnsubscribeToken(token);
         return token;
+    }
+
+    @Override
+    @Transactional
+    public UserDto updateSortPreferences(Long userId, String email, SortPreferencesRequest request) {
+        User user = repository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
+
+        boolean changed = false;
+        if (request.getListsSortMode() != null) {
+            user.setListsSortMode(request.getListsSortMode());
+            changed = true;
+        }
+        if (request.getListsSortDirection() != null) {
+            user.setListsSortDirection(request.getListsSortDirection());
+            changed = true;
+        }
+        if (request.getTodosSortMode() != null) {
+            user.setTodosSortMode(request.getTodosSortMode());
+            changed = true;
+        }
+        if (request.getTodosSortDirection() != null) {
+            user.setTodosSortDirection(request.getTodosSortDirection());
+            changed = true;
+        }
+
+        if (!changed) {
+            log.debug("updateSortPreferences no-op для userId={}", userId);
+            // no-op: ничего не поменялось, cache актуальный — evict не нужен
+            return mapper.toDto(user);
+        }
+
+        User saved = repository.saveAndFlush(user);
+        // afterCommit-synchronization — strong consistency: при rollback кэш не чистим
+        evictUserCache(email);
+        log.info("Обновлены sort-настройки: userId={}", userId);
+        return mapper.toDto(saved);
     }
 
     @Override

@@ -35,6 +35,19 @@ public class TaskListUser {
     private LocalDateTime joinedAt;
 
     /**
+     * Позиция списка в порядке отображения у конкретного юзера (per-user sorting).
+     * Backfill через ROW_NUMBER PARTITION BY user_id ORDER BY joined_at (см. Liquibase 023b).
+     * Изменяется через PATCH /api/lists/reorder.
+     * <p>
+     * Field initializer = 0 обязателен: DB default'у (Liquibase 023 defaultValueNumeric: 0)
+     * Hibernate не доверяет — INSERT всегда содержит явное значение колонки. Без initializer
+     * летит NOT NULL constraint violation при createList/acceptInvite, потому что конструктор
+     * TaskListUser(TaskList, User, TaskListRole) поля position не трогает.
+     */
+    @Column(name = "position", nullable = false)
+    private Integer position = 0;
+
+    /**
      * Версия записи для оптимистичной блокировки.
      * Hibernate автоматически инкрементирует при каждом UPDATE.
      */
@@ -98,6 +111,14 @@ public class TaskListUser {
 
     public void setJoinedAt(LocalDateTime joinedAt) {
         this.joinedAt = joinedAt;
+    }
+
+    public Integer getPosition() {
+        return position;
+    }
+
+    public void setPosition(Integer position) {
+        this.position = position;
     }
 
     public Long getVersion() {

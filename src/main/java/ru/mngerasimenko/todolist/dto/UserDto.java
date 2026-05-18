@@ -70,4 +70,19 @@ public class UserDto {
     @JsonProperty("preferred_email_locale")
     @Size(max = 8)
     private String preferredEmailLocale;
+
+    /**
+     * Sort-настройки пользователя (Task 5). См. PATCH /api/users/me/sort-preferences.
+     */
+    @JsonProperty("lists_sort_mode")
+    private String listsSortMode;
+
+    @JsonProperty("lists_sort_direction")
+    private String listsSortDirection;
+
+    @JsonProperty("todos_sort_mode")
+    private String todosSortMode;
+
+    @JsonProperty("todos_sort_direction")
+    private String todosSortDirection;
 }
