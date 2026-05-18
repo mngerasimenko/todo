@@ -156,12 +156,14 @@ class TaskListServiceImplTest {
 
     @Test
     void getListsByUserId_ReturnsListOfLists() {
-        // testTaskListUser.position по умолчанию null — маппер вызывается с (taskList, role, null)
+        // testTaskListUser.position инициализируется = 0 (field initializer на entity) —
+        // маппер вызывается с (taskList, role, 0). Защита от NOT NULL constraint
+        // violation при INSERT в task_list_user, см. комментарий в TaskListUser.position.
         ListResponse response = ListResponse.builder()
                 .id(10L).name("TestList").role("ADMIN").build();
 
         when(taskListUserRepository.findByUserId(1L)).thenReturn(List.of(testTaskListUser));
-        when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN, null)).thenReturn(response);
+        when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN, 0)).thenReturn(response);
 
         List<ListResponse> result = taskListService.getListsByUserId(1L);
 
