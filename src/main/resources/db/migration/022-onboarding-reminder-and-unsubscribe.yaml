@@ -1,0 +1,48 @@
+databaseChangeLog:
+  - changeSet:
+      id: 022-onboarding-reminder-and-unsubscribe
+      author: mngerasimenko
+      comment: "Phase 3.3 + unsubscribe: onboarding_reminder_sent (3d reminder one-shot flag), reminder_opt_out (forward-looking opt-out for both 3d and 7d), unsubscribe_token (one-shot token issued at reminder send, consumed on /api/users/unsubscribe-reminder hit)"
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: todo_users
+                columnName: onboarding_reminder_sent
+      changes:
+        - addColumn:
+            tableName: todo_users
+            columns:
+              - column:
+                  name: onboarding_reminder_sent
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: reminder_opt_out
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: unsubscribe_token
+                  type: varchar(64)
+                  constraints:
+                    nullable: true
+
+  - changeSet:
+      id: 022b-add-unsubscribe-token-unique
+      author: mngerasimenko
+      comment: "Belt-and-braces unique constraint on todo_users.unsubscribe_token so a 256-bit hex collision can never produce IncorrectResultSizeDataAccessException on findByUnsubscribeToken. Two active tokens can never coexist anyway — the token is cleared on unsubscribe and reissued per reminder send — but the DB-level guarantee is cheap."
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - indexExists:
+                tableName: todo_users
+                indexName: uq_todo_users_unsubscribe_token
+      changes:
+        - addUniqueConstraint:
+            tableName: todo_users
+            columnNames: unsubscribe_token
+            constraintName: uq_todo_users_unsubscribe_token

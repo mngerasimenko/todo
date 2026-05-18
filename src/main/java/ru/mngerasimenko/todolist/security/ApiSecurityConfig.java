@@ -59,7 +59,8 @@ public class ApiSecurityConfig {
                                 "/api/v3/api-docs/**",
                                 "/api/swagger-ui/**",
                                 "/api/swagger-ui.html",
-                                "/api/track/**"
+                                "/api/track/**",
+                                "/api/users/unsubscribe-reminder"
                         ).permitAll()
                         // Публичный GET для информации о приглашении
                         .requestMatchers(HttpMethod.GET, "/api/lists/invite/*").permitAll()

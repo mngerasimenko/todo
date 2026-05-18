@@ -83,4 +83,38 @@ public interface UserService {
 
     /** Отметить что напоминание отправлено */
     void markReminderSent(Long userId);
+
+    /**
+     * Отписать пользователя от reminder-напоминаний (3d + 7d) по одноразовому токену.
+     * Ставит reminderOptOut=true и очищает unsubscribeToken.
+     *
+     * @return BCP-47 локаль пользователя (preferredEmailLocale) — для рендеринга
+     *         success-HTML на нужном языке в контроллере.
+     * @throws ru.mngerasimenko.todolist.exception.UserNotFoundException если токен
+     *         невалиден или уже использован.
+     */
+    String unsubscribeFromReminders(String unsubscribeToken);
+
+    /**
+     * Кандидаты на 3-дневное onboarding-напоминание (Phase 3.3).
+     * @param days сколько дней должно пройти с регистрации без возврата (обычно 3).
+     */
+    List<User> findOnboardingReminderCandidates(int days);
+
+    /**
+     * Пометить, что 3-дневное onboarding-напоминание отправлено. Однократно.
+     * После этого пользователь не попадёт в {@link #findOnboardingReminderCandidates(int)}.
+     */
+    void markOnboardingReminderSent(Long userId);
+
+    /**
+     * Сгенерировать новый одноразовый unsubscribe-токен (256 бит, hex) и сохранить
+     * его в {@code user.unsubscribeToken}. Возвращает токен для подстановки в email-footer.
+     * <p>
+     * Перезаписывает предыдущий токен — гарантирует, что в БД одновременно живёт только
+     * один активный токен на пользователя (это позволяет UNIQUE-constraint в миграции 022b).
+     *
+     * @throws ru.mngerasimenko.todolist.exception.UserNotFoundException если userId не существует
+     */
+    String issueUnsubscribeToken(Long userId);
 }

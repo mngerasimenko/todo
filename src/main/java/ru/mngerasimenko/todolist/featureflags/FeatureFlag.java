@@ -21,6 +21,12 @@ public enum FeatureFlag {
             "Scheduler ежедневной рассылки напоминаний неактивным пользователям (7+ дней). " +
             "При false scheduled-метод пропускает итерацию, сам бин остаётся живым."),
 
+    ONBOARDING_REMINDER("app.onboarding-reminder.enabled", true,
+            "Scheduler 3-дневного onboarding-напоминания (Phase 3.3). " +
+            "Шлёт push + email пользователям, не возвращавшимся в приложение через 3 дня " +
+            "после регистрации. Один раз на устройство (флаг onboarding_reminder_sent). " +
+            "При false scheduled-метод пропускает итерацию, бин остаётся живым."),
+
     PUSH_NOTIFICATIONS("push-notifications.enabled", true,
             "Отправка push-уведомлений через Firebase при действиях в совместных списках " +
             "и inactive-reminder. Полезно выключить при нестабильной работе Firebase."),

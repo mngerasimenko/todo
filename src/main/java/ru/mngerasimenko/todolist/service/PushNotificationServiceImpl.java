@@ -39,6 +39,17 @@ public class PushNotificationServiceImpl implements PushNotificationService {
     private final FeatureFlagStore flagStore;
     private final MessageService messageService;
 
+    /**
+     * Значения для FCM data-поля {@code push_type} (Phase 3.1-server). Android-клиент сможет
+     * сегментировать события по типу когда подключит парсинг (Android-часть Phase 3.1 отложена
+     * до явного потребителя, см. fromIdeas/response_push_typization_phase31_2026-05-17.md).
+     */
+    public static final String PUSH_TYPE_TASK_ADDED = "task_added";
+    public static final String PUSH_TYPE_TASK_COMPLETED = "task_completed";
+    public static final String PUSH_TYPE_MEMBER_ADDED = "member_added";
+    public static final String PUSH_TYPE_INACTIVE_REMINDER = "inactive_reminder";
+    public static final String PUSH_TYPE_ONBOARDING_REMINDER = "onboarding_reminder";
+
     /** Кешированный результат проверки Firebase */
     private volatile boolean firebaseHealthyCache = false;
 
@@ -90,7 +101,7 @@ public class PushNotificationServiceImpl implements PushNotificationService {
         log.info("Найдено {} push-токенов для уведомления", tokens.size());
         if (tokens.isEmpty()) return;
 
-        sendLocalized(tokens,
+        sendLocalized(tokens, PUSH_TYPE_TASK_ADDED,
                 "push.todo.created.title", new Object[]{},
                 "push.todo.created.body", new Object[]{authorName, todoName},
                 listId);
@@ -105,7 +116,7 @@ public class PushNotificationServiceImpl implements PushNotificationService {
         log.info("Найдено {} push-токенов для уведомления", tokens.size());
         if (tokens.isEmpty()) return;
 
-        sendLocalized(tokens,
+        sendLocalized(tokens, PUSH_TYPE_TASK_COMPLETED,
                 "push.todo.done.title", new Object[]{},
                 "push.todo.done.body", new Object[]{completorName, todoName},
                 listId);
@@ -120,7 +131,7 @@ public class PushNotificationServiceImpl implements PushNotificationService {
         log.info("Найдено {} push-токенов для уведомления", tokens.size());
         if (tokens.isEmpty()) return;
 
-        sendLocalized(tokens,
+        sendLocalized(tokens, PUSH_TYPE_MEMBER_ADDED,
                 "push.member.added.title", new Object[]{},
                 "push.member.added.body", new Object[]{newUserName, listName},
                 listId);
@@ -153,6 +164,7 @@ public class PushNotificationServiceImpl implements PushNotificationService {
      * Невалидные токены (UNREGISTERED) автоматически удаляются.
      */
     private void sendLocalized(List<PushToken> tokens,
+                               String pushType,
                                String titleKey, Object[] titleArgs,
                                String bodyKey, Object[] bodyArgs,
                                Long listId) {
@@ -174,7 +186,11 @@ public class PushNotificationServiceImpl implements PushNotificationService {
                                         .setBody(body)
                                         .setChannelId("todo_notifications_v2")
                                         .build())
-                                .build());
+                                .build())
+                        // Phase 3.1-server: семантический маркер типа для будущей аналитики
+                        // (Android-парсинг отложен до явного потребителя, см. fromIdeas/
+                        //  response_push_typization_phase31_2026-05-17.md).
+                        .putData("push_type", pushType);
 
                 if (listId != null) {
                     messageBuilder.putData("list_id", String.valueOf(listId));
@@ -218,12 +234,38 @@ public class PushNotificationServiceImpl implements PushNotificationService {
                     ? userName
                     : messageService.getMessage("push.fallback.name", locale);
             sendLocalized(
-                    List.of(pt),
+                    List.of(pt), PUSH_TYPE_INACTIVE_REMINDER,
                     "push.inactive.title", new Object[]{},
                     "push.inactive.body", new Object[]{displayName},
                     null);
         }
         log.info("Push-напоминание отправлено userId={} на {} устройств(а)", userId, tokens.size());
+    }
+
+    @Override
+    @Async
+    public void sendOnboardingReminderPush(Long userId, String userName) {
+        if (pushDisabled()) return;
+
+        List<PushToken> tokens = pushTokenRepository.findByUserId(userId);
+        if (tokens.isEmpty()) {
+            log.debug("Нет push-токенов для userId={}, onboarding-напоминание не отправлено", userId);
+            return;
+        }
+
+        // Per-token локализация имени, как в sendInactiveReminderPush.
+        for (PushToken pt : tokens) {
+            Locale locale = Locale.forLanguageTag(pt.getLocale());
+            String displayName = userName != null
+                    ? userName
+                    : messageService.getMessage("push.fallback.name", locale);
+            sendLocalized(
+                    List.of(pt), PUSH_TYPE_ONBOARDING_REMINDER,
+                    "push.onboarding.title", new Object[]{},
+                    "push.onboarding.body", new Object[]{displayName},
+                    null);
+        }
+        log.info("Onboarding push-напоминание отправлено userId={} на {} устройств(а)", userId, tokens.size());
     }
 
     /** Короткий helper: true если отправку push нужно пропустить. */

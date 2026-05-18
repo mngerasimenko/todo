@@ -66,9 +66,18 @@ public class InactiveReminderScheduler {
 
             // Email — только если email подтверждён
             if (user.isEmailVerified()) {
+                String unsubToken = null;
+                try {
+                    unsubToken = userService.issueUnsubscribeToken(user.getId());
+                } catch (Exception e) {
+                    // Если токен не сгенерирован — отправим письмо без footer-link (старое поведение).
+                    log.warn("[inactive-reminder] Не удалось сгенерировать unsubscribe-токен userId={}: {}",
+                            user.getId(), e.getMessage());
+                }
                 try {
                     emailService.sendInactiveReminderEmail(
-                            user.getEmail(), user.getName(), user.getId(), user.getPreferredEmailLocale());
+                            user.getEmail(), user.getName(), user.getId(),
+                            user.getPreferredEmailLocale(), unsubToken);
                     sentEmails++;
                 } catch (Exception e) {
                     log.warn("[inactive-reminder] Ошибка отправки email userId={}: {}", user.getId(), e.getMessage());

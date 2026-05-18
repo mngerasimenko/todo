@@ -163,6 +163,33 @@ public class User {
     private String preferredEmailLocale = "ru";
 
     /**
+     * Флаг — отправлено ли 3-дневное onboarding-напоминание (Phase 3.3).
+     * Ставится в true однократно при отправке через OnboardingReminderScheduler,
+     * больше не сбрасывается (юзер получает напоминание один раз на устройство).
+     * Отдельно от 7-дневного reminder'а — у того свой счётчик reminderCount.
+     */
+    @Column(name = "onboarding_reminder_sent", nullable = false)
+    private boolean onboardingReminderSent = false;
+
+    /**
+     * Пользователь явно отказался от reminder-напоминаний (3d и 7d одновременно).
+     * Ставится в true через GET /api/users/unsubscribe-reminder?token=...
+     * (forward-looking opt-out, см. fromIdeas/response_phase33_unsubscribe_risk_2026-05-17.md).
+     * Сбрасывает все будущие reminder-отправки на email + push.
+     */
+    @Column(name = "reminder_opt_out", nullable = false)
+    private boolean reminderOptOut = false;
+
+    /**
+     * Одноразовый токен для отписки от reminder'ов через email-ссылку.
+     * Генерируется при отправке каждого reminder'а (3d или 7d), кладётся в footer-link
+     * email-шаблона. При hit'е /api/users/unsubscribe-reminder?token=... сервер
+     * валидирует, ставит reminder_opt_out=true и очищает токен.
+     */
+    @Column(name = "unsubscribe_token", length = 64)
+    private String unsubscribeToken;
+
+    /**
      * Версия записи для оптимистичной блокировки.
      * Hibernate автоматически инкрементирует при каждом UPDATE.
      */
@@ -380,5 +407,29 @@ public class User {
 
     public void setReminderCount(int reminderCount) {
         this.reminderCount = reminderCount;
+    }
+
+    public boolean isOnboardingReminderSent() {
+        return onboardingReminderSent;
+    }
+
+    public void setOnboardingReminderSent(boolean onboardingReminderSent) {
+        this.onboardingReminderSent = onboardingReminderSent;
+    }
+
+    public boolean isReminderOptOut() {
+        return reminderOptOut;
+    }
+
+    public void setReminderOptOut(boolean reminderOptOut) {
+        this.reminderOptOut = reminderOptOut;
+    }
+
+    public String getUnsubscribeToken() {
+        return unsubscribeToken;
+    }
+
+    public void setUnsubscribeToken(String unsubscribeToken) {
+        this.unsubscribeToken = unsubscribeToken;
     }
 }

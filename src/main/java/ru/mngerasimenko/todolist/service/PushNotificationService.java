@@ -42,6 +42,17 @@ public interface PushNotificationService {
     void sendInactiveReminderPush(Long userId, String userName);
 
     /**
+     * Отправить 3-дневное onboarding-напоминание новому пользователю (push) — Phase 3.3.
+     * Текст отличается от inactive-reminder ({@code push.onboarding.*} keys) — фокус на
+     * «попробуйте сейчас», а не «возвращайтесь».
+     * Payload помечается {@code push_type=onboarding_reminder}.
+     *
+     * @param userId ID пользователя
+     * @param userName имя для персонализации (или null → fallback name из messages)
+     */
+    void sendOnboardingReminderPush(Long userId, String userName);
+
+    /**
      * Проверить доступность Firebase (кешированный результат).
      * @return true если Firebase SDK инициализирован и работает
      */

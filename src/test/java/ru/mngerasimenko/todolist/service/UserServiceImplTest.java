@@ -984,4 +984,110 @@ class UserServiceImplTest {
         assertThatThrownBy(() -> userService.markReminderSent(99L))
                 .isInstanceOf(UserNotFoundException.class);
     }
+
+    // ===== unsubscribeFromReminders (Phase 3.3) =====
+
+    @Test
+    void unsubscribeFromReminders_ValidToken_SetsOptOutAndClearsToken() {
+        user.setReminderOptOut(false);
+        user.setUnsubscribeToken("valid-token");
+        user.setPreferredEmailLocale("ru");
+        when(repository.findByUnsubscribeToken("valid-token")).thenReturn(user);
+
+        String locale = userService.unsubscribeFromReminders("valid-token");
+
+        assertThat(user.isReminderOptOut()).isTrue();
+        assertThat(user.getUnsubscribeToken()).isNull();
+        assertThat(locale).isEqualTo("ru");
+    }
+
+    @Test
+    void unsubscribeFromReminders_NullToken_ThrowsUserNotFoundException() {
+        assertThatThrownBy(() -> userService.unsubscribeFromReminders(null))
+                .isInstanceOf(UserNotFoundException.class);
+        verify(repository, never()).findByUnsubscribeToken(any());
+    }
+
+    @Test
+    void unsubscribeFromReminders_BlankToken_ThrowsUserNotFoundException() {
+        assertThatThrownBy(() -> userService.unsubscribeFromReminders("   "))
+                .isInstanceOf(UserNotFoundException.class);
+        verify(repository, never()).findByUnsubscribeToken(any());
+    }
+
+    @Test
+    void unsubscribeFromReminders_UnknownToken_ThrowsUserNotFoundException() {
+        when(repository.findByUnsubscribeToken("not-in-db")).thenReturn(null);
+
+        assertThatThrownBy(() -> userService.unsubscribeFromReminders("not-in-db"))
+                .isInstanceOf(UserNotFoundException.class);
+    }
+
+    // ===== findOnboardingReminderCandidates / markOnboardingReminderSent (Phase 3.3) =====
+
+    @Test
+    void findOnboardingReminderCandidates_DelegatesToRepository() {
+        when(repository.findOnboardingReminderCandidates(any(LocalDateTime.class)))
+                .thenReturn(List.of(user));
+
+        List<User> result = userService.findOnboardingReminderCandidates(3);
+
+        assertThat(result).hasSize(1);
+        ArgumentCaptor<LocalDateTime> thresholdCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(repository).findOnboardingReminderCandidates(thresholdCaptor.capture());
+        // threshold should be ~3 days in the past (allow some skew for test execution time)
+        assertThat(thresholdCaptor.getValue())
+                .isBefore(LocalDateTime.now().minusDays(3).plusSeconds(5))
+                .isAfter(LocalDateTime.now().minusDays(3).minusSeconds(5));
+    }
+
+    @Test
+    void markOnboardingReminderSent_SetsFlag() {
+        user.setOnboardingReminderSent(false);
+        when(repository.findById(1L)).thenReturn(Optional.of(user));
+
+        userService.markOnboardingReminderSent(1L);
+
+        assertThat(user.isOnboardingReminderSent()).isTrue();
+    }
+
+    @Test
+    void markOnboardingReminderSent_UserNotFound_ThrowsException() {
+        when(repository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.markOnboardingReminderSent(99L))
+                .isInstanceOf(UserNotFoundException.class);
+    }
+
+    // ===== issueUnsubscribeToken (Phase 3.3 + unsubscribe) =====
+
+    @Test
+    void issueUnsubscribeToken_GeneratesAndPersistsToken() {
+        when(repository.findById(1L)).thenReturn(Optional.of(user));
+
+        String token = userService.issueUnsubscribeToken(1L);
+
+        // 32 random bytes → 64 hex chars
+        assertThat(token).hasSize(64).matches("[0-9a-f]+");
+        assertThat(user.getUnsubscribeToken()).isEqualTo(token);
+    }
+
+    @Test
+    void issueUnsubscribeToken_OverwritesPreviousToken() {
+        user.setUnsubscribeToken("old-token");
+        when(repository.findById(1L)).thenReturn(Optional.of(user));
+
+        String newToken = userService.issueUnsubscribeToken(1L);
+
+        assertThat(newToken).isNotEqualTo("old-token");
+        assertThat(user.getUnsubscribeToken()).isEqualTo(newToken);
+    }
+
+    @Test
+    void issueUnsubscribeToken_UserNotFound_ThrowsException() {
+        when(repository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.issueUnsubscribeToken(99L))
+                .isInstanceOf(UserNotFoundException.class);
+    }
 }

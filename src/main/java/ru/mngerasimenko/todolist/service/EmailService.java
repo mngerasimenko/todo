@@ -39,6 +39,26 @@ public interface EmailService {
     void sendInactiveReminderEmail(String email, String userName, Long userId, String locale);
 
     /**
+     * То же, что {@link #sendInactiveReminderEmail(String, String, Long, String)}, плюс
+     * одноразовый unsubscribe-токен для footer-link. Если token null/blank — footer
+     * отписки не отображается (поведение совместимо со старой сигнатурой).
+     */
+    void sendInactiveReminderEmail(String email, String userName, Long userId, String locale, String unsubscribeToken);
+
+    /**
+     * Отправить 3-дневное onboarding-напоминание новому пользователю (Phase 3.3).
+     * Текст отличается от inactive-reminder ({@code email.onboarding.*} keys) — фокус
+     * на «попробуйте сейчас», а не «возвращайтесь».
+     *
+     * @param email email пользователя
+     * @param userName имя для персонализации (null → fallback из messages)
+     * @param userId ID для трекинга
+     * @param locale BCP-47 локаль (обычно {@code user.preferredEmailLocale})
+     * @param unsubscribeToken одноразовый токен для footer-link (null → footer не показывается)
+     */
+    void sendOnboardingReminderEmail(String email, String userName, Long userId, String locale, String unsubscribeToken);
+
+    /**
      * Проверить доступность SMTP-сервера (кешированный результат).
      * @return true если последняя проверка была успешной
      */
