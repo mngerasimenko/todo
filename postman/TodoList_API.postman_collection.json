@@ -788,6 +788,120 @@
 					"response": []
 				},
 				{
+					"name": "Update List (PATCH)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Color updated to requested value\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.color).to.eql(\"#3366FF\");",
+									"});",
+									"",
+									"pm.test(\"Name unchanged (not sent in body)\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.name).to.eql(\"МойСписок\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"color\": \"#3366FF\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/lists/{{listId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"lists",
+								"{{listId}}"
+							]
+						},
+						"description": "Частичное обновление списка (PATCH-семантика). Только ADMIN списка.\n\n| Поле | Формат | Описание |\n|------|--------|----------|\n| name | 2..128, без `<>` | Новое название (опционально) |\n| color | #RRGGBB | Цвет списка (опционально) |\n\nЕсли поле `null` — оно не изменяется.\n\n**Ошибки:** `400` (невалидный color/name), `403` (не ADMIN), `404` (список не найден)"
+					},
+					"response": []
+				},
+				{
+					"name": "Reorder Lists (PATCH)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"items\": [\n    { \"id\": {{listId}}, \"position\": 0 }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/lists/reorder",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"lists",
+								"reorder"
+							]
+						},
+						"description": "Batch reorder per-user position для списков текущего пользователя.\n\nТело: `{ \"items\": [ { \"id\": <list_id>, \"position\": <int> } ] }`.\n\nДоступны только списки, в которых юзер участник.\n\n**Ошибки:** `400` (duplicate id/position, size mismatch, чужой list_id), `409` (optimistic-lock конфликт)"
+					},
+					"response": []
+				},
+				{
 					"name": "Create Invite (copy link)",
 					"event": [
 						{
@@ -1515,6 +1629,84 @@
 					"response": []
 				},
 				{
+					"name": "Reorder Todos in List (PATCH)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Сервис требует, чтобы reorder содержал все todo списка (size mismatch иначе).",
+									"// Сначала запрашиваем todos и формируем items с position по индексу.",
+									"const baseUrl = pm.environment.get('baseUrl');",
+									"const accessToken = pm.environment.get('accessToken');",
+									"const listId = pm.environment.get('listId');",
+									"",
+									"pm.sendRequest({",
+									"    url: baseUrl + '/api/lists/' + listId + '/todos',",
+									"    method: 'GET',",
+									"    header: { 'Authorization': 'Bearer ' + accessToken }",
+									"}, function (err, res) {",
+									"    if (err) { console.error('Pre-request error:', err); return; }",
+									"    const todos = res.json();",
+									"    const items = todos.map(function (t, idx) { return { id: t.id, position: idx }; });",
+									"    pm.variables.set('reorderTodosBody', JSON.stringify({ items: items }));",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{{reorderTodosBody}}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/lists/{{listId}}/todos/reorder",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"lists",
+								"{{listId}}",
+								"todos",
+								"reorder"
+							]
+						},
+						"description": "Batch reorder задач внутри списка. Любой участник списка может вызывать.\n\nТело: `{ \"items\": [ { \"id\": <todo_id>, \"position\": <int> }, ... ] }`.\n\n**Важно:** нужно передать ВСЕ todo списка — иначе 400 (size mismatch). В этом запросе items формируются на лету в pre-request скрипте через GET /api/lists/{id}/todos.\n\n**Ошибки:** `400` (duplicate id/position, size mismatch, todo вне списка), `409` (optimistic-lock конфликт)"
+					},
+					"response": []
+				},
+				{
 					"name": "Delete Todo",
 					"event": [
 						{
@@ -1896,6 +2088,65 @@
 							]
 						},
 						"description": "Обновление цветов задач пользователя.\n\n| Поле | Формат | Описание |\n|------|--------|----------|\n| created_task_color | #RRGGBB | Цвет иконки создаваемых задач |\n| completed_task_color | #RRGGBB | Цвет иконки выполненных задач |\n\n**Ошибки:** `400` (неверный формат HEX), `404` (пользователь не найден)"
+					},
+					"response": []
+				},
+				{
+					"name": "Update Sort Preferences (PATCH)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Sort preferences updated\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.lists_sort_mode).to.eql(\"MANUAL\");",
+									"    pm.expect(jsonData.lists_sort_direction).to.eql(\"ASC\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"listsSortMode\": \"MANUAL\",\n  \"listsSortDirection\": \"ASC\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/users/me/sort-preferences",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"users",
+								"me",
+								"sort-preferences"
+							]
+						},
+						"description": "Частичное обновление sort-настроек текущего пользователя (lists / todos × mode / direction).\n\n| Поле | Значения | Описание |\n|------|----------|----------|\n| lists_sort_mode | MANUAL / ALPHABETICAL / CREATED_AT | Режим сортировки списков |\n| lists_sort_direction | ASC / DESC | Направление сортировки списков |\n| todos_sort_mode | MANUAL / ALPHABETICAL / CREATED_AT | Режим сортировки задач |\n| todos_sort_direction | ASC / DESC | Направление сортировки задач |\n\nВсе поля опциональные. Применяется к /api/users/me, т.е. к текущему пользователю по JWT.\n\n**Ошибки:** `400` (невалидные mode/direction)"
 					},
 					"response": []
 				},
