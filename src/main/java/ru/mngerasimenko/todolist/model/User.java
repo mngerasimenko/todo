@@ -189,6 +189,36 @@ public class User {
     @Column(name = "unsubscribe_token", length = 64)
     private String unsubscribeToken;
 
+    // Sort preferences (Phase Nadezda-001).
+    // ВАЖНО: 4 поля ниже инициализируются через field initializer ("CREATED_AT"/"DESC").
+    // Не убирай initializer и не добавляй конструктор без явного set этих 4 полей —
+    // колонки NOT NULL, при null-insert получишь SQL exception на saveAndFlush.
+
+    /**
+     * Режим сортировки списков задач: MANUAL, ALPHABETICAL, CREATED_AT.
+     * Управляется PATCH /api/users/me/sort-preferences.
+     */
+    @Column(name = "lists_sort_mode", length = 20, nullable = false)
+    private String listsSortMode = "CREATED_AT";
+
+    /**
+     * Направление сортировки списков задач: ASC или DESC.
+     */
+    @Column(name = "lists_sort_direction", length = 4, nullable = false)
+    private String listsSortDirection = "DESC";
+
+    /**
+     * Режим сортировки задач внутри списка: MANUAL, ALPHABETICAL, CREATED_AT.
+     */
+    @Column(name = "todos_sort_mode", length = 20, nullable = false)
+    private String todosSortMode = "CREATED_AT";
+
+    /**
+     * Направление сортировки задач: ASC или DESC.
+     */
+    @Column(name = "todos_sort_direction", length = 4, nullable = false)
+    private String todosSortDirection = "DESC";
+
     /**
      * Версия записи для оптимистичной блокировки.
      * Hibernate автоматически инкрементирует при каждом UPDATE.
@@ -431,5 +461,37 @@ public class User {
 
     public void setUnsubscribeToken(String unsubscribeToken) {
         this.unsubscribeToken = unsubscribeToken;
+    }
+
+    public String getListsSortMode() {
+        return listsSortMode;
+    }
+
+    public void setListsSortMode(String listsSortMode) {
+        this.listsSortMode = listsSortMode;
+    }
+
+    public String getListsSortDirection() {
+        return listsSortDirection;
+    }
+
+    public void setListsSortDirection(String listsSortDirection) {
+        this.listsSortDirection = listsSortDirection;
+    }
+
+    public String getTodosSortMode() {
+        return todosSortMode;
+    }
+
+    public void setTodosSortMode(String todosSortMode) {
+        this.todosSortMode = todosSortMode;
+    }
+
+    public String getTodosSortDirection() {
+        return todosSortDirection;
+    }
+
+    public void setTodosSortDirection(String todosSortDirection) {
+        this.todosSortDirection = todosSortDirection;
     }
 }

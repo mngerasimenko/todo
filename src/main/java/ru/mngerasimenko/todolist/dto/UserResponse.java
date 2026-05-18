@@ -55,4 +55,29 @@ public class UserResponse {
      */
     @JsonProperty("preferred_email_locale")
     private String preferredEmailLocale;
+
+    /**
+     * Режим сортировки списков задач: MANUAL | ALPHABETICAL | CREATED_AT.
+     * Управляется PATCH /api/users/me/sort-preferences.
+     */
+    @JsonProperty("lists_sort_mode")
+    private String listsSortMode;
+
+    /**
+     * Направление сортировки списков: ASC | DESC.
+     */
+    @JsonProperty("lists_sort_direction")
+    private String listsSortDirection;
+
+    /**
+     * Режим сортировки задач внутри списка: MANUAL | ALPHABETICAL | CREATED_AT.
+     */
+    @JsonProperty("todos_sort_mode")
+    private String todosSortMode;
+
+    /**
+     * Направление сортировки задач: ASC | DESC.
+     */
+    @JsonProperty("todos_sort_direction")
+    private String todosSortDirection;
 }

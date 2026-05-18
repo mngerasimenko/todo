@@ -557,6 +557,14 @@ class UserServiceImplTest {
         when(repository.save(any(User.class))).thenReturn(savedUser);
         when(mapper.toDto(savedUser)).thenReturn(updatedDto);
 
+        // Мокируем кэши — проверяем что evictUserCache очищает оба кэша по email
+        org.springframework.cache.Cache mockUsersMe = mock(org.springframework.cache.Cache.class);
+        org.springframework.cache.Cache mockUserAuth = mock(org.springframework.cache.Cache.class);
+        when(cacheManager.getCache(ru.mngerasimenko.todolist.config.RedisCacheConfig.USERS_ME))
+                .thenReturn(mockUsersMe);
+        when(cacheManager.getCache(ru.mngerasimenko.todolist.config.RedisCacheConfig.USER_AUTH))
+                .thenReturn(mockUserAuth);
+
         UserDto result = userService.updateColors(1L, "#FF0000", "#00FF00");
 
         assertThat(result).isNotNull();
@@ -564,6 +572,9 @@ class UserServiceImplTest {
         assertThat(result.getCompletedTaskColor()).isEqualTo("#00FF00");
         verify(repository, times(1)).findById(1L);
         verify(repository, times(1)).save(existingUser);
+        // В unit-тесте TransactionSynchronizationManager неактивен — evict вызывается сразу
+        verify(mockUsersMe).evict("user@mail.ru");
+        verify(mockUserAuth).evict("user@mail.ru");
     }
 
     @Test
@@ -575,6 +586,8 @@ class UserServiceImplTest {
                 .hasMessage("User not found with id: 999");
 
         verify(repository, never()).save(any(User.class));
+        // При исключении evict кэша не должен вызываться
+        verify(cacheManager, never()).getCache(anyString());
     }
 
     // ===== verifyEmail =====
@@ -1089,5 +1102,107 @@ class UserServiceImplTest {
 
         assertThatThrownBy(() -> userService.issueUnsubscribeToken(99L))
                 .isInstanceOf(UserNotFoundException.class);
+    }
+
+    // ===== updateSortPreferences (Task 5) =====
+
+    @Test
+    void updateSortPreferences_PartialUpdate_UpdatesOnlyProvidedFields() {
+        Long userId = 1L;
+        User existing = new User();
+        existing.setId(userId);
+        existing.setEmail("u@todolist.ru");
+        existing.setPassword("hash");
+        existing.setListsSortMode("CREATED_AT");
+        existing.setListsSortDirection("DESC");
+        existing.setTodosSortMode("CREATED_AT");
+        existing.setTodosSortDirection("DESC");
+
+        when(repository.findById(userId)).thenReturn(Optional.of(existing));
+        when(repository.saveAndFlush(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(mapper.toDto(any(User.class))).thenAnswer(inv -> {
+            User u = inv.getArgument(0);
+            UserDto dto = new UserDto();
+            dto.setId(u.getId());
+            dto.setListsSortMode(u.getListsSortMode());
+            dto.setListsSortDirection(u.getListsSortDirection());
+            dto.setTodosSortMode(u.getTodosSortMode());
+            dto.setTodosSortDirection(u.getTodosSortDirection());
+            return dto;
+        });
+
+        ru.mngerasimenko.todolist.dto.SortPreferencesRequest req =
+                new ru.mngerasimenko.todolist.dto.SortPreferencesRequest();
+        req.setListsSortMode("ALPHABETICAL");
+        // listsSortDirection не передан — должен остаться DESC
+        req.setTodosSortMode("MANUAL");
+
+        // Мокируем кэши — проверяем что evictUserCache очищает оба кэша по email
+        org.springframework.cache.Cache mockUsersMe = mock(org.springframework.cache.Cache.class);
+        org.springframework.cache.Cache mockUserAuth = mock(org.springframework.cache.Cache.class);
+        when(cacheManager.getCache(ru.mngerasimenko.todolist.config.RedisCacheConfig.USERS_ME))
+                .thenReturn(mockUsersMe);
+        when(cacheManager.getCache(ru.mngerasimenko.todolist.config.RedisCacheConfig.USER_AUTH))
+                .thenReturn(mockUserAuth);
+
+        UserDto result = userService.updateSortPreferences(userId, "u@todolist.ru", req);
+
+        assertThat(result.getListsSortMode()).isEqualTo("ALPHABETICAL");
+        assertThat(result.getListsSortDirection()).isEqualTo("DESC");
+        assertThat(result.getTodosSortMode()).isEqualTo("MANUAL");
+        assertThat(result.getTodosSortDirection()).isEqualTo("DESC");
+        verify(repository).saveAndFlush(existing);
+        // В unit-тесте TransactionSynchronizationManager неактивен — evict вызывается сразу
+        verify(mockUsersMe).evict("u@todolist.ru");
+        verify(mockUserAuth).evict("u@todolist.ru");
+    }
+
+    @Test
+    void updateSortPreferences_AllFieldsNull_NoOp_DoesNotSave() {
+        Long userId = 1L;
+        User existing = new User();
+        existing.setId(userId);
+        existing.setEmail("u@todolist.ru");
+        existing.setPassword("hash");
+        existing.setListsSortMode("ALPHABETICAL");
+        existing.setListsSortDirection("ASC");
+
+        when(repository.findById(userId)).thenReturn(Optional.of(existing));
+        when(mapper.toDto(existing)).thenAnswer(inv -> {
+            UserDto dto = new UserDto();
+            dto.setId(existing.getId());
+            dto.setListsSortMode(existing.getListsSortMode());
+            dto.setListsSortDirection(existing.getListsSortDirection());
+            return dto;
+        });
+
+        ru.mngerasimenko.todolist.dto.SortPreferencesRequest req =
+                new ru.mngerasimenko.todolist.dto.SortPreferencesRequest();
+        // все поля null
+
+        UserDto result = userService.updateSortPreferences(userId, "u@todolist.ru", req);
+
+        assertThat(result.getListsSortMode()).isEqualTo("ALPHABETICAL");
+        assertThat(result.getListsSortDirection()).isEqualTo("ASC");
+        // saveAndFlush НЕ должен вызываться — no-op
+        verify(repository, never()).saveAndFlush(any());
+        // При no-op cache evict НЕ должен происходить — cache актуальный
+        verify(cacheManager, never()).getCache(anyString());
+    }
+
+    @Test
+    void updateSortPreferences_UserNotFound_ThrowsException() {
+        when(repository.findById(999L)).thenReturn(Optional.empty());
+
+        ru.mngerasimenko.todolist.dto.SortPreferencesRequest req =
+                new ru.mngerasimenko.todolist.dto.SortPreferencesRequest();
+        req.setListsSortMode("ALPHABETICAL");
+
+        assertThatThrownBy(() -> userService.updateSortPreferences(999L, "x@todolist.ru", req))
+                .isInstanceOf(UserNotFoundException.class);
+
+        verify(repository, never()).saveAndFlush(any());
+        // При исключении evict кэша не должен вызываться
+        verify(cacheManager, never()).getCache(anyString());
     }
 }

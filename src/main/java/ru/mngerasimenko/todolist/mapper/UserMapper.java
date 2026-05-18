@@ -33,6 +33,10 @@ public class UserMapper {
                 .subscriptionExpiresAt(user.getSubscriptionExpiresAt())
                 .betaTester(user.isBetaTester())
                 .preferredEmailLocale(user.getPreferredEmailLocale())
+                .listsSortMode(user.getListsSortMode())
+                .listsSortDirection(user.getListsSortDirection())
+                .todosSortMode(user.getTodosSortMode())
+                .todosSortDirection(user.getTodosSortDirection())
                 .build();
     }
 
@@ -88,6 +92,10 @@ public class UserMapper {
                 .subscriptionExpiresAt(dto.getSubscriptionExpiresAt())
                 .betaTester(dto.getBetaTester())
                 .preferredEmailLocale(dto.getPreferredEmailLocale())
+                .listsSortMode(dto.getListsSortMode())
+                .listsSortDirection(dto.getListsSortDirection())
+                .todosSortMode(dto.getTodosSortMode())
+                .todosSortDirection(dto.getTodosSortDirection())
                 .build();
     }
 }
