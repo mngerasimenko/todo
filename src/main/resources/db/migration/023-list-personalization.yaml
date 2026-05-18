@@ -1,0 +1,114 @@
+databaseChangeLog:
+  - changeSet:
+      id: 023-list-personalization-columns
+      author: mngerasimenko
+      comment: "Phase Nadezda-001 (отзыв 2026-05-10): добавляет поля для сортировки списков (#1), сортировки задач (#2) и цвета списка (#4). Все DEFAULT'ы консервативные — старое поведение сохраняется (CREATED_AT DESC по умолчанию, position=0 backfill через ROW_NUMBER для стабильного порядка)."
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: task_list_user
+                columnName: position
+      changes:
+        # #1 sorting: position для списков (per-user)
+        - addColumn:
+            tableName: task_list_user
+            columns:
+              - column:
+                  name: position
+                  type: int
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+        # #2 sorting: position для задач (общий per-список)
+        - addColumn:
+            tableName: todo
+            columns:
+              - column:
+                  name: position
+                  type: int
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+        # #4 color на list
+        - addColumn:
+            tableName: task_list
+            columns:
+              - column:
+                  name: color
+                  type: varchar(7)
+                  constraints:
+                    nullable: true
+        # #1+#2 sort prefs per-user
+        - addColumn:
+            tableName: todo_users
+            columns:
+              - column:
+                  name: lists_sort_mode
+                  type: varchar(20)
+                  defaultValue: 'CREATED_AT'
+                  constraints:
+                    nullable: false
+              - column:
+                  name: lists_sort_direction
+                  type: varchar(4)
+                  defaultValue: 'DESC'
+                  constraints:
+                    nullable: false
+              - column:
+                  name: todos_sort_mode
+                  type: varchar(20)
+                  defaultValue: 'CREATED_AT'
+                  constraints:
+                    nullable: false
+              - column:
+                  name: todos_sort_direction
+                  type: varchar(4)
+                  defaultValue: 'DESC'
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 023b-backfill-task-list-user-position
+      author: mngerasimenko
+      comment: "Backfill task_list_user.position через ROW_NUMBER PARTITION BY user_id ORDER BY joined_at. Гарантирует стабильный начальный порядок (по дате добавления списка к юзеру) до первого reorder'а. Guard `position = 0` делает changeSet no-op если у юзера уже есть установленные позиции — защита от случайного rerun после ручной recovery DATABASECHANGELOG."
+      preConditions:
+        - onFail: HALT
+        - columnExists:
+            tableName: task_list_user
+            columnName: position
+      changes:
+        - sql:
+            dbms: postgresql
+            sql: >
+              UPDATE task_list_user tlu
+              SET position = sub.rn - 1
+              FROM (
+                SELECT list_id, user_id,
+                       ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY joined_at) AS rn
+                FROM task_list_user
+              ) sub
+              WHERE tlu.list_id = sub.list_id
+                AND tlu.user_id = sub.user_id
+                AND tlu.position = 0
+
+  - changeSet:
+      id: 023c-backfill-todo-position
+      author: mngerasimenko
+      comment: "Backfill todo.position через ROW_NUMBER PARTITION BY list_id ORDER BY id. Стабильный начальный порядок (по id ASC = по дате создания) до первого reorder'а. Guard `position = 0` делает changeSet no-op если задачи уже переупорядочены — защита от случайного rerun."
+      preConditions:
+        - onFail: HALT
+        - columnExists:
+            tableName: todo
+            columnName: position
+      changes:
+        - sql:
+            dbms: postgresql
+            sql: >
+              UPDATE todo t
+              SET position = sub.rn - 1
+              FROM (
+                SELECT id, ROW_NUMBER() OVER (PARTITION BY list_id ORDER BY id) AS rn
+                FROM todo
+              ) sub
+              WHERE t.id = sub.id AND t.position = 0

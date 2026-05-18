@@ -41,3 +41,5 @@ databaseChangeLog:
       file: db/migration/020-add-user-preferred-email-locale.yaml
   - include:
       file: db/migration/022-onboarding-reminder-and-unsubscribe.yaml
+  - include:
+      file: db/migration/023-list-personalization.yaml
