@@ -51,6 +51,14 @@ public class Todo {
     private boolean isPrivate = false;
 
     /**
+     * Позиция задачи внутри списка для bulk-reorder (общая per-список).
+     * Все участники списка видят один и тот же порядок.
+     * Backfill через Liquibase 023 (ROW_NUMBER ORDER BY id).
+     */
+    @Column(name = "position", nullable = false)
+    private Integer position = 0;
+
+    /**
      * Создатель задачи.
      */
     @ManyToOne(fetch = FetchType.LAZY)
@@ -235,5 +243,13 @@ public class Todo {
 
     public void setVersion(Long version) {
         this.version = version;
+    }
+
+    public Integer getPosition() {
+        return position;
+    }
+
+    public void setPosition(Integer position) {
+        this.position = position;
     }
 }

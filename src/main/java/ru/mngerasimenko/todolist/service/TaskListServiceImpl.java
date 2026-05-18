@@ -28,6 +28,7 @@ import ru.mngerasimenko.todolist.model.InviteToken;
 import ru.mngerasimenko.todolist.model.TaskList;
 import ru.mngerasimenko.todolist.model.TaskListRole;
 import ru.mngerasimenko.todolist.model.TaskListUser;
+import ru.mngerasimenko.todolist.model.Todo;
 import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.repository.InviteTokenRepository;
 import ru.mngerasimenko.todolist.repository.TaskListRepository;
@@ -298,6 +299,43 @@ public class TaskListServiceImpl implements TaskListService {
         evictTaskListsCache(List.of(userId));
 
         log.info("Списки переупорядочены: userId={}, count={}", userId, items.size());
+    }
+
+    @Override
+    @Transactional
+    public void reorderTodos(Long listId, Long requesterId, List<ReorderItem> items) {
+        // Fail-fast: дубликаты id — malformed input. Без этой проверки Collectors.toMap
+        // ниже бросит IllegalStateException → HTTP 500.
+        List<Long> todoIds = items.stream().map(ReorderItem::id).toList();
+        if (todoIds.stream().distinct().count() != todoIds.size()) {
+            throw new IllegalArgumentException("Duplicate todo ids in reorder request");
+        }
+
+        // Симметричная проверка: дубликаты position'ов — UX-баг клиента.
+        List<Integer> positions = items.stream().map(ReorderItem::position).toList();
+        if (positions.stream().distinct().count() != positions.size()) {
+            throw new IllegalArgumentException("Duplicate positions in reorder request");
+        }
+
+        // Проверка участия — любой участник списка может реордерить (не только ADMIN)
+        taskListUserRepository.findByIdListIdAndIdUserId(listId, requesterId)
+                .orElseThrow(() -> new IllegalArgumentException("Вы не являетесь участником данного списка"));
+
+        List<Todo> todos = todoRepository.findByIdInAndListId(todoIds, listId);
+
+        if (todos.size() != items.size()) {
+            throw new IllegalArgumentException("Some todos do not belong to list " + listId);
+        }
+
+        Map<Long, Integer> newPositions = items.stream()
+                .collect(Collectors.toMap(ReorderItem::id, ReorderItem::position));
+
+        todos.forEach(t -> t.setPosition(newPositions.get(t.getId())));
+
+        todoRepository.saveAllAndFlush(todos);
+        // Кеш todos в проекте не используется (TodoServiceImpl без @Cacheable) — evict не нужен.
+
+        log.info("Задачи переупорядочены: listId={}, userId={}, count={}", listId, requesterId, items.size());
     }
 
     @Override

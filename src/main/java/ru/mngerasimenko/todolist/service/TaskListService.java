@@ -63,6 +63,15 @@ public interface TaskListService {
     void reorderLists(Long userId, List<ReorderItem> items);
 
     /**
+     * Bulk-reorder задач внутри списка (общий per-список position).
+     * Любой участник списка может вызвать. Кеш todo не используется в проекте — evict не нужен.
+     *
+     * @throws IllegalArgumentException если юзер не участник списка, если есть дубликаты id/position,
+     *                                   или если хоть один todo.id не принадлежит указанному listId
+     */
+    void reorderTodos(Long listId, Long requesterId, List<ReorderItem> items);
+
+    /**
      * Создать приглашение в список. Только ADMIN списка.
      * Генерирует токен, опционально отправляет email.
      */

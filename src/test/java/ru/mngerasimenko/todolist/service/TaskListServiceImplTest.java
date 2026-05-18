@@ -603,6 +603,102 @@ class TaskListServiceImplTest {
         verify(taskListUserRepository, never()).findByIdUserIdAndIdListIdIn(anyLong(), any());
     }
 
+    // --- reorderTodos ---
+
+    @Test
+    void reorderTodos_userIsParticipant_bulkUpdatesAllTodosInList() {
+        // Любой участник списка может реордерить задачи; позиция общая per-список.
+        Long listId = 42L;
+        Long userId = 1L;
+        Long todoAId = 100L, todoBId = 101L;
+
+        Todo todoA = new Todo();
+        todoA.setId(todoAId);
+        todoA.setListId(listId);
+        todoA.setPosition(0);
+        Todo todoB = new Todo();
+        todoB.setId(todoBId);
+        todoB.setListId(listId);
+        todoB.setPosition(1);
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(listId, userId))
+                .thenReturn(Optional.of(new TaskListUser()));
+        when(todoRepository.findByIdInAndListId(List.of(todoAId, todoBId), listId))
+                .thenReturn(List.of(todoA, todoB));
+        when(todoRepository.saveAllAndFlush(anyList()))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        taskListService.reorderTodos(listId, userId, List.of(
+                new ReorderItem(todoAId, 1),
+                new ReorderItem(todoBId, 0)
+        ));
+
+        assertThat(todoA.getPosition()).isEqualTo(1);
+        assertThat(todoB.getPosition()).isEqualTo(0);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<Todo>> captor = ArgumentCaptor.forClass(List.class);
+        verify(todoRepository).saveAllAndFlush(captor.capture());
+        assertThat(captor.getValue())
+                .hasSize(2)
+                .extracting(Todo::getPosition)
+                .containsExactly(1, 0);
+    }
+
+    @Test
+    void reorderTodos_userNotParticipant_throwsIllegalArgument() {
+        // Доступ через членство в списке — не-участник получает 400 (IllegalArgument → GlobalExceptionHandler)
+        when(taskListUserRepository.findByIdListIdAndIdUserId(42L, 99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> taskListService.reorderTodos(42L, 99L, List.of(new ReorderItem(100L, 0))))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(todoRepository, never()).saveAllAndFlush(any());
+    }
+
+    @Test
+    void reorderTodos_todoNotInList_throwsIllegalArgument() {
+        // Если хоть один todo.id не из этого списка — реордер отклоняется целиком (атомарность)
+        when(taskListUserRepository.findByIdListIdAndIdUserId(42L, 1L))
+                .thenReturn(Optional.of(new TaskListUser()));
+        when(todoRepository.findByIdInAndListId(List.of(999L), 42L))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> taskListService.reorderTodos(42L, 1L, List.of(new ReorderItem(999L, 0))))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(todoRepository, never()).saveAllAndFlush(any());
+    }
+
+    @Test
+    void reorderTodos_duplicateIds_throwsIllegalArgument() {
+        // Fail-fast до похода в БД: дубликаты id — malformed input.
+        // Без проверки Collectors.toMap бросил бы IllegalStateException → HTTP 500.
+        assertThatThrownBy(() -> taskListService.reorderTodos(42L, 1L, List.of(
+                new ReorderItem(100L, 0),
+                new ReorderItem(100L, 1)
+        )))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Duplicate");
+
+        verify(todoRepository, never()).saveAllAndFlush(any());
+        verify(todoRepository, never()).findByIdInAndListId(any(), any());
+    }
+
+    @Test
+    void reorderTodos_duplicatePositions_throwsIllegalArgument() {
+        // Симметрия с duplicate-id: две задачи не могут иметь одинаковую позицию.
+        assertThatThrownBy(() -> taskListService.reorderTodos(42L, 1L, List.of(
+                new ReorderItem(100L, 0),
+                new ReorderItem(101L, 0)
+        )))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Duplicate positions");
+
+        verify(todoRepository, never()).saveAllAndFlush(any());
+        verify(todoRepository, never()).findByIdInAndListId(any(), any());
+    }
+
     // --- createInvite ---
 
     @Test

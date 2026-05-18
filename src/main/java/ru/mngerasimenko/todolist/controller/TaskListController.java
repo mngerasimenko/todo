@@ -18,6 +18,7 @@ import ru.mngerasimenko.todolist.dto.list.ListResponse;
 import ru.mngerasimenko.todolist.dto.list.ReorderItem;
 import ru.mngerasimenko.todolist.dto.list.ReorderListsRequest;
 import ru.mngerasimenko.todolist.dto.list.UpdateListRequest;
+import ru.mngerasimenko.todolist.dto.todo.ReorderTodosRequest;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
 import ru.mngerasimenko.todolist.service.TaskListService;
 import ru.mngerasimenko.todolist.service.UserService;
@@ -125,6 +126,23 @@ public class TaskListController {
                 .map(i -> new ReorderItem(i.getId(), i.getPosition()))
                 .toList();
         taskListService.reorderLists(userId, items);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Bulk-reorder задач внутри списка (общий per-список порядок).
+     * Любой участник списка может вызывать.
+     */
+    @PatchMapping("/{id}/todos/reorder")
+    public ResponseEntity<Void> reorderTodos(
+            @PathVariable Long id,
+            @Valid @RequestBody ReorderTodosRequest request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = getUserId(userDetails);
+        List<ReorderItem> items = request.getItems().stream()
+                .map(i -> new ReorderItem(i.getId(), i.getPosition()))
+                .toList();
+        taskListService.reorderTodos(id, userId, items);
         return ResponseEntity.ok().build();
     }
 
