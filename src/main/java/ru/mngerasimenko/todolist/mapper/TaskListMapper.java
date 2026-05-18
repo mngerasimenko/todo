@@ -15,8 +15,11 @@ public class TaskListMapper {
 
     /**
      * Конвертация списка задач в ответ с ролью текущего пользователя.
+     * {@code position} — персональная позиция списка у текущего юзера (per-user sorting).
+     * Допустимо передавать {@code null} в single-list endpoints (createList/updateList/acceptInvite),
+     * где клиент не использует это поле.
      */
-    public ListResponse toResponse(TaskList taskList, TaskListRole role) {
+    public ListResponse toResponse(TaskList taskList, TaskListRole role, Integer position) {
         if (taskList == null) {
             return null;
         }
@@ -24,10 +27,19 @@ public class TaskListMapper {
                 .id(taskList.getId())
                 .name(taskList.getName())
                 .color(taskList.getColor())
+                .position(position)
                 .creatorName(taskList.getCreator() != null ? taskList.getCreator().getName() : null)
                 .role(role != null ? role.name() : null)
                 .createdAt(taskList.getCreatedAt())
                 .build();
+    }
+
+    /**
+     * Перегрузка без {@code position} — для single-list ответов (create/update/accept),
+     * где position не передаётся клиенту.
+     */
+    public ListResponse toResponse(TaskList taskList, TaskListRole role) {
+        return toResponse(taskList, role, null);
     }
 
     /**

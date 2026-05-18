@@ -29,6 +29,13 @@ public class ListResponse {
     private String color;
 
     /**
+     * Позиция списка в персональной сортировке текущего юзера (per-user).
+     * Может быть {@code null} в single-list ответах (createList/updateList/acceptInvite),
+     * где клиент эту позицию не использует.
+     */
+    private Integer position;
+
+    /**
      * Имя создателя списка.
      */
     @JsonProperty("creator_name")

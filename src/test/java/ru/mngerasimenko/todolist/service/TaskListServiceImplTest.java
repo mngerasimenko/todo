@@ -3,6 +3,7 @@ package ru.mngerasimenko.todolist.service;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -12,6 +13,7 @@ import ru.mngerasimenko.todolist.dto.list.InviteInfoResponse;
 import ru.mngerasimenko.todolist.dto.list.InviteResponse;
 import ru.mngerasimenko.todolist.dto.list.ListMemberResponse;
 import ru.mngerasimenko.todolist.dto.list.ListResponse;
+import ru.mngerasimenko.todolist.dto.list.ReorderItem;
 import ru.mngerasimenko.todolist.exception.TokenExpiredException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.TaskListMapper;
@@ -39,6 +41,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
@@ -153,11 +156,12 @@ class TaskListServiceImplTest {
 
     @Test
     void getListsByUserId_ReturnsListOfLists() {
+        // testTaskListUser.position по умолчанию null — маппер вызывается с (taskList, role, null)
         ListResponse response = ListResponse.builder()
                 .id(10L).name("TestList").role("ADMIN").build();
 
         when(taskListUserRepository.findByUserId(1L)).thenReturn(List.of(testTaskListUser));
-        when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN)).thenReturn(response);
+        when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN, null)).thenReturn(response);
 
         List<ListResponse> result = taskListService.getListsByUserId(1L);
 
@@ -515,6 +519,88 @@ class TaskListServiceImplTest {
                 .hasMessageContaining("администратор");
 
         verify(taskListRepository, never()).saveAndFlush(any());
+    }
+
+    // --- reorderLists ---
+
+    @Test
+    void reorderLists_validInput_bulkUpdatesPositionForUserOnly_evictsCache() {
+        // Two lists user is in (positions 0 и 1) — переупорядочиваем их (меняем местами)
+        Long userId = 1L;
+        Long listAId = 10L, listBId = 11L;
+
+        TaskListUser linkA = new TaskListUser();
+        linkA.setId(new TaskListUserId(listAId, userId));
+        linkA.setPosition(0);
+        TaskListUser linkB = new TaskListUser();
+        linkB.setId(new TaskListUserId(listBId, userId));
+        linkB.setPosition(1);
+
+        when(taskListUserRepository.findByIdUserIdAndIdListIdIn(userId, List.of(listAId, listBId)))
+                .thenReturn(List.of(linkA, linkB));
+        when(taskListUserRepository.saveAllAndFlush(anyList()))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        taskListService.reorderLists(userId, List.of(
+                new ReorderItem(listAId, 1),
+                new ReorderItem(listBId, 0)
+        ));
+
+        assertThat(linkA.getPosition()).isEqualTo(1);
+        assertThat(linkB.getPosition()).isEqualTo(0);
+
+        // ArgumentCaptor вместо identity-сравнения List — устойчиво к refactor'у,
+        // в котором сервис создал бы новую коллекцию перед save.
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<TaskListUser>> captor = ArgumentCaptor.forClass(List.class);
+        verify(taskListUserRepository).saveAllAndFlush(captor.capture());
+        assertThat(captor.getValue())
+                .hasSize(2)
+                .extracting(TaskListUser::getPosition)
+                .containsExactly(1, 0);
+    }
+
+    @Test
+    void reorderLists_unknownListId_throwsIllegalArgument() {
+        // Юзер пытается переупорядочить список, в котором не состоит — IllegalArgument, без saveAll
+        Long userId = 1L;
+        when(taskListUserRepository.findByIdUserIdAndIdListIdIn(userId, List.of(999L)))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> taskListService.reorderLists(userId, List.of(new ReorderItem(999L, 0))))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(taskListUserRepository, never()).saveAllAndFlush(any());
+    }
+
+    @Test
+    void reorderLists_duplicateIds_throwsIllegalArgument() {
+        // Дубликаты id в запросе — malformed input, fail-fast до похода в БД.
+        // Без этой проверки Collectors.toMap бросил бы IllegalStateException → HTTP 500.
+        assertThatThrownBy(() -> taskListService.reorderLists(1L, List.of(
+                new ReorderItem(10L, 0),
+                new ReorderItem(10L, 1)
+        )))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Duplicate");
+
+        verify(taskListUserRepository, never()).saveAllAndFlush(any());
+        // findByIdUserIdAndIdListIdIn НЕ должен вызываться — проверка до DB
+        verify(taskListUserRepository, never()).findByIdUserIdAndIdListIdIn(anyLong(), any());
+    }
+
+    @Test
+    void reorderLists_duplicatePositions_throwsIllegalArgument() {
+        // Симметрия с duplicate-id: два списка не могут иметь одинаковую позицию.
+        assertThatThrownBy(() -> taskListService.reorderLists(1L, List.of(
+                new ReorderItem(10L, 0),
+                new ReorderItem(11L, 0)
+        )))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Duplicate positions");
+
+        verify(taskListUserRepository, never()).saveAllAndFlush(any());
+        verify(taskListUserRepository, never()).findByIdUserIdAndIdListIdIn(anyLong(), any());
     }
 
     // --- createInvite ---

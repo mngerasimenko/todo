@@ -466,6 +466,58 @@ class TaskListControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
+    // === PATCH /api/lists/reorder — bulk-обновление позиций (per-user) ===
+
+    @Test
+    @WithMockUser(username = "user@mail.ru")
+    void reorderLists_validInput_returns200() throws Exception {
+        mockMvc.perform(patch("/api/lists/reorder")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"id\":10,\"position\":1},{\"id\":11,\"position\":0}]}"))
+                .andExpect(status().isOk());
+
+        verify(taskListService).reorderLists(eq(1L), argThat(items -> items.size() == 2));
+    }
+
+    @Test
+    @WithMockUser(username = "user@mail.ru")
+    void reorderLists_emptyItems_returns400() throws Exception {
+        // @NotEmpty на items — пустой массив отлетает на @Valid до сервиса
+        mockMvc.perform(patch("/api/lists/reorder")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[]}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(taskListService);
+    }
+
+    @Test
+    @WithMockUser(username = "user@mail.ru")
+    void reorderLists_duplicateIds_returns400() throws Exception {
+        // Контрактная проверка: IllegalArgumentException из сервиса должен мапиться
+        // в HTTP 400 через GlobalExceptionHandler (а не падать в 500).
+        doThrow(new IllegalArgumentException("Duplicate list ids in reorder request"))
+                .when(taskListService).reorderLists(eq(1L), any());
+
+        mockMvc.perform(patch("/api/lists/reorder")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"id\":10,\"position\":0},{\"id\":10,\"position\":1}]}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockUser(username = "user@mail.ru")
+    void reorderLists_duplicatePositions_returns400() throws Exception {
+        // Locks API contract: duplicate positions → HTTP 400 via GlobalExceptionHandler.
+        doThrow(new IllegalArgumentException("Duplicate positions in reorder request"))
+                .when(taskListService).reorderLists(eq(1L), any());
+
+        mockMvc.perform(patch("/api/lists/reorder")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"id\":10,\"position\":0},{\"id\":11,\"position\":0}]}"))
+                .andExpect(status().isBadRequest());
+    }
+
     // === POST /api/lists/{id}/invite — приглашение по email ===
 
     @Test

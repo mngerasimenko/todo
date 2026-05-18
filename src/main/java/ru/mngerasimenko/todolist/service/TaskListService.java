@@ -5,6 +5,7 @@ import ru.mngerasimenko.todolist.dto.list.InviteInfoResponse;
 import ru.mngerasimenko.todolist.dto.list.InviteResponse;
 import ru.mngerasimenko.todolist.dto.list.ListMemberResponse;
 import ru.mngerasimenko.todolist.dto.list.ListResponse;
+import ru.mngerasimenko.todolist.dto.list.ReorderItem;
 
 import java.util.List;
 
@@ -52,6 +53,14 @@ public interface TaskListService {
      * @return ответ с обновлёнными полями и ролью текущего пользователя (ADMIN)
      */
     ListResponse updateList(Long listId, Long requesterId, String name, String color);
+
+    /**
+     * Bulk-reorder списков для пользователя (per-user position).
+     * Атомарно обновляет task_list_user.position. Кеш task-lists юзера инвалидируется.
+     *
+     * @throws IllegalArgumentException если хоть один listId не принадлежит юзеру
+     */
+    void reorderLists(Long userId, List<ReorderItem> items);
 
     /**
      * Создать приглашение в список. Только ADMIN списка.

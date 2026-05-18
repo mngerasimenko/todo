@@ -15,6 +15,8 @@ import ru.mngerasimenko.todolist.dto.list.InviteRequest;
 import ru.mngerasimenko.todolist.dto.list.InviteResponse;
 import ru.mngerasimenko.todolist.dto.list.ListMemberResponse;
 import ru.mngerasimenko.todolist.dto.list.ListResponse;
+import ru.mngerasimenko.todolist.dto.list.ReorderItem;
+import ru.mngerasimenko.todolist.dto.list.ReorderListsRequest;
 import ru.mngerasimenko.todolist.dto.list.UpdateListRequest;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
 import ru.mngerasimenko.todolist.service.TaskListService;
@@ -107,6 +109,23 @@ public class TaskListController {
         Long userId = getUserId(userDetails);
         taskListService.deleteList(id, userId);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Bulk-reorder списков для текущего юзера (per-user position).
+     * ВАЖНО: должен идти ДО {@code @PatchMapping("/{id}")}, чтобы Spring
+     * не пытался матчить "reorder" как {@code id}.
+     */
+    @PatchMapping("/reorder")
+    public ResponseEntity<Void> reorderLists(
+            @Valid @RequestBody ReorderListsRequest request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = getUserId(userDetails);
+        List<ReorderItem> items = request.getItems().stream()
+                .map(i -> new ReorderItem(i.getId(), i.getPosition()))
+                .toList();
+        taskListService.reorderLists(userId, items);
+        return ResponseEntity.ok().build();
     }
 
     /**
