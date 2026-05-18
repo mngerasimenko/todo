@@ -418,6 +418,54 @@ class TaskListControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
+    // === PATCH /api/lists/{id} — частичное обновление списка (color + name) ===
+
+    @Test
+    @WithMockUser(username = "user@mail.ru")
+    void updateList_ValidRequest_ReturnsOkWithUpdatedFields() throws Exception {
+        ListResponse updated = ListResponse.builder()
+                .id(1L)
+                .name("Покупки")
+                .color("#22C55E")
+                .role("ADMIN")
+                .build();
+
+        when(taskListService.updateList(eq(1L), eq(1L), eq("Покупки"), eq("#22C55E")))
+                .thenReturn(updated);
+
+        mockMvc.perform(patch("/api/lists/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Покупки\",\"color\":\"#22C55E\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.name").value("Покупки"))
+                .andExpect(jsonPath("$.color").value("#22C55E"));
+
+        verify(taskListService).updateList(1L, 1L, "Покупки", "#22C55E");
+    }
+
+    @Test
+    @WithMockUser(username = "user@mail.ru")
+    void updateList_InvalidColor_ReturnsBadRequest() throws Exception {
+        // Не соответствует ^#[0-9a-fA-F]{6}$ — должно отлететь на @Valid
+        mockMvc.perform(patch("/api/lists/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"color\":\"red\"}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(taskListService);
+    }
+
+    @Test
+    @WithMockUser(username = "user@todolist.ru")
+    void patchList_nameWithAngleBrackets_returns400() throws Exception {
+        // XSS-guard: имя со скобками < > должно отлететь на @Pattern (^[^<>]*$)
+        mockMvc.perform(patch("/api/lists/{id}", 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"<script>alert(1)</script>\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
     // === POST /api/lists/{id}/invite — приглашение по email ===
 
     @Test

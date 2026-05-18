@@ -222,6 +222,44 @@ public class TaskListServiceImpl implements TaskListService {
 
     @Override
     @Transactional
+    public ListResponse updateList(Long listId, Long requesterId, String name, String color) {
+        TaskListUser membership = taskListUserRepository.findByIdListIdAndIdUserId(listId, requesterId)
+                .orElseThrow(() -> new IllegalArgumentException("Вы не являетесь участником данного списка"));
+
+        if (membership.getRole() != TaskListRole.ADMIN) {
+            throw new IllegalArgumentException("Только администратор может изменять список");
+        }
+
+        // Оба поля null — no-op: возвращаем текущее состояние без записи/инвалидации кеша
+        if (name == null && color == null) {
+            return taskListMapper.toResponse(membership.getTaskList(), membership.getRole());
+        }
+
+        TaskList list = membership.getTaskList();
+
+        // PATCH-семантика: null — поле не трогаем
+        if (name != null) {
+            list.setName(name);
+        }
+        if (color != null) {
+            list.setColor(color);
+        }
+
+        TaskList saved = taskListRepository.saveAndFlush(list);
+
+        // Меняются name/color — кеш task-lists неактуален для всех участников.
+        List<Long> affectedUserIds = taskListUserRepository.findByIdListId(listId).stream()
+                .map(m -> m.getUser().getId())
+                .toList();
+        evictTaskListsCache(affectedUserIds);
+
+        log.info("Список обновлён: listId={}, userId={}, name={}, color={}",
+                listId, requesterId, name != null, color != null);
+        return taskListMapper.toResponse(saved, TaskListRole.ADMIN);
+    }
+
+    @Override
+    @Transactional
     public InviteResponse createInvite(Long listId, Long userId, String recipientEmail) {
         TaskListUser membership = taskListUserRepository.findByIdListIdAndIdUserId(listId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("Вы не являетесь участником данного списка"));

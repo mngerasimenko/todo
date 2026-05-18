@@ -15,6 +15,7 @@ import ru.mngerasimenko.todolist.dto.list.InviteRequest;
 import ru.mngerasimenko.todolist.dto.list.InviteResponse;
 import ru.mngerasimenko.todolist.dto.list.ListMemberResponse;
 import ru.mngerasimenko.todolist.dto.list.ListResponse;
+import ru.mngerasimenko.todolist.dto.list.UpdateListRequest;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
 import ru.mngerasimenko.todolist.service.TaskListService;
 import ru.mngerasimenko.todolist.service.UserService;
@@ -106,6 +107,20 @@ public class TaskListController {
         Long userId = getUserId(userDetails);
         taskListService.deleteList(id, userId);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Частично обновить список (PATCH-семантика). Только ADMIN списка.
+     * Поля {@code name} и {@code color} опциональные.
+     */
+    @PatchMapping("/{id}")
+    public ResponseEntity<ListResponse> updateList(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateListRequest request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = getUserId(userDetails);
+        ListResponse response = taskListService.updateList(id, userId, request.getName(), request.getColor());
+        return ResponseEntity.ok(response);
     }
 
     /**

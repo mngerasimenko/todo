@@ -465,6 +465,58 @@ class TaskListServiceImplTest {
         verify(taskListRepository, never()).deleteByListId(anyLong());
     }
 
+    // --- updateList ---
+
+    @Test
+    void updateList_WhenAdmin_UpdatesNameAndColorAndReturnsResponse() {
+        // ADMIN меняет одновременно name и color; кеш task-lists евиктится для всех участников
+        User user2 = new User(); user2.setId(2L); user2.setName("user2");
+        TaskListUser otherMember = new TaskListUser();
+        otherMember.setId(new TaskListUserId(10L, 2L));
+        otherMember.setRole(TaskListRole.USER);
+        otherMember.setUser(user2);
+
+        ListResponse expectedResponse = ListResponse.builder()
+                .id(10L).name("Новое имя").color("#22C55E")
+                .creatorName("testuser").role("ADMIN").build();
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
+                .thenReturn(Optional.of(testTaskListUser));
+        when(taskListRepository.saveAndFlush(any(TaskList.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(taskListUserRepository.findByIdListId(10L))
+                .thenReturn(List.of(testTaskListUser, otherMember));
+        when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN)).thenReturn(expectedResponse);
+
+        ListResponse result = taskListService.updateList(10L, 1L, "Новое имя", "#22C55E");
+
+        assertThat(result).isNotNull();
+        assertThat(result.getName()).isEqualTo("Новое имя");
+        assertThat(result.getColor()).isEqualTo("#22C55E");
+        // Поля action: попали в entity до save
+        assertThat(testTaskList.getName()).isEqualTo("Новое имя");
+        assertThat(testTaskList.getColor()).isEqualTo("#22C55E");
+        verify(taskListRepository).saveAndFlush(testTaskList);
+        // Собрали userIds всех участников для evict'а (включая ADMIN'а)
+        verify(taskListUserRepository).findByIdListId(10L);
+    }
+
+    @Test
+    void updateList_WhenNotAdmin_ThrowsIllegalArgumentException() {
+        TaskListUser memberUser = new TaskListUser();
+        memberUser.setId(new TaskListUserId(10L, 2L));
+        memberUser.setRole(TaskListRole.USER);
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 2L))
+                .thenReturn(Optional.of(memberUser));
+
+        assertThatThrownBy(() -> taskListService.updateList(10L, 2L, "Новое имя", "#000000"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("администратор");
+
+        verify(taskListRepository, never()).saveAndFlush(any());
+    }
+
     // --- createInvite ---
 
     @Test

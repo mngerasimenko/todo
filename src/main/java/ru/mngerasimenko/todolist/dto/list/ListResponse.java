@@ -24,6 +24,11 @@ public class ListResponse {
     private String name;
 
     /**
+     * Цвет списка в формате #RRGGBB (опционально, может быть null).
+     */
+    private String color;
+
+    /**
      * Имя создателя списка.
      */
     @JsonProperty("creator_name")

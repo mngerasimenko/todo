@@ -45,6 +45,15 @@ public interface TaskListService {
     void deleteList(Long listId, Long userId);
 
     /**
+     * Частично обновить список задач (PATCH-семантика). Только ADMIN списка.
+     * Поля {@code name} и {@code color} опциональные: {@code null} — поле не изменяется.
+     * Кеш {@code task-lists} инвалидируется для всех участников списка.
+     *
+     * @return ответ с обновлёнными полями и ролью текущего пользователя (ADMIN)
+     */
+    ListResponse updateList(Long listId, Long requesterId, String name, String color);
+
+    /**
      * Создать приглашение в список. Только ADMIN списка.
      * Генерирует токен, опционально отправляет email.
      */
