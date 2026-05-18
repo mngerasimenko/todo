@@ -46,3 +46,20 @@ databaseChangeLog:
             tableName: todo_users
             columnNames: unsubscribe_token
             constraintName: uq_todo_users_unsubscribe_token
+
+  - changeSet:
+      id: 022c-backfill-onboarding-flag-for-existing-users
+      author: mngerasimenko
+      comment: "Forward-looking onboarding: помечаем onboarding_reminder_sent=true у всех существующих юзеров (createdAt < NOW() - 3d) — окно онбординга для них уже прошло задолго до релиза 3.3. Без этого первый тик OnboardingReminderScheduler 11:00 UTC после prod-deploy улетел бы ко всем неактивным юзерам с emailVerified=true как массовая рассылка — sender reputation hit, RuStore 1★, invalid baseline для acceptance-метрик. SQL идемпотентен (повторный UPDATE флага в true — noop). Используем NOW() — момент применения миграции; юзеры, зарегистрированные позже relative-окна, попадут под scheduler штатно."
+      preConditions:
+        - onFail: HALT
+        - columnExists:
+            tableName: todo_users
+            columnName: onboarding_reminder_sent
+      changes:
+        - sql:
+            dbms: postgresql
+            sql: >
+              UPDATE todo_users
+              SET onboarding_reminder_sent = TRUE
+              WHERE created_at < NOW() - INTERVAL '3 days'
