@@ -11,7 +11,7 @@ services:
       - SPRING_PROFILES_ACTIVE=production
       # JacksonConfig serializes LocalDateTime as "...Z" assuming the container runs in UTC. Keep this explicit.
       - TZ=UTC
-      - JAVA_TOOL_OPTIONS=-Xmx160m -Xms160m -XX:MaxMetaspaceSize=128m -Xss256k
+      - JAVA_TOOL_OPTIONS=-Xmx160m -Xms160m -XX:MaxMetaspaceSize=192m -Xss256k
       - JWT_SECRET=${JWT_SECRET}
       - SUBSCRIPTION_ENFORCEMENT=false
       - MAIL_HOST=${MAIL_HOST:-smtp.jino.ru}
