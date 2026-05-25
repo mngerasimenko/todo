@@ -1,0 +1,40 @@
+databaseChangeLog:
+  - changeSet:
+      id: 024-add-task-list-user-color
+      author: mngerasimenko
+      comment: "Server R-5.1: per-user цвет списка. Цвет переезжает с общего task_list.color на per-user task_list_user.color (как position в 023). nullable — нет цвета по умолчанию. Старый task_list.color остаётся как legacy/источник backfill, новый код в него не пишет."
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: task_list_user
+                columnName: color
+      changes:
+        - addColumn:
+            tableName: task_list_user
+            columns:
+              - column:
+                  name: color
+                  type: varchar(7)
+                  constraints:
+                    nullable: true
+
+  - changeSet:
+      id: 024b-backfill-task-list-user-color
+      author: mngerasimenko
+      comment: "Backfill task_list_user.color из общего task_list.color: каждый участник наследует текущий общий цвет списка (forward-safe). Guard `color IS NULL` делает changeSet no-op если per-user цвета уже выставлены — защита от rerun."
+      preConditions:
+        - onFail: HALT
+        - columnExists:
+            tableName: task_list_user
+            columnName: color
+      changes:
+        - sql:
+            dbms: postgresql
+            sql: >
+              UPDATE task_list_user tlu
+              SET color = tl.color
+              FROM task_list tl
+              WHERE tlu.list_id = tl.id
+                AND tl.color IS NOT NULL
+                AND tlu.color IS NULL

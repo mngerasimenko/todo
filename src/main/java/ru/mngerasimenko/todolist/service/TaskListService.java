@@ -46,13 +46,22 @@ public interface TaskListService {
     void deleteList(Long listId, Long userId);
 
     /**
-     * Частично обновить список задач (PATCH-семантика). Только ADMIN списка.
-     * Поля {@code name} и {@code color} опциональные: {@code null} — поле не изменяется.
-     * Кеш {@code task-lists} инвалидируется для всех участников списка.
+     * Переименовать список задач (PATCH-семантика). Только ADMIN списка.
+     * {@code null} name — не изменяется. Кеш {@code task-lists} инвалидируется для всех участников.
+     * (Цвет больше не задаётся здесь — он per-user, см. {@link #updatePersonalization}.)
      *
-     * @return ответ с обновлёнными полями и ролью текущего пользователя (ADMIN)
+     * @return ответ с обновлённым именем и ролью текущего пользователя (ADMIN)
      */
-    ListResponse updateList(Long listId, Long requesterId, String name, String color);
+    ListResponse updateList(Long listId, Long requesterId, String name);
+
+    /**
+     * Обновить персональные настройки списка (per-user). Доступно любому участнику.
+     * Сейчас — только цвет ({@code #RRGGBB} или {@code null} для сброса), пишется в
+     * task_list_user текущего юзера. Кеш {@code task-lists} инвалидируется для этого юзера.
+     *
+     * @return ответ с персональным цветом и ролью текущего пользователя
+     */
+    ListResponse updatePersonalization(Long listId, Long userId, String color);
 
     /**
      * Bulk-reorder списков для пользователя (per-user position).

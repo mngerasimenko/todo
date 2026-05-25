@@ -96,7 +96,7 @@ public class TaskListServiceImpl implements TaskListService {
     public List<ListResponse> getListsByUserId(Long userId) {
         List<TaskListUser> taskListUsers = taskListUserRepository.findByUserId(userId);
         return taskListUsers.stream()
-                .map(tlu -> taskListMapper.toResponse(tlu.getTaskList(), tlu.getRole(), tlu.getPosition()))
+                .map(tlu -> taskListMapper.toResponse(tlu.getTaskList(), tlu.getRole(), tlu.getPosition(), tlu.getColor()))
                 .toList();
     }
 
@@ -226,7 +226,7 @@ public class TaskListServiceImpl implements TaskListService {
 
     @Override
     @Transactional
-    public ListResponse updateList(Long listId, Long requesterId, String name, String color) {
+    public ListResponse updateList(Long listId, Long requesterId, String name) {
         TaskListUser membership = taskListUserRepository.findByIdListIdAndIdUserId(listId, requesterId)
                 .orElseThrow(() -> new IllegalArgumentException("Вы не являетесь участником данного списка"));
 
@@ -234,32 +234,44 @@ public class TaskListServiceImpl implements TaskListService {
             throw new IllegalArgumentException("Только администратор может изменять список");
         }
 
-        // Оба поля null — no-op: возвращаем текущее состояние без записи/инвалидации кеша
-        if (name == null && color == null) {
-            return taskListMapper.toResponse(membership.getTaskList(), membership.getRole());
+        // name null — no-op: возвращаем текущее состояние без записи/инвалидации кеша
+        if (name == null) {
+            return taskListMapper.toResponse(membership.getTaskList(), membership.getRole(),
+                    membership.getPosition(), membership.getColor());
         }
 
         TaskList list = membership.getTaskList();
-
-        // PATCH-семантика: null — поле не трогаем
-        if (name != null) {
-            list.setName(name);
-        }
-        if (color != null) {
-            list.setColor(color);
-        }
-
+        list.setName(name);
         TaskList saved = taskListRepository.saveAndFlush(list);
 
-        // Меняются name/color — кеш task-lists неактуален для всех участников.
+        // Имя — общее поле списка, кеш task-lists неактуален для всех участников.
         List<Long> affectedUserIds = taskListUserRepository.findByIdListId(listId).stream()
                 .map(m -> m.getUser().getId())
                 .toList();
         evictTaskListsCache(affectedUserIds);
 
-        log.info("Список обновлён: listId={}, userId={}, name={}, color={}",
-                listId, requesterId, name != null, color != null);
-        return taskListMapper.toResponse(saved, TaskListRole.ADMIN);
+        log.info("Список переименован: listId={}, userId={}", listId, requesterId);
+        return taskListMapper.toResponse(saved, TaskListRole.ADMIN,
+                membership.getPosition(), membership.getColor());
+    }
+
+    @Override
+    @Transactional
+    public ListResponse updatePersonalization(Long listId, Long userId, String color) {
+        // Любой участник может задать свой персональный цвет (не только ADMIN).
+        TaskListUser membership = taskListUserRepository.findByIdListIdAndIdUserId(listId, userId)
+                .orElseThrow(() -> new IllegalArgumentException("Вы не являетесь участником данного списка"));
+
+        membership.setColor(color);
+        taskListUserRepository.saveAndFlush(membership);
+
+        // Персональное изменение — инвалидируем кеш только этого юзера.
+        evictTaskListsCache(List.of(userId));
+
+        log.info("Персонализация списка обновлена: listId={}, userId={}, color={}",
+                listId, userId, color != null);
+        return taskListMapper.toResponse(membership.getTaskList(), membership.getRole(),
+                membership.getPosition(), membership.getColor());
     }
 
     @Override

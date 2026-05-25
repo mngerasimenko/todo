@@ -15,18 +15,18 @@ public class TaskListMapper {
 
     /**
      * Конвертация списка задач в ответ с ролью текущего пользователя.
-     * {@code position} — персональная позиция списка у текущего юзера (per-user sorting).
-     * Допустимо передавать {@code null} в single-list endpoints (createList/updateList/acceptInvite),
-     * где клиент не использует это поле.
+     * {@code position} и {@code color} — персональные (per-user) значения из TaskListUser.
+     * Допустимо передавать {@code null} в single-list endpoints (createList/acceptInvite),
+     * где у нового списка персональных цвета/позиции ещё нет.
      */
-    public ListResponse toResponse(TaskList taskList, TaskListRole role, Integer position) {
+    public ListResponse toResponse(TaskList taskList, TaskListRole role, Integer position, String color) {
         if (taskList == null) {
             return null;
         }
         return ListResponse.builder()
                 .id(taskList.getId())
                 .name(taskList.getName())
-                .color(taskList.getColor())
+                .color(color)
                 .position(position)
                 .creatorName(taskList.getCreator() != null ? taskList.getCreator().getName() : null)
                 .role(role != null ? role.name() : null)
@@ -35,11 +35,11 @@ public class TaskListMapper {
     }
 
     /**
-     * Перегрузка без {@code position} — для single-list ответов (create/update/accept),
-     * где position не передаётся клиенту.
+     * Перегрузка без {@code position}/{@code color} — для single-list ответов (create/accept),
+     * где персональные поля клиенту не передаются.
      */
     public ListResponse toResponse(TaskList taskList, TaskListRole role) {
-        return toResponse(taskList, role, null);
+        return toResponse(taskList, role, null, null);
     }
 
     /**

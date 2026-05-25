@@ -48,6 +48,14 @@ public class TaskListUser {
     private Integer position = 0;
 
     /**
+     * Персональный цвет списка у конкретного юзера (#RRGGBB), per-user (Server R-5.1).
+     * null — цвет не задан. Изменяется через PATCH /api/lists/{id}/personalization.
+     * Раньше цвет был общим (task_list.color); та колонка осталась как legacy/источник backfill.
+     */
+    @Column(name = "color", length = 7)
+    private String color;
+
+    /**
      * Версия записи для оптимистичной блокировки.
      * Hibernate автоматически инкрементирует при каждом UPDATE.
      */
@@ -119,6 +127,14 @@ public class TaskListUser {
 
     public void setPosition(Integer position) {
         this.position = position;
+    }
+
+    public String getColor() {
+        return color;
+    }
+
+    public void setColor(String color) {
+        this.color = color;
     }
 
     public Long getVersion() {

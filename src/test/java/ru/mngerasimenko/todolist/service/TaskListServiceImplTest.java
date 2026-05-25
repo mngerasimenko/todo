@@ -163,7 +163,7 @@ class TaskListServiceImplTest {
                 .id(10L).name("TestList").role("ADMIN").build();
 
         when(taskListUserRepository.findByUserId(1L)).thenReturn(List.of(testTaskListUser));
-        when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN, 0)).thenReturn(response);
+        when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN, 0, null)).thenReturn(response);
 
         List<ListResponse> result = taskListService.getListsByUserId(1L);
 
@@ -474,8 +474,9 @@ class TaskListServiceImplTest {
     // --- updateList ---
 
     @Test
-    void updateList_WhenAdmin_UpdatesNameAndColorAndReturnsResponse() {
-        // ADMIN меняет одновременно name и color; кеш task-lists евиктится для всех участников
+    void updateList_WhenAdmin_UpdatesNameAndReturnsResponse() {
+        // ADMIN переименовывает список; кеш task-lists евиктится для всех участников.
+        // Цвет здесь больше не задаётся — он per-user (см. updatePersonalization).
         User user2 = new User(); user2.setId(2L); user2.setName("user2");
         TaskListUser otherMember = new TaskListUser();
         otherMember.setId(new TaskListUserId(10L, 2L));
@@ -483,7 +484,7 @@ class TaskListServiceImplTest {
         otherMember.setUser(user2);
 
         ListResponse expectedResponse = ListResponse.builder()
-                .id(10L).name("Новое имя").color("#22C55E")
+                .id(10L).name("Новое имя")
                 .creatorName("testuser").role("ADMIN").build();
 
         when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
@@ -492,16 +493,14 @@ class TaskListServiceImplTest {
                 .thenAnswer(inv -> inv.getArgument(0));
         when(taskListUserRepository.findByIdListId(10L))
                 .thenReturn(List.of(testTaskListUser, otherMember));
-        when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN)).thenReturn(expectedResponse);
+        when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN, 0, null)).thenReturn(expectedResponse);
 
-        ListResponse result = taskListService.updateList(10L, 1L, "Новое имя", "#22C55E");
+        ListResponse result = taskListService.updateList(10L, 1L, "Новое имя");
 
         assertThat(result).isNotNull();
         assertThat(result.getName()).isEqualTo("Новое имя");
-        assertThat(result.getColor()).isEqualTo("#22C55E");
-        // Поля action: попали в entity до save
+        // Имя попало в entity до save
         assertThat(testTaskList.getName()).isEqualTo("Новое имя");
-        assertThat(testTaskList.getColor()).isEqualTo("#22C55E");
         verify(taskListRepository).saveAndFlush(testTaskList);
         // Собрали userIds всех участников для evict'а (включая ADMIN'а)
         verify(taskListUserRepository).findByIdListId(10L);
@@ -516,11 +515,67 @@ class TaskListServiceImplTest {
         when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 2L))
                 .thenReturn(Optional.of(memberUser));
 
-        assertThatThrownBy(() -> taskListService.updateList(10L, 2L, "Новое имя", "#000000"))
+        assertThatThrownBy(() -> taskListService.updateList(10L, 2L, "Новое имя"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("администратор");
 
         verify(taskListRepository, never()).saveAndFlush(any());
+    }
+
+    // --- updatePersonalization (per-user color) ---
+
+    @Test
+    void updatePersonalization_AnyMember_SetsColorAndReturnsResponse() {
+        // Любой участник (в т.ч. не-ADMIN) задаёт СВОЙ цвет — пишется в task_list_user
+        ListResponse expectedResponse = ListResponse.builder()
+                .id(10L).name("TestList").color("#22C55E").role("ADMIN").build();
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
+                .thenReturn(Optional.of(testTaskListUser));
+        when(taskListUserRepository.saveAndFlush(testTaskListUser)).thenReturn(testTaskListUser);
+        when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN, 0, "#22C55E"))
+                .thenReturn(expectedResponse);
+
+        ListResponse result = taskListService.updatePersonalization(10L, 1L, "#22C55E");
+
+        assertThat(result).isNotNull();
+        assertThat(result.getColor()).isEqualTo("#22C55E");
+        // Цвет записан в membership (per-user), не в общий TaskList
+        assertThat(testTaskListUser.getColor()).isEqualTo("#22C55E");
+        verify(taskListUserRepository).saveAndFlush(testTaskListUser);
+    }
+
+    @Test
+    void updatePersonalization_WhenNotMember_ThrowsIllegalArgumentException() {
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 99L))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> taskListService.updatePersonalization(10L, 99L, "#000000"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("участником");
+
+        verify(taskListUserRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void updatePersonalization_NullColor_ClearsColor() {
+        // null — сброс персонального цвета (валидный кейс: «Очистить цвет» на клиенте)
+        testTaskListUser.setColor("#EA4335");
+
+        ListResponse expectedResponse = ListResponse.builder()
+                .id(10L).name("TestList").color(null).role("ADMIN").build();
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
+                .thenReturn(Optional.of(testTaskListUser));
+        when(taskListUserRepository.saveAndFlush(testTaskListUser)).thenReturn(testTaskListUser);
+        when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN, 0, null))
+                .thenReturn(expectedResponse);
+
+        ListResponse result = taskListService.updatePersonalization(10L, 1L, null);
+
+        assertThat(result.getColor()).isNull();
+        assertThat(testTaskListUser.getColor()).isNull(); // цвет сброшен в membership
+        verify(taskListUserRepository).saveAndFlush(testTaskListUser);
     }
 
     // --- reorderLists ---

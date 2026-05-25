@@ -418,37 +418,55 @@ class TaskListControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
-    // === PATCH /api/lists/{id} — частичное обновление списка (color + name) ===
+    // === PATCH /api/lists/{id} — переименование списка ===
 
     @Test
     @WithMockUser(username = "user@mail.ru")
-    void updateList_ValidRequest_ReturnsOkWithUpdatedFields() throws Exception {
+    void updateList_ValidRequest_ReturnsOkWithUpdatedName() throws Exception {
         ListResponse updated = ListResponse.builder()
                 .id(1L)
                 .name("Покупки")
-                .color("#22C55E")
                 .role("ADMIN")
                 .build();
 
-        when(taskListService.updateList(eq(1L), eq(1L), eq("Покупки"), eq("#22C55E")))
+        when(taskListService.updateList(eq(1L), eq(1L), eq("Покупки")))
                 .thenReturn(updated);
 
         mockMvc.perform(patch("/api/lists/1")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Покупки\",\"color\":\"#22C55E\"}"))
+                        .content("{\"name\":\"Покупки\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.name").value("Покупки"))
+                .andExpect(jsonPath("$.name").value("Покупки"));
+
+        verify(taskListService).updateList(1L, 1L, "Покупки");
+    }
+
+    // === PATCH /api/lists/{id}/personalization — per-user цвет ===
+
+    @Test
+    @WithMockUser(username = "user@mail.ru")
+    void updatePersonalization_ValidColor_ReturnsOk() throws Exception {
+        ListResponse updated = ListResponse.builder()
+                .id(1L).name("Покупки").color("#22C55E").role("ADMIN").build();
+
+        when(taskListService.updatePersonalization(eq(1L), eq(1L), eq("#22C55E")))
+                .thenReturn(updated);
+
+        mockMvc.perform(patch("/api/lists/1/personalization")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"color\":\"#22C55E\"}"))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.color").value("#22C55E"));
 
-        verify(taskListService).updateList(1L, 1L, "Покупки", "#22C55E");
+        verify(taskListService).updatePersonalization(1L, 1L, "#22C55E");
     }
 
     @Test
     @WithMockUser(username = "user@mail.ru")
-    void updateList_InvalidColor_ReturnsBadRequest() throws Exception {
-        // Не соответствует ^#[0-9a-fA-F]{6}$ — должно отлететь на @Valid
-        mockMvc.perform(patch("/api/lists/1")
+    void updatePersonalization_InvalidColor_ReturnsBadRequest() throws Exception {
+        // Не соответствует ^#[0-9a-fA-F]{6}$ — отлетает на @Valid до сервиса
+        mockMvc.perform(patch("/api/lists/1/personalization")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"color\":\"red\"}"))
                 .andExpect(status().isBadRequest());

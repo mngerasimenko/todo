@@ -118,6 +118,34 @@ class Liquibase023BackfillIntegrationTest extends AbstractIntegrationTest {
         assertThat(getTodoPosition(todoId)).isEqualTo(7);
     }
 
+    // === Тест 5: 024b backfill — per-user color наследуется из общего task_list.color ===
+
+    @Test
+    void backfill_taskListUser_color_inheritsFromTaskList() {
+        Long userId = insertUser();
+        Long listId = insertList(userId, "L");
+        setListColor(listId, "#EA4335");                                  // общий цвет на task_list
+        insertTaskListUser(listId, userId, "ADMIN", LocalDateTime.now(), 0); // per-user color = NULL
+
+        executeBackfillTaskListUserColor();
+
+        assertThat(getColor(listId, userId)).isEqualTo("#EA4335");
+    }
+
+    // === Тест 6: 024b backfill — idempotence guard (не перезаписывает заданный per-user цвет) ===
+
+    @Test
+    void backfill_taskListUser_color_idempotenceGuard_doesNotOverwriteNonNull() {
+        Long userId = insertUser();
+        Long listId = insertList(userId, "L");
+        setListColor(listId, "#EA4335");
+        insertTaskListUserWithColor(listId, userId, "ADMIN", "#000000"); // уже свой цвет
+
+        executeBackfillTaskListUserColor();
+
+        assertThat(getColor(listId, userId)).isEqualTo("#000000"); // не тронут
+    }
+
     // === Хелперы для вставки данных ===
 
     /**
@@ -164,6 +192,37 @@ class Liquibase023BackfillIntegrationTest extends AbstractIntegrationTest {
 
     private Integer getTodoPosition(Long todoId) {
         return jdbcTemplate.queryForObject("SELECT position FROM todo WHERE id = ?", Integer.class, todoId);
+    }
+
+    private void setListColor(Long listId, String color) {
+        jdbcTemplate.update("UPDATE task_list SET color = ? WHERE id = ?", color, listId);
+    }
+
+    private void insertTaskListUserWithColor(Long listId, Long userId, String role, String color) {
+        jdbcTemplate.update(
+                "INSERT INTO task_list_user (list_id, user_id, role, joined_at, position, color) " +
+                        "VALUES (?, ?, ?, ?, 0, ?)",
+                listId, userId, role, LocalDateTime.now(), color);
+    }
+
+    private String getColor(Long listId, Long userId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT color FROM task_list_user WHERE list_id = ? AND user_id = ?",
+                String.class, listId, userId);
+    }
+
+    /**
+     * Повторяет UPDATE из changeSet 024b (один-в-один SQL).
+     */
+    private void executeBackfillTaskListUserColor() {
+        jdbcTemplate.execute(
+                "UPDATE task_list_user tlu " +
+                        "SET color = tl.color " +
+                        "FROM task_list tl " +
+                        "WHERE tlu.list_id = tl.id " +
+                        "  AND tl.color IS NOT NULL " +
+                        "  AND tlu.color IS NULL"
+        );
     }
 
     /**
