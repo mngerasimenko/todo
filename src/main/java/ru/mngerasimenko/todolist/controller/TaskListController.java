@@ -15,6 +15,7 @@ import ru.mngerasimenko.todolist.dto.list.InviteRequest;
 import ru.mngerasimenko.todolist.dto.list.InviteResponse;
 import ru.mngerasimenko.todolist.dto.list.ListMemberResponse;
 import ru.mngerasimenko.todolist.dto.list.ListResponse;
+import ru.mngerasimenko.todolist.dto.list.PersonalizationRequest;
 import ru.mngerasimenko.todolist.dto.list.ReorderItem;
 import ru.mngerasimenko.todolist.dto.list.ReorderListsRequest;
 import ru.mngerasimenko.todolist.dto.list.UpdateListRequest;
@@ -147,8 +148,8 @@ public class TaskListController {
     }
 
     /**
-     * Частично обновить список (PATCH-семантика). Только ADMIN списка.
-     * Поля {@code name} и {@code color} опциональные.
+     * Переименовать список (PATCH-семантика). Только ADMIN списка.
+     * {@code name} опционален. Цвет здесь не задаётся — он per-user (см. /personalization).
      */
     @PatchMapping("/{id}")
     public ResponseEntity<ListResponse> updateList(
@@ -156,7 +157,21 @@ public class TaskListController {
             @Valid @RequestBody UpdateListRequest request,
             @AuthenticationPrincipal UserDetails userDetails) {
         Long userId = getUserId(userDetails);
-        ListResponse response = taskListService.updateList(id, userId, request.getName(), request.getColor());
+        ListResponse response = taskListService.updateList(id, userId, request.getName());
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Обновить персональные (per-user) настройки списка — сейчас цвет.
+     * Доступно любому участнику списка (свой цвет, не общий).
+     */
+    @PatchMapping("/{id}/personalization")
+    public ResponseEntity<ListResponse> updatePersonalization(
+            @PathVariable Long id,
+            @Valid @RequestBody PersonalizationRequest request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long userId = getUserId(userDetails);
+        ListResponse response = taskListService.updatePersonalization(id, userId, request.getColor());
         return ResponseEntity.ok(response);
     }
 
