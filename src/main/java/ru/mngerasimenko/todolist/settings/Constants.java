@@ -18,6 +18,6 @@ public interface Constants {
     String EMPTY_DONE = "Empty done";
     String FAIL = "Fail";
     String DELETED = "Deleted";
-    String APP_NAME = "СПИСОК ЗАДАЧ";
+    String APP_NAME = "Наш список";
 
 }
