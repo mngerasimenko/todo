@@ -88,7 +88,7 @@ class EmailTemplateRenderingTest {
 
         assertThat(html)
                 .contains("lang=\"ru\"")
-                .contains("Список задач")
+                .contains("Наш список")
                 .contains("Подтвердите ваш email")
                 .contains("Подтвердить email")
                 .contains("https://example.test/verify-email?token=abc123")
@@ -200,7 +200,7 @@ class EmailTemplateRenderingTest {
 
         assertThat(html)
                 .contains("lang=\"ru\"")
-                .contains("Список задач")
+                .contains("Наш список")
                 .contains("Мы скучаем!")
                 .contains("Привет, Анна!")
                 .contains("Открыть приложение")

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title th:text="#{email.inactive.subject}">Список задач — Напоминание</title>
+    <title th:text="#{email.inactive.subject}">Наш список — Напоминание</title>
 </head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;">
@@ -13,14 +13,14 @@
                 <!-- Header -->
                 <tr>
                     <td style="background:linear-gradient(135deg,#22c55e 0%,#16a34a 100%);padding:28px 32px;text-align:center;">
-                        <h1 style="color:#ffffff;font-size:20px;font-weight:800;margin:0;" th:text="#{app.name}">Список задач</h1>
+                        <h1 style="color:#ffffff;font-size:20px;font-weight:800;margin:0;" th:text="#{app.name}">Наш список</h1>
                         <p style="color:rgba(255,255,255,0.85);font-size:13px;margin:4px 0 0;" th:text="#{email.inactive.banner}">Мы скучаем!</p>
                     </td>
                 </tr>
                 <!-- Body -->
                 <tr>
                     <td style="padding:32px 28px;text-align:center;">
-                        <img src="https://todo.keepware.ru/icon-512-rustore.png?v=1" th:alt="#{email.inactive.image_alt}" alt="Список задач" width="64" height="64" style="display:block;margin:0 auto 16px;border-radius:14px;" />
+                        <img src="https://todo.keepware.ru/icon-512-rustore.png?v=1" th:alt="#{email.inactive.image_alt}" alt="Наш список" width="64" height="64" style="display:block;margin:0 auto 16px;border-radius:14px;" />
                         <p style="color:#1f2937;font-size:15px;line-height:1.6;margin:0 0 16px;text-align:left;" th:text="#{email.inactive.greeting(${userName})}">
                             Привет, друг!
                         </p>
@@ -48,7 +48,7 @@
                 <tr>
                     <td style="background:#f9fafb;padding:20px 28px;text-align:center;border-top:1px solid #e5e7eb;">
                         <p style="color:#9ca3af;font-size:11px;margin:0;" th:text="#{email.inactive.footer}">
-                            Это автоматическое напоминание от приложения «Список задач»
+                            Это автоматическое напоминание от приложения «Наш список»
                         </p>
                         <p style="margin:8px 0 0;font-size:11px;" th:if="${unsubscribeUrl}">
                             <a th:href="${unsubscribeUrl}" href="#"
