@@ -23,8 +23,8 @@ REST API бэкенд для совместного управления спи�
 ---
 <a href="https://github.com/devxb/gitanimals">
   <img src="https://render.gitanimals.org/lines/mngerasimenko?pet-id=824520970020148661" width="30%" height="100"/>
-  <img src="https://render.gitanimals.org/lines/mngerasimenko?pet-id=821969379148787851" width="30%" height="100"/>
-  <img src="https://render.gitanimals.org/lines/mngerasimenko?pet-id=823198080045774067" width="30%" height="100"/>  
+  <img src="https://render.gitanimals.org/lines/mngerasimenko?pet-id=846821718390091682" width="30%" height="100"/>
+  <img src="https://render.gitanimals.org/lines/mngerasimenko?pet-id=843814633071056111" width="30%" height="100"/>  
 </a>
 
 ## Demo (staging)
