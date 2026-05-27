@@ -43,6 +43,7 @@ jobs:
         run: mvn clean test
 
       - name: Upload JaCoCo coverage report
+        continue-on-error: true  # диагностический артефакт — не валим pipeline при storage-квоте
         uses: actions/upload-artifact@v4
         with:
           name: jacoco-report
@@ -50,6 +51,7 @@ jobs:
           retention-days: 7
 
       - name: Upload test results
+        continue-on-error: true  # диагностический артефакт — не валим pipeline при storage-квоте
         uses: actions/upload-artifact@v4
         with:
           name: test-results
@@ -88,6 +90,7 @@ jobs:
         run: mvn clean package -DskipTests
 
       - name: Archive application JAR
+        continue-on-error: true  # деплой берёт образ с DockerHub, JAR-артефакт не используется — не валим build
         uses: actions/upload-artifact@v4
         with:
           name: todo-app-jar
