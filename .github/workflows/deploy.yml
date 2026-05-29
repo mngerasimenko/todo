@@ -89,14 +89,6 @@ jobs:
       - name: Build package (skip tests — already passed)
         run: mvn clean package -DskipTests
 
-      - name: Archive application JAR
-        continue-on-error: true  # деплой берёт образ с DockerHub, JAR-артефакт не используется — не валим build
-        uses: actions/upload-artifact@v4
-        with:
-          name: todo-app-jar
-          path: target/*.jar
-          retention-days: 7
-
       - name: Build Docker image
         run: docker build -t mngerasimenko/todo-app:${{ github.sha }} .
 
