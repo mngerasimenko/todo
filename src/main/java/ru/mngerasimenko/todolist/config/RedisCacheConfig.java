@@ -125,8 +125,12 @@ public class RedisCacheConfig implements CachingConfigurer {
                 .withCacheConfiguration(USERS_ME, base
                         .entryTtl(Duration.ofSeconds(60))
                         .serializeValuesWith(SerializationPair.fromSerializer(userDtoSerializer)))
+                // TTL 5 мин для task-lists (было 60с): GET /api/lists вызывается раз на
+                // открытие ListSelection — при окне 60с почти всегда expired, hit rate ~24%.
+                // Все мутации (create/update/personalization/reorder/leave/delete/acceptInvite)
+                // явно делают evict кеша, поэтому длинный TTL остаётся корректным.
                 .withCacheConfiguration(TASK_LISTS, base
-                        .entryTtl(Duration.ofSeconds(60))
+                        .entryTtl(Duration.ofMinutes(5))
                         .serializeValuesWith(SerializationPair.fromSerializer(taskListsSerializer)))
                 .withCacheConfiguration(USER_AUTH, base
                         .entryTtl(Duration.ofSeconds(60))
