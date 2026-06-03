@@ -26,7 +26,7 @@ public class TodoRequest {
     private Long id;
 
     @NotBlank(message = "Todo name is required")
-    @Size(min = 2, max = 120, message = "Todo name must be between 2 and 120 characters")
+    @Size(min = 1, max = 120, message = "Todo name must be between 1 and 120 characters")
     @Pattern(regexp = "^[^<>]*$", message = "Name contains invalid characters")
     private String name;
 

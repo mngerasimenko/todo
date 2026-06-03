@@ -18,7 +18,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class UpdateListRequest {
 
-    @Size(min = 2, max = 128, message = "Name must be between 2 and 128 characters")
+    @Size(min = 1, max = 128, message = "Name must be between 1 and 128 characters")
     @Pattern(regexp = "^[^<>]*$", message = "Name contains invalid characters")
     private String name;
 }
