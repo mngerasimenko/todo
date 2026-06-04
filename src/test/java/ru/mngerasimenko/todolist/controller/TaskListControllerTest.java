@@ -130,17 +130,21 @@ class TaskListControllerTest {
 
     @Test
     @WithMockUser(username = "user@mail.ru")
-    void createList_NameTooShort_ReturnsBadRequest() throws Exception {
+    void createList_SingleCharName_ReturnsCreated() throws Exception {
+        // После релаксации min-длины (2 → 1) однобуквенное имя списка валидно.
         CreateListRequest request = CreateListRequest.builder()
                 .name("A")
                 .build();
 
+        when(taskListService.createList("A", 1L))
+                .thenReturn(testListResponse);
+
         mockMvc.perform(post("/api/lists")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isCreated());
 
-        verifyNoInteractions(taskListService);
+        verify(taskListService).createList("A", 1L);
     }
 
     @Test

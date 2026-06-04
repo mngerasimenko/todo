@@ -29,7 +29,7 @@ public class TodoDto {
     }
 
     @NotBlank(message = "Todo name is required")
-    @Size(min = 2, max = 120, message = "Todo name must be between 2 and 120 characters")
+    @Size(min = 1, max = 120, message = "Todo name must be between 1 and 120 characters")
     private String name;
 
     @JsonProperty("created_at")
