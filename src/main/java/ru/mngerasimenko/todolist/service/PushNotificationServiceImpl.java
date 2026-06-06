@@ -8,13 +8,14 @@ import com.google.firebase.messaging.FirebaseMessagingException;
 import com.google.firebase.messaging.MessagingErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.model.PushToken;
-import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.repository.PushTokenRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 
@@ -56,29 +57,24 @@ public class PushNotificationServiceImpl implements PushNotificationService {
     @Override
     @Transactional
     public void registerToken(Long userId, String fcmToken, String deviceId, String locale) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found: " + userId));
-
         // Fallback на "ru" для старых Android-клиентов, которые не шлют поле locale
         String effectiveLocale = (locale == null || locale.isBlank()) ? "ru" : locale;
 
-        PushToken pushToken = pushTokenRepository.findByDeviceId(deviceId)
-                .orElse(null);
-
-        if (pushToken != null) {
-            // Обновляем существующий токен (устройство могло сменить пользователя, токен или язык)
-            pushToken.setUser(user);
-            pushToken.setFcmToken(fcmToken);
-            pushToken.setLocale(effectiveLocale);
-            pushToken.setUpdatedAt(LocalDateTime.now());
-            pushTokenRepository.save(pushToken);
-            log.info("Обновлён push-токен для устройства: deviceId={}, userId={}, locale={}", deviceId, userId, effectiveLocale);
-        } else {
-            // Новое устройство
-            pushToken = new PushToken(user, fcmToken, deviceId, effectiveLocale);
-            pushTokenRepository.save(pushToken);
-            log.info("Зарегистрирован push-токен: deviceId={}, userId={}, locale={}", deviceId, userId, effectiveLocale);
+        // Атомарный upsert вместо findByDeviceId + save — две одновременные регистрации
+        // того же устройства больше не вызывают DataIntegrityViolationException или потерю
+        // обновления при race condition (путь стал hot после Phase A.4 R-3 — Android-клиент
+        // перерегистрирует токен при каждой смене языка в Settings).
+        //
+        // FK-нарушение на user_id ловим единственно возможной DataIntegrityViolationException
+        // на этой операции (никаких других нарушений быть не может — device_id UNIQUE решён
+        // самим ON CONFLICT). Это избавляет от лишнего round-trip в existsById и от TOCTOU
+        // окна между ним и upsert'ом.
+        try {
+            pushTokenRepository.upsertByDeviceId(userId, fcmToken, deviceId, effectiveLocale);
+        } catch (DataIntegrityViolationException e) {
+            throw new UserNotFoundException("User not found: " + userId);
         }
+        log.info("Upsert push-токена: deviceId={}, userId={}, locale={}", deviceId, userId, effectiveLocale);
     }
 
     @Override
