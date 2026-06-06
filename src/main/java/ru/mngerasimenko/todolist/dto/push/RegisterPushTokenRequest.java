@@ -2,10 +2,12 @@ package ru.mngerasimenko.todolist.dto.push;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import ru.mngerasimenko.todolist.dto.validation.LocaleValidation;
 
 /**
  * Запрос на регистрацию FCM push-токена устройства.
@@ -29,6 +31,7 @@ public class RegisterPushTokenRequest {
      * если не указано — сервер использует "ru" (см. PushNotificationServiceImpl.registerToken).
      */
     @JsonProperty("locale")
-    @Size(max = 8, message = "Locale must not exceed 8 characters")
+    @Size(max = LocaleValidation.MAX_LENGTH, message = LocaleValidation.MAX_LENGTH_MESSAGE)
+    @Pattern(regexp = LocaleValidation.PATTERN_OPTIONAL, message = LocaleValidation.PATTERN_MESSAGE)
     private String locale;
 }

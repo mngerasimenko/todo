@@ -1,11 +1,13 @@
 package ru.mngerasimenko.todolist.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import ru.mngerasimenko.todolist.dto.validation.LocaleValidation;
 
 /**
  * DTO для смены языка email-уведомлений пользователя.
@@ -21,6 +23,7 @@ import lombok.NoArgsConstructor;
 public class UpdateEmailLocaleRequest {
 
     @NotBlank(message = "Locale is required")
-    @Size(max = 8, message = "Locale must not exceed 8 characters")
+    @Size(max = LocaleValidation.MAX_LENGTH, message = LocaleValidation.MAX_LENGTH_MESSAGE)
+    @Pattern(regexp = LocaleValidation.PATTERN, message = LocaleValidation.PATTERN_MESSAGE)
     private String locale;
 }
