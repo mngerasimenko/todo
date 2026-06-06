@@ -19,6 +19,9 @@ import java.util.Collections;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
@@ -71,61 +74,49 @@ class PushNotificationServiceImplTest {
     @Test
     void registerToken_NewDevice_NullLocale_FallsBackToRu() {
         // Старый Android-клиент, не шлёт locale — fallback "ru"
-        User user = new User();
-        user.setId(1L);
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(pushTokenRepository.findByDeviceId("device-1")).thenReturn(Optional.empty());
-
         pushNotificationService.registerToken(1L, "fcm-token-abc", "device-1", null);
 
-        ArgumentCaptor<PushToken> captor = ArgumentCaptor.forClass(PushToken.class);
-        verify(pushTokenRepository).save(captor.capture());
-        assertThat(captor.getValue().getLocale()).isEqualTo("ru");
+        verify(pushTokenRepository).upsertByDeviceId(1L, "fcm-token-abc", "device-1", "ru");
     }
 
     @Test
     void registerToken_NewDevice_BlankLocale_FallsBackToRu() {
         // Защита от пустой строки — тоже fallback на "ru"
-        User user = new User();
-        user.setId(1L);
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(pushTokenRepository.findByDeviceId("device-2")).thenReturn(Optional.empty());
-
         pushNotificationService.registerToken(1L, "fcm-token-abc", "device-2", "  ");
 
-        ArgumentCaptor<PushToken> captor = ArgumentCaptor.forClass(PushToken.class);
-        verify(pushTokenRepository).save(captor.capture());
-        assertThat(captor.getValue().getLocale()).isEqualTo("ru");
+        verify(pushTokenRepository).upsertByDeviceId(1L, "fcm-token-abc", "device-2", "ru");
     }
 
     @Test
     void registerToken_NewDevice_ExplicitLocale_PersistsLocale() {
         // Клиент явно прислал "en" — должно сохраниться как "en"
-        User user = new User();
-        user.setId(1L);
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(pushTokenRepository.findByDeviceId("device-en")).thenReturn(Optional.empty());
-
         pushNotificationService.registerToken(1L, "fcm-token-abc", "device-en", "en");
 
-        ArgumentCaptor<PushToken> captor = ArgumentCaptor.forClass(PushToken.class);
-        verify(pushTokenRepository).save(captor.capture());
-        assertThat(captor.getValue().getLocale()).isEqualTo("en");
+        verify(pushTokenRepository).upsertByDeviceId(1L, "fcm-token-abc", "device-en", "en");
     }
 
     @Test
-    void registerToken_ExistingDevice_UpdatesLocale() {
-        // Существующий токен (юзер сменил язык приложения) — обновляем locale
-        User user = new User();
-        user.setId(1L);
-        PushToken existing = new PushToken(user, "old-fcm", "device-1", "ru");
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(pushTokenRepository.findByDeviceId("device-1")).thenReturn(Optional.of(existing));
-
+    void registerToken_ExistingDevice_UpdatesViaUpsert() {
+        // Существующий токен (юзер сменил язык приложения) — upsert ON CONFLICT
+        // обновит существующую строку в БД, локально это просто доп. вызов repo.
         pushNotificationService.registerToken(1L, "new-fcm", "device-1", "en");
 
-        verify(pushTokenRepository).save(existing);
-        assertThat(existing.getLocale()).isEqualTo("en");
-        assertThat(existing.getFcmToken()).isEqualTo("new-fcm");
+        verify(pushTokenRepository).upsertByDeviceId(1L, "new-fcm", "device-1", "en");
+        // save больше не вызывается — старый паттерн find+save заменён на native upsert
+        verify(pushTokenRepository, org.mockito.Mockito.never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void registerToken_FkViolation_TranslatesToUserNotFound() {
+        // Когда user_id не существует, native upsert падает с DataIntegrityViolationException
+        // (FK violation). Сервис переводит её в UserNotFoundException — единый exception type
+        // с /me/* эндпоинтами, обрабатывается GlobalExceptionHandler как 404.
+        doThrow(new org.springframework.dao.DataIntegrityViolationException("FK violation"))
+                .when(pushTokenRepository).upsertByDeviceId(eq(99L), any(), any(), any());
+
+        assertThatThrownBy(() ->
+                pushNotificationService.registerToken(99L, "fcm", "device-x", "ru")
+        ).isInstanceOf(ru.mngerasimenko.todolist.exception.UserNotFoundException.class)
+         .hasMessageContaining("User not found: 99");
     }
 }

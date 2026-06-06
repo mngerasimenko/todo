@@ -104,11 +104,14 @@ class CreateUserConcurrencyTest extends AbstractIntegrationTest {
                 .as("В БД должен быть ровно 1 пользователь с именем '%s'", DUPLICATE_NAME)
                 .isEqualTo(1);
 
-        // Потоки, которые проиграли гонку, должны получить IllegalArgumentException
+        // Потоки, которые проиграли гонку, должны получить IllegalArgumentException.
+        // Текст сообщения обобщён в `UserServiceImpl.createUser` (DataIntegrityViolationException
+        // ветка): «Не удалось создать аккаунт. Проверьте введённые данные и попробуйте снова».
+        // Сделано умышленно, чтобы не подтверждать существование конкретного email.
         errors.forEach(e ->
                 assertThat(e).as("Ожидался IllegalArgumentException, получен: %s", e.getClass().getName())
                         .isInstanceOf(IllegalArgumentException.class)
-                        .hasMessageContaining("уже существует"));
+                        .hasMessageContaining("Не удалось создать аккаунт"));
 
         // Минимум один поток должен был завершиться успешно (без ошибки)
         assertThat(errors.size()).as("Не более 4 потоков должны были упасть").isLessThan(threads);

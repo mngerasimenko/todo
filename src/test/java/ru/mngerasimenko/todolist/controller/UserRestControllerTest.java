@@ -520,6 +520,33 @@ class UserRestControllerTest {
         verify(userService, never()).updateEmailLocale(any(), any());
     }
 
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void updateEmailLocale_NonBcp47Pattern_Returns400() throws Exception {
+        // Невалидный BCP-47: цифровой и spec-символ-содержащий. До @Pattern попадали в БД.
+        for (String bad : new String[]{"123", "*", "!@#$", "ru-!", "  X"}) {
+            mockMvc.perform(patch("/api/users/me/email-locale")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"locale\": \"" + bad + "\"}"))
+                    .andExpect(status().isBadRequest());
+        }
+        verify(userService, never()).updateEmailLocale(any(), any());
+    }
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void updateEmailLocale_ValidBcp47Variants_AllPass() throws Exception {
+        when(userService.getUserByEmail("test@mail.ru")).thenReturn(testUserDto);
+
+        for (String ok : new String[]{"ru", "en", "pt-BR", "zh-Hant"}) {
+            mockMvc.perform(patch("/api/users/me/email-locale")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"locale\": \"" + ok + "\"}"))
+                    .andExpect(status().isNoContent());
+            verify(userService).updateEmailLocale(1L, ok);
+        }
+    }
+
     // === Тест create + get ===
 
     @Test

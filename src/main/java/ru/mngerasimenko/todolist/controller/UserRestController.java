@@ -20,6 +20,7 @@ import ru.mngerasimenko.todolist.dto.UserRequest;
 import ru.mngerasimenko.todolist.dto.UserResponse;
 import ru.mngerasimenko.todolist.mapper.UserMapper;
 import ru.mngerasimenko.todolist.dto.push.RegisterPushTokenRequest;
+import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.service.PushNotificationService;
 import ru.mngerasimenko.todolist.service.SubscriptionService;
 import ru.mngerasimenko.todolist.service.UserService;
@@ -126,6 +127,21 @@ public class UserRestController {
     }
 
     /**
+     * Достать аутентифицированного пользователя или бросить 404. Защищает {@code /me/*}
+     * эндпоинты от race: если пользователь удалил себя в другой сессии между моментом
+     * authentication и обращением к БД, {@code getUserByEmail} вернёт null. Без этого
+     * helper'а {@code currentUser.getId()} давал NPE → HTTP 500, что было неприятно
+     * в мониторинге. Pre-existing pattern, не специфика какого-то одного endpoint'а.
+     */
+    private UserDto requireCurrentUser(UserDetails userDetails) {
+        UserDto user = userService.getUserByEmail(userDetails.getUsername());
+        if (user == null) {
+            throw new UserNotFoundException("Authenticated user not found");
+        }
+        return user;
+    }
+
+    /**
      * Ручная валидация запроса (используется когда авторизация должна проверяться до валидации).
      */
     private <T> void validateRequest(T request) {
@@ -140,7 +156,7 @@ public class UserRestController {
     public ResponseEntity<Void> registerPushToken(
             @AuthenticationPrincipal UserDetails userDetails,
             @Valid @RequestBody RegisterPushTokenRequest request) {
-        UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
+        UserDto currentUser = requireCurrentUser(userDetails);
         pushNotificationService.registerToken(
                 currentUser.getId(),
                 request.getFcmToken(),
@@ -155,7 +171,7 @@ public class UserRestController {
     public ResponseEntity<Void> removePushToken(
             @AuthenticationPrincipal UserDetails userDetails,
             @PathVariable String deviceId) {
-        UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
+        UserDto currentUser = requireCurrentUser(userDetails);
         pushNotificationService.removeToken(currentUser.getId(), deviceId);
         return ResponseEntity.noContent().build();
     }
@@ -168,7 +184,7 @@ public class UserRestController {
     public ResponseEntity<Void> updateEmailLocale(
             @AuthenticationPrincipal UserDetails userDetails,
             @Valid @RequestBody UpdateEmailLocaleRequest request) {
-        UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
+        UserDto currentUser = requireCurrentUser(userDetails);
         userService.updateEmailLocale(currentUser.getId(), request.getLocale());
         return ResponseEntity.noContent().build();
     }
@@ -181,7 +197,7 @@ public class UserRestController {
     public ResponseEntity<UserResponse> updateSortPreferences(
             @AuthenticationPrincipal UserDetails userDetails,
             @Valid @RequestBody SortPreferencesRequest request) {
-        UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
+        UserDto currentUser = requireCurrentUser(userDetails);
         UserDto updated = userService.updateSortPreferences(
                 currentUser.getId(), userDetails.getUsername(), request);
         return ResponseEntity.ok(userMapper.toResponse(updated));

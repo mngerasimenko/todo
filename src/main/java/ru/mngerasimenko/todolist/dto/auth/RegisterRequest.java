@@ -9,6 +9,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import ru.mngerasimenko.todolist.dto.validation.EmailValidation;
+import ru.mngerasimenko.todolist.dto.validation.LocaleValidation;
 
 /**
  * DTO для запроса регистрации пользователя
@@ -51,6 +52,7 @@ public class RegisterRequest {
      * Опциональное поле — если не указано, сервер использует Accept-Language
      * заголовок запроса, fallback "ru" (см. UserServiceImpl.createUser).
      */
-    @Size(max = 8, message = "Locale must not exceed 8 characters")
+    @Size(max = LocaleValidation.MAX_LENGTH, message = LocaleValidation.MAX_LENGTH_MESSAGE)
+    @Pattern(regexp = LocaleValidation.PATTERN_OPTIONAL, message = LocaleValidation.PATTERN_MESSAGE)
     private String locale;
 }
