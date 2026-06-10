@@ -17,6 +17,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagNotFoundException;
 
@@ -217,6 +218,17 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleNoResourceFound(NoResourceFoundException ex) {
         log.warn("Static resource not found: {}", ex.getResourcePath());
         return createErrorResponse(HttpStatus.NOT_FOUND, "Not Found", "Resource not found");
+    }
+
+    /**
+     * Обрабатывает повреждённое multipart-тело запроса (HTTP 400).
+     * Типовой источник — внешние сканеры уязвимостей Next.js Server Actions,
+     * шлющие POST с обрезанным multipart на корневые URL.
+     */
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<Map<String, Object>> handleMultipartError(MultipartException ex) {
+        log.warn("Malformed multipart request: {}", ex.getMessage());
+        return createErrorResponse(HttpStatus.BAD_REQUEST, "Bad Request", "Malformed multipart request");
     }
 
     /**
