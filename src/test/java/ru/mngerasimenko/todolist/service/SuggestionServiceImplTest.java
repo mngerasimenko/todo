@@ -94,12 +94,20 @@ class SuggestionServiceImplTest {
     }
 
     @Test
-    void track_TooShort_DoesNothing() {
-        properties.setMinPrefixLength(2);
-
-        service.track("а", false);
+    void track_ShorterThanMinTrackLength_DoesNothing() {
+        // В словарь кладём слова от 3 символов (minTrackLength=3) — 1-2-символьные пропускаем.
+        service.track("ок", false);
 
         verify(repository, never()).upsert(anyString(), anyString());
+    }
+
+    @Test
+    void track_ThreeChars_IsTracked() {
+        when(blacklist.contains(anyString())).thenReturn(false);
+
+        service.track("чай", false); // ровно 3 символа — храним
+
+        verify(repository).upsert("чай", "чай");
     }
 
     @Test
@@ -245,6 +253,18 @@ class SuggestionServiceImplTest {
 
         assertThat(result).isEmpty();
         verify(repository, never()).findTopByPrefix(anyString(), anyLong(), any(Pageable.class));
+    }
+
+    @Test
+    void suggest_OneCharPrefix_DefaultThreshold_Queries() {
+        // Дефолтный minPrefixLength=1 — подсказываем с первой буквы.
+        when(repository.findTopByPrefix(eq("м%"), anyLong(), any(Pageable.class)))
+                .thenReturn(List.of(sample("молоко", "Молоко", 9)));
+
+        List<SuggestionResponse> result = service.suggest("м", 5);
+
+        assertThat(result).extracting(SuggestionResponse::getText).containsExactly("Молоко");
+        verify(repository).findTopByPrefix(eq("м%"), eq(properties.getMinFreq()), any(Pageable.class));
     }
 
     @Test

@@ -1,0 +1,76 @@
+databaseChangeLog:
+  - changeSet:
+      id: 026-seed-task-suggestions
+      author: mngerasimenko
+      comment: "Server R-6: посев словаря подсказок. 36 продуктов (freq = число вхождений из агрегации прод-задач, 2026-06-22, только однословные users>=2, без персонального/составного хвоста) + 22 глагола-старта (freq=5). ON CONFLICT (text) = floor через GREATEST — не понижает живые счётчики. dbms postgresql: H2-тесты пропускают (NOW()/ON CONFLICT)."
+      preConditions:
+        - onFail: MARK_RAN
+        - tableExists:
+            tableName: task_suggestion
+      changes:
+        - sql:
+            dbms: postgresql
+            splitStatements: false
+            sql: >
+              INSERT INTO task_suggestion (text, text_display, freq, last_used_at, blocked) VALUES
+              ('молоко','молоко',19,NOW(),false),
+              ('хлеб','хлеб',20,NOW(),false),
+              ('яйца','яйца',9,NOW(),false),
+              ('сметана','сметана',8,NOW(),false),
+              ('вода','вода',6,NOW(),false),
+              ('картошка','картошка',8,NOW(),false),
+              ('лук','лук',7,NOW(),false),
+              ('печенье','печенье',6,NOW(),false),
+              ('морковь','морковь',5,NOW(),false),
+              ('пиво','пиво',5,NOW(),false),
+              ('сахар','сахар',4,NOW(),false),
+              ('сыр','Сыр',8,NOW(),false),
+              ('кофе','кофе',6,NOW(),false),
+              ('кефир','кефир',3,NOW(),false),
+              ('майонез','майонез',3,NOW(),false),
+              ('мука','мука',3,NOW(),false),
+              ('яблоки','яблоки',5,NOW(),false),
+              ('лимон','Лимон',4,NOW(),false),
+              ('бананы','бананы',4,NOW(),false),
+              ('капуста','капуста',4,NOW(),false),
+              ('конфеты','Конфеты',3,NOW(),false),
+              ('мороженое','мороженое',3,NOW(),false),
+              ('семечки','семечки',3,NOW(),false),
+              ('горох','горох',2,NOW(),false),
+              ('кетчуп','кетчуп',2,NOW(),false),
+              ('купить линзы','купить линзы',2,NOW(),false),
+              ('кухня','кухня',2,NOW(),false),
+              ('макароны','макароны',2,NOW(),false),
+              ('пармезан','пармезан',2,NOW(),false),
+              ('помидоры','помидоры',2,NOW(),false),
+              ('посуда','посуда',2,NOW(),false),
+              ('сливки','сливки',2,NOW(),false),
+              ('сок','сок',2,NOW(),false),
+              ('уголь','уголь',2,NOW(),false),
+              ('хлебцы','хлебцы',2,NOW(),false),
+              ('холодильник','холодильник',2,NOW(),false),
+              ('купить','Купить',5,NOW(),false),
+              ('вызвать','Вызвать',5,NOW(),false),
+              ('забрать','Забрать',5,NOW(),false),
+              ('помыть','Помыть',5,NOW(),false),
+              ('сдать','Сдать',5,NOW(),false),
+              ('выбрать','Выбрать',5,NOW(),false),
+              ('установить','Установить',5,NOW(),false),
+              ('высадить','Высадить',5,NOW(),false),
+              ('починить','Починить',5,NOW(),false),
+              ('убраться','Убраться',5,NOW(),false),
+              ('записаться','Записаться',5,NOW(),false),
+              ('сделать','Сделать',5,NOW(),false),
+              ('позвонить','Позвонить',5,NOW(),false),
+              ('оплатить','Оплатить',5,NOW(),false),
+              ('заказать','Заказать',5,NOW(),false),
+              ('приготовить','Приготовить',5,NOW(),false),
+              ('постирать','Постирать',5,NOW(),false),
+              ('отправить','Отправить',5,NOW(),false),
+              ('проверить','Проверить',5,NOW(),false),
+              ('напомнить','Напомнить',5,NOW(),false),
+              ('продлить','Продлить',5,NOW(),false),
+              ('отвезти','Отвезти',5,NOW(),false)
+              ON CONFLICT (text) DO UPDATE SET
+                freq = GREATEST(task_suggestion.freq, EXCLUDED.freq),
+                last_used_at = NOW();

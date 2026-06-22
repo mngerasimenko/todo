@@ -56,6 +56,25 @@ class BlacklistServiceImplTest {
         assertThat(service.contains("   ")).isFalse();
     }
 
+    @Test
+    void contains_AdultEscortTerms_ReturnsTrue() {
+        // Найдено при анализе прод-словаря 2026-06-22 — дыра в фильтре закрыта.
+        assertThat(service.contains("Видео миньета на фоне")).isTrue();
+        assertThat(service.contains("эскорт услуги")).isTrue();
+        assertThat(service.contains("проститутка")).isTrue();
+        assertThat(service.contains("порно")).isTrue();
+        assertThat(service.contains("эротическое бельё")).isTrue();
+    }
+
+    @Test
+    void contains_AdultRootsNoCollision_ReturnsFalse() {
+        // «проститу» не ловит «простите»; «анал»/«интим» намеренно НЕ в списке →
+        // «анализы» и «интимная гигиена» проходят.
+        assertThat(service.contains("простите за опоздание")).isFalse();
+        assertThat(service.contains("сдать анализы")).isFalse();
+        assertThat(service.contains("интимная гигиена")).isFalse();
+    }
+
     // ===== Positive (мат и его обфускации блокируются) =====
 
     @Test
