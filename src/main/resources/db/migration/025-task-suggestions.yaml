@@ -1,0 +1,74 @@
+databaseChangeLog:
+  - changeSet:
+      id: 025-create-task-suggestion
+      author: mngerasimenko
+      comment: "Server R-6: глобальный словарь подсказок при вводе задачи. text — нормализованный (lower+trim) PK; text_display — оригинальное написание для красивой выдачи; freq — суммарная частота; last_used_at — для cleanup'а; blocked — ручная блокировка через admin API. Без backfill: пустая таблица, наполняется через хук в TodoServiceImpl.createTodo."
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: task_suggestion
+      changes:
+        - createTable:
+            tableName: task_suggestion
+            columns:
+              - column:
+                  name: text
+                  type: varchar(60)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: text_display
+                  type: varchar(60)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: freq
+                  type: bigint
+                  constraints:
+                    nullable: false
+                  defaultValueNumeric: 1
+              - column:
+                  name: last_used_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+                  defaultValueComputed: CURRENT_TIMESTAMP
+              - column:
+                  name: blocked
+                  type: boolean
+                  constraints:
+                    nullable: false
+                  defaultValueBoolean: false
+
+  - changeSet:
+      id: 025b-task-suggestion-prefix-index
+      author: mngerasimenko
+      comment: "Server R-6: индекс text varchar_pattern_ops для prefix-search 'хле%' без full scan. Postgres-специфичный (LIKE 'prefix%')."
+      preConditions:
+        - onFail: HALT
+        - tableExists:
+            tableName: task_suggestion
+      changes:
+        - sql:
+            dbms: postgresql
+            sql: >
+              CREATE INDEX IF NOT EXISTS idx_task_suggestion_prefix
+              ON task_suggestion (text varchar_pattern_ops)
+              WHERE blocked = false
+
+  - changeSet:
+      id: 025c-task-suggestion-last-used-at-index
+      author: mngerasimenko
+      comment: "Server R-6: BTREE-индекс на last_used_at для еженедельного DELETE WHERE last_used_at < cutoff. Без этого cleanup-scheduler делает Seq Scan + блокирует hot UPSERT'ы из createTodo afterCommit-хука (panel-review performance#1, 2026-06-21)."
+      preConditions:
+        - onFail: HALT
+        - tableExists:
+            tableName: task_suggestion
+      changes:
+        - sql:
+            dbms: postgresql
+            sql: >
+              CREATE INDEX IF NOT EXISTS idx_task_suggestion_last_used_at
+              ON task_suggestion (last_used_at)

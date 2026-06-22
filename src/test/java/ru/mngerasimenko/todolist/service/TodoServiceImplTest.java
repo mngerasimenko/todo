@@ -57,6 +57,9 @@ public class TodoServiceImplTest {
     @Mock
     private PushNotificationService pushNotificationService;
 
+    @Mock
+    private SuggestionService suggestionService;
+
     @InjectMocks
     private TodoServiceImpl todoService;
 
@@ -139,6 +142,75 @@ public class TodoServiceImplTest {
         verify(taskListRepository, times(1)).findById(1L);
         verify(todoRepository, times(1)).save(any(Todo.class));
         verify(todoMapper, times(1)).toDto(savedTodo);
+        // R-6 хук: публичная задача попадает в словарь подсказок с private=false.
+        verify(suggestionService, times(1)).track("New Todo", false);
+    }
+
+    @Test
+    void createTodo_PrivateTodo_PassesPrivateTrueToSuggestionTracking() {
+        TodoDto newTodoDto = new TodoDto();
+        newTodoDto.setName("Секретное");
+        newTodoDto.setUserId(1L);
+        newTodoDto.setListId(1L);
+
+        Todo newTodo = new Todo();
+        newTodo.setName("Секретное");
+
+        Todo savedTodo = new Todo();
+        savedTodo.setId(2L);
+        savedTodo.setName("Секретное");
+        savedTodo.setIsPrivate(true);
+        savedTodo.setCreatedAt(LocalDateTime.now());
+        savedTodo.setUser(testUser);
+        savedTodo.setTaskList(testTaskList);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+        when(taskListRepository.findById(1L)).thenReturn(Optional.of(testTaskList));
+        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
+        when(todoMapper.toEntity(newTodoDto)).thenReturn(newTodo);
+        when(todoRepository.save(any(Todo.class))).thenReturn(savedTodo);
+        when(todoMapper.toDto(savedTodo)).thenReturn(new TodoDto());
+
+        todoService.createTodo(newTodoDto);
+
+        // Приватная задача: хук обязан передать private=true (фактический skip — внутри track).
+        verify(suggestionService, times(1)).track("Секретное", true);
+    }
+
+    @Test
+    void createTodo_WhenSuggestionTrackingFails_StillReturnsDto() {
+        TodoDto newTodoDto = new TodoDto();
+        newTodoDto.setName("New Todo");
+        newTodoDto.setUserId(1L);
+        newTodoDto.setListId(1L);
+
+        Todo newTodo = new Todo();
+        newTodo.setName("New Todo");
+
+        Todo savedTodo = new Todo();
+        savedTodo.setId(2L);
+        savedTodo.setName("New Todo");
+        savedTodo.setCreatedAt(LocalDateTime.now());
+        savedTodo.setUser(testUser);
+        savedTodo.setTaskList(testTaskList);
+
+        TodoDto savedTodoDto = new TodoDto();
+        savedTodoDto.setId(2L);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+        when(taskListRepository.findById(1L)).thenReturn(Optional.of(testTaskList));
+        when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
+        when(todoMapper.toEntity(newTodoDto)).thenReturn(newTodo);
+        when(todoRepository.save(any(Todo.class))).thenReturn(savedTodo);
+        when(todoMapper.toDto(savedTodo)).thenReturn(savedTodoDto);
+        doThrow(new RuntimeException("dictionary down"))
+                .when(suggestionService).track(anyString(), anyBoolean());
+
+        // Сбой словаря подсказок НЕ должен ломать создание задачи (best-effort).
+        TodoDto result = todoService.createTodo(newTodoDto);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getId()).isEqualTo(2L);
     }
 
     @Test

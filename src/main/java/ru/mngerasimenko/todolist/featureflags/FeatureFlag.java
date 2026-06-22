@@ -33,7 +33,13 @@ public enum FeatureFlag {
 
     RESPONSE_CACHE("response-cache.enabled", true,
             "Кэширование ответов GET /api/users/me и GET /api/lists в Redis (TTL 60 сек). " +
-            "При false — запросы идут напрямую в Postgres. Аварийное выключение при подозрении на stale-данные.");
+            "При false — запросы идут напрямую в Postgres. Аварийное выключение при подозрении на stale-данные."),
+
+    SUGGESTIONS("app.suggestions.enabled", true,
+            "Глобальный словарь подсказок при вводе задачи (Server R-6). " +
+            "При false: GET /api/suggestions возвращает пустой список, хук в TodoServiceImpl " +
+            "не пополняет словарь, cleanup-scheduler пропускает итерацию. " +
+            "Эндпоинт остаётся доступен (без 404), чтобы старые клиенты не ломались.");
 
     private final String name;
     private final boolean defaultValue;

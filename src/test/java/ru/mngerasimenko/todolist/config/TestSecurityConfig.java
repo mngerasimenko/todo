@@ -84,6 +84,7 @@ public class TestSecurityConfig {
         props.setResetPassword(permissive);
         props.setResendVerification(permissive);
         props.setLogout(permissive);
+        props.setSuggestions(permissive);
         // В тестах flagStore всегда возвращает true для RATE_LIMIT — фильтр пропускает все запросы через свой rate-limit
         ru.mngerasimenko.todolist.featureflags.FeatureFlagStore flagStore =
                 org.mockito.Mockito.mock(ru.mngerasimenko.todolist.featureflags.FeatureFlagStore.class);

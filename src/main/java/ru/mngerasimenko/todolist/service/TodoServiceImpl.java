@@ -4,6 +4,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.exception.ListNotFoundException;
 import ru.mngerasimenko.todolist.exception.TodoNotFoundException;
@@ -36,6 +38,7 @@ public class TodoServiceImpl implements TodoService {
     private final PushNotificationService pushNotificationService;
     private final TodoMapper todoMapper;
     private final SubscriptionService subscriptionService;
+    private final SuggestionService suggestionService;
 
     @Override
     @Transactional
@@ -73,6 +76,33 @@ public class TodoServiceImpl implements TodoService {
             pushNotificationService.notifyNewTodo(
                     taskList.getId(), user.getId(), user.getName(), savedTodo.getName());
         }
+
+        // Пополнение глобального словаря подсказок (Server R-6). Делаем строго в afterCommit,
+        // чтобы при rollback'е транзакции createTodo словарь не получил «фантомную» запись.
+        // REQUIRES_NEW на стороне SuggestionService гарантирует отдельную транзакцию для UPSERT.
+        final String trackText = savedTodo.getName();
+        final boolean trackPrivate = Boolean.TRUE.equals(savedTodo.getIsPrivate());
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    try {
+                        suggestionService.track(trackText, trackPrivate);
+                    } catch (RuntimeException ex) {
+                        log.warn("[suggestions] afterCommit track failed: {}", ex.toString());
+                    }
+                }
+            });
+        } else {
+            // Без активной TX (теоретически — если кто-то позовёт createTodo вне @Transactional):
+            // tracking сразу же, в обычном потоке.
+            try {
+                suggestionService.track(trackText, trackPrivate);
+            } catch (RuntimeException ex) {
+                log.warn("[suggestions] inline track failed: {}", ex.toString());
+            }
+        }
+
         return todoMapper.toDto(savedTodo);
     }
 

@@ -142,6 +142,12 @@
     <p>The Controller <strong>does not share</strong> personal data with third parties, except where required by the laws of the Russian Federation.</p>
     <p>The Service does not use third-party analytics, advertising networks, or tracking systems.</p>
 
+    <h2>6.1. Global task-suggestion dictionary</h2>
+    <p>When a task is created, the original text of its title (as you typed it) may be added to a shared dictionary of task suggestions — the same text that appears in your own list, made available as a candidate completion for other users typing a new task. A dictionary entry stores only the text and a usage counter, with no user identifier, email, or IP address. Entries are exposed through the public endpoint <code>GET /api/suggestions</code> (accessible to anyone, including unauthenticated clients) only after at least five distinct users have typed the same title.</p>
+    <p><strong>Private tasks are never added to the dictionary.</strong> Titles that look like emails or phone numbers, or contain profanity, are dropped at write time. Titles longer than 30 characters and texts containing no letters (emoji-only / digit-only) are also skipped.</p>
+    <p>If a string that contains someone's personal data (a name, address) makes it into the public dictionary, contact the operator to have it removed — the administrator can mark it hidden.</p>
+    <p>Entries that have not been used for more than one year are removed automatically.</p>
+
     <h2>7. Data protection</h2>
     <p>The following safeguards are in place:</p>
     <ul>

@@ -18,11 +18,13 @@ import ru.mngerasimenko.todolist.featureflags.FlagSource;
 import ru.mngerasimenko.todolist.security.ApiSecurityConfig;
 import ru.mngerasimenko.todolist.security.SuperAdminGuard;
 import ru.mngerasimenko.todolist.service.AdminService;
+import ru.mngerasimenko.todolist.service.SuggestionService;
 
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -52,6 +54,9 @@ class AdminControllerTest {
 
     @MockitoBean
     private FeatureFlagStore flagStore;
+
+    @MockitoBean
+    private SuggestionService suggestionService;
 
     @BeforeEach
     void setUp() {
@@ -214,5 +219,48 @@ class AdminControllerTest {
                 .andExpect(status().isNotFound());
 
         verify(flagStore, never()).reset(org.mockito.ArgumentMatchers.any());
+    }
+
+    // ===== Suggestion block =====
+
+    @Test
+    void blockSuggestion_withoutAuth_Returns401() throws Exception {
+        mockMvc.perform(post("/api/admin/suggestions/{text}/block", "молоко"))
+                .andExpect(status().isUnauthorized());
+
+        verify(suggestionService, never()).block(anyString());
+    }
+
+    @Test
+    @WithMockUser(username = "regular@mail.ru")
+    void blockSuggestion_regularUser_Returns404() throws Exception {
+        mockMvc.perform(post("/api/admin/suggestions/{text}/block", "молоко"))
+                .andExpect(status().isNotFound());
+
+        verify(suggestionService, never()).block(anyString());
+    }
+
+    @Test
+    @WithMockUser(username = ADMIN_EMAIL)
+    void blockSuggestion_existingText_Returns204() throws Exception {
+        when(suggestionService.block("молоко")).thenReturn(true);
+
+        mockMvc.perform(post("/api/admin/suggestions/{text}/block", "молоко"))
+                .andExpect(status().isNoContent());
+
+        verify(suggestionService).block("молоко");
+    }
+
+    @Test
+    @WithMockUser(username = ADMIN_EMAIL)
+    void blockSuggestion_unknownText_Returns404WithStandardJsonBody() throws Exception {
+        when(suggestionService.block("несуществует")).thenReturn(false);
+
+        mockMvc.perform(post("/api/admin/suggestions/{text}/block", "несуществует"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Not Found"))
+                .andExpect(jsonPath("$.message").value("Suggestion not found in dictionary"));
+
+        verify(suggestionService).block("несуществует");
     }
 }

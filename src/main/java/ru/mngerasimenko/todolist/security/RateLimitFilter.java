@@ -176,6 +176,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return null;
         }
 
+        // Публичный GET /api/suggestions — отдельный bucket, иначе анонимные
+        // клиенты будут есть general-бюджет авторизованного пользователя по тому же IP.
+        if ("GET".equalsIgnoreCase(method) && uri.equals("/api/suggestions")) {
+            return "suggestions:" + clientIp;
+        }
+
         return "general:" + clientIp;
     }
 
@@ -262,6 +268,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
             if (uri.equals("/api/auth/resend-verification")) return properties.getResendVerification();
             if (uri.equals("/api/auth/change-email")) return properties.getChangeEmail();
             if (uri.equals("/api/auth/logout")) return properties.getLogout();
+        }
+        if ("GET".equalsIgnoreCase(method) && uri.equals("/api/suggestions")) {
+            return properties.getSuggestions();
         }
         return properties.getGeneral();
     }
