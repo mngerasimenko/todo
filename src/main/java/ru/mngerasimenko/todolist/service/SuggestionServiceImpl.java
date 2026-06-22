@@ -101,7 +101,9 @@ public class SuggestionServiceImpl implements SuggestionService {
             return;
         }
         try {
-            repository.upsert(normalized, trimmed);
+            // text_display унифицирован в нижний регистр (= normalized): пользователи
+            // в основном пишут продукты с маленькой (owner-решение 2026-06-22).
+            repository.upsert(normalized, normalized);
         } catch (RuntimeException ex) {
             // Tracking не должен ломать создание задачи — это nice-to-have. Логируем и проглатываем.
             log.warn("[suggestions] не удалось обновить словарь, length={}: {}",

@@ -1,0 +1,13 @@
+databaseChangeLog:
+  - changeSet:
+      id: 027-lowercase-task-suggestion-display
+      author: mngerasimenko
+      comment: "Server R-6: унификация text_display в нижний регистр (owner-решение 2026-06-22 — пользователи в основном пишут продукты с маленькой, ~92% в сиде). После этого text_display совпадает с нормализованным text. Будущие записи lowercase'ятся в track (upsert(normalized, normalized)). dbms postgresql (H2-тесты пропускают)."
+      preConditions:
+        - onFail: MARK_RAN
+        - tableExists:
+            tableName: task_suggestion
+      changes:
+        - sql:
+            dbms: postgresql
+            sql: UPDATE task_suggestion SET text_display = lower(text_display) WHERE text_display <> lower(text_display);
