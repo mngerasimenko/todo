@@ -26,7 +26,7 @@ import java.util.regex.Pattern;
  * Track-фильтры (выбраны в плане R-6, 2026-06-05; ужесточены 2026-06-21 после panel-review):
  * <ol>
  *   <li>Приватная задача → skip (не tracking приватные)</li>
- *   <li>Пустая / короче {@code min-prefix-length} / длиннее {@code max-text-length} → skip</li>
+ *   <li>Пустая / короче {@code min-track-length} (храним слова от 3 символов) / длиннее {@code max-text-length} → skip</li>
  *   <li>Похоже на email → skip (символ {@code @} с буквой/цифрой/{@code +_-.} до и после)</li>
  *   <li>≥{@code 2} цифры подряд → skip (номер телефона / адрес / сумма) — ужесточено с 3</li>
  *   <li>Нет ни одной буквы (emoji-only / цифры-only / пунктуация-only) → skip</li>
@@ -80,7 +80,7 @@ public class SuggestionServiceImpl implements SuggestionService {
         if (trimmed.isEmpty()) {
             return;
         }
-        if (trimmed.length() < properties.getMinPrefixLength()
+        if (trimmed.length() < properties.getMinTrackLength()
                 || trimmed.length() > properties.getMaxTextLength()) {
             return;
         }
