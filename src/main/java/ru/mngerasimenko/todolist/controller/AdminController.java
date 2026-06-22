@@ -14,10 +14,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ru.mngerasimenko.todolist.dto.admin.FeatureFlagResponse;
 import ru.mngerasimenko.todolist.dto.admin.InactiveReminderTriggerResponse;
+import ru.mngerasimenko.todolist.exception.SuggestionNotFoundException;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagNotFoundException;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.service.AdminService;
+import ru.mngerasimenko.todolist.service.SuggestionService;
 
 import java.util.List;
 
@@ -35,6 +37,7 @@ public class AdminController {
 
     private final AdminService adminService;
     private final FeatureFlagStore flagStore;
+    private final SuggestionService suggestionService;
 
     /**
      * Принудительно отправить напоминание о неактивности указанному пользователю.
@@ -86,6 +89,33 @@ public class AdminController {
                 .orElseThrow(() -> new FeatureFlagNotFoundException(name));
         flagStore.reset(flag);
         log.info("[admin] {} reset feature flag {}", authentication.getName(), name);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Заблокировать строку в глобальном словаре подсказок (Server R-6).
+     * Запись не удаляется, только проставляется {@code blocked = true} — частота сохраняется
+     * на случай разблокировки. Кеш подсказок инвалидируется внутри сервиса.
+     * <p>
+     * Текст принимается через {@code @PathVariable} с regex-суффиксом {@code :.+},
+     * чтобы пропустить точки/пробелы/кириллицу/спецсимволы (тот же приём что для email
+     * в {@link #triggerInactiveReminder}). Не-найденная строка отдаёт стандартный
+     * 404-JSON через {@link SuggestionNotFoundException} + GlobalExceptionHandler,
+     * а не пустое тело — единый формат с остальными 404 в проекте.
+     *
+     * @return 204 при успехе, 404 если такой строки в словаре нет
+     */
+    @PostMapping("/suggestions/{text:.+}/block")
+    public ResponseEntity<Void> blockSuggestion(@PathVariable("text") String text,
+                                                Authentication authentication) {
+        boolean blocked = suggestionService.block(text);
+        if (!blocked) {
+            log.info("[admin] {} попытался заблокировать неизвестную строку словаря (len={})",
+                    authentication.getName(), text == null ? 0 : text.length());
+            throw new SuggestionNotFoundException("Suggestion not found in dictionary");
+        }
+        log.info("[admin] {} заблокировал строку словаря (len={})",
+                authentication.getName(), text.length());
         return ResponseEntity.noContent().build();
     }
 }

@@ -45,3 +45,5 @@ databaseChangeLog:
       file: db/migration/023-list-personalization.yaml
   - include:
       file: db/migration/024-list-user-color.yaml
+  - include:
+      file: db/migration/025-task-suggestions.yaml

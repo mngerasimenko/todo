@@ -64,6 +64,9 @@ public class ApiSecurityConfig {
                         ).permitAll()
                         // Публичный GET для информации о приглашении
                         .requestMatchers(HttpMethod.GET, "/api/lists/invite/*").permitAll()
+                        // Публичный GET глобального словаря подсказок (Server R-6).
+                        // Доступен гостям без JWT, чтобы закрывать «холодный старт».
+                        .requestMatchers(HttpMethod.GET, "/api/suggestions").permitAll()
                         // Административные эндпоинты: аутентификация обязательна,
                         // проверка супер-админа идёт через @PreAuthorize на контроллере
                         .requestMatchers("/api/admin/**").authenticated()

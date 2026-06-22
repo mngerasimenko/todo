@@ -2284,6 +2284,169 @@
 			"description": "Служебные эндпоинты приложения (открыты, не требуют JWT)"
 		},
 		{
+			"name": "Suggestions",
+			"item": [
+				{
+					"name": "Get Suggestions (public, no JWT)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response is an array\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/suggestions?prefix=хле&limit=5",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "suggestions" ],
+							"query": [
+								{ "key": "prefix", "value": "хле" },
+								{ "key": "limit", "value": "5" }
+							]
+						},
+						"description": "Глобальный словарь подсказок (Server R-6). **Публичный** (без JWT)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Suggestions - prefix too short → empty",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Returns empty list\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array').that.is.empty;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/suggestions?prefix=х",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "suggestions" ],
+							"query": [ { "key": "prefix", "value": "х" } ]
+						},
+						"description": "Префикс короче min-prefix-length — сервис возвращает пустой массив."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Suggestions - limit out of range → 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 400\", function () {",
+									"    pm.response.to.have.status(400);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/suggestions?prefix=хле&limit=999",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "suggestions" ],
+							"query": [
+								{ "key": "prefix", "value": "хле" },
+								{ "key": "limit", "value": "999" }
+							]
+						},
+						"description": "limit > 50 → 400 (bean validation @Max(50))."
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Block Suggestion (super-admin only)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204 or 404\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([204, 404]);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/suggestions/test_block/block",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "admin", "suggestions", "test_block", "block" ]
+						},
+						"description": "Блокировка строки в словаре. Доступна только email'ам из app.super-admin.emails. Возвращает 204 если строка была заблокирована, 404 если её нет в словаре."
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Block Suggestion - regular user → 404",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 404 (admin endpoints hidden)\", function () {",
+									"    pm.response.to.have.status(404);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/suggestions/test_block/block",
+							"host": [ "{{baseUrl}}" ],
+							"path": [ "api", "admin", "suggestions", "test_block", "block" ]
+						},
+						"description": "Не-админский пользователь получает 404 (admin-эндпоинты скрыты accessDeniedHandler'ом)."
+					},
+					"response": []
+				}
+			],
+			"description": "Глобальный словарь подсказок при вводе задачи (Server R-6)."
+		},
+		{
 			"name": "Negative Tests",
 			"item": [
 				{

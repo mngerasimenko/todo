@@ -31,6 +31,12 @@ public class RateLimitProperties {
     private EndpointLimit resendVerification = new EndpointLimit(3, 3600);
     private EndpointLimit changeEmail = new EndpointLimit(3, 3600);
     private EndpointLimit logout = new EndpointLimit(10, 60);
+    /**
+     * GET /api/suggestions — публичный (без JWT). Отдельный лимит, чтобы прокачка
+     * подсказок не отъедала {@link #general general}-бюджет авторизованных запросов
+     * и чтобы у анонимного клиента был свой потолок.
+     */
+    private EndpointLimit suggestions = new EndpointLimit(60, 60);
     private EndpointLimit general = new EndpointLimit(100, 60);
 
     @Getter

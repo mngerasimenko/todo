@@ -29,6 +29,7 @@ import org.springframework.data.redis.serializer.RedisSerializationContext.Seria
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import ru.mngerasimenko.todolist.dto.AuthUserDto;
+import ru.mngerasimenko.todolist.dto.SuggestionResponse;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.dto.list.ListResponse;
 
@@ -69,6 +70,7 @@ public class RedisCacheConfig implements CachingConfigurer {
     public static final String USERS_ME = "users-me";
     public static final String TASK_LISTS = "task-lists";
     public static final String USER_AUTH = "user-auth";
+    public static final String SUGGESTIONS = "suggestions";
 
     /**
      * SpEL-условие для @Cacheable — проверяет feature flag RESPONSE_CACHE.
@@ -116,6 +118,14 @@ public class RedisCacheConfig implements CachingConfigurer {
         RedisSerializer<List<ListResponse>> taskListsSerializer =
                 (RedisSerializer) new Jackson2JsonRedisSerializer<>(appObjectMapper, listResponseType);
 
+        // suggestions: List<SuggestionResponse>, TTL 60с (см. ниже withCacheConfiguration).
+        // Глобальный словарь подсказок (Server R-6) — ключ "prefix:limit".
+        JavaType suggestionsType = appObjectMapper.getTypeFactory()
+                .constructCollectionType(List.class, SuggestionResponse.class);
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        RedisSerializer<List<SuggestionResponse>> suggestionsSerializer =
+                (RedisSerializer) new Jackson2JsonRedisSerializer<>(appObjectMapper, suggestionsType);
+
         // enableStatistics() обязателен для cache.gets/puts/evictions Micrometer-метрик:
         // без него RedisCache.getStatistics() возвращает no-op-объект с нулями,
         // и панель «Cache Hit Rate» в Grafana показывает «No data».
@@ -135,6 +145,15 @@ public class RedisCacheConfig implements CachingConfigurer {
                 .withCacheConfiguration(USER_AUTH, base
                         .entryTtl(Duration.ofSeconds(60))
                         .serializeValuesWith(SerializationPair.fromSerializer(authUserDtoSerializer)))
+                // TTL 60с (а не 5 мин как изначально): админский block() через
+                // @CacheEvict отбрасывается no-op'ом HealthAwareCache при недоступности
+                // Redis — а заблокированную строку нужно скрыть быстро. 60с — компромисс
+                // между «достаточно для debounce-инга при вводе одного слова» и «не висит
+                // 5 минут в выдаче после жалобы». Также уменьшает Redis memory на длинном
+                // хвосте префиксов (panel-review concurrency#1 + performance#5, 2026-06-21).
+                .withCacheConfiguration(SUGGESTIONS, base
+                        .entryTtl(Duration.ofSeconds(60))
+                        .serializeValuesWith(SerializationPair.fromSerializer(suggestionsSerializer)))
                 .build();
     }
 

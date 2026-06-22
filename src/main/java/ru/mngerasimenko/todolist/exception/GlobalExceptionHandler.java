@@ -69,6 +69,15 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Попытка заблокировать несуществующую строку в /api/admin/suggestions/{text}/block (Server R-6).
+     */
+    @ExceptionHandler(SuggestionNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleSuggestionNotFound(SuggestionNotFoundException ex) {
+        log.info("Suggestion not found: {}", ex.getMessage());
+        return createErrorResponse(HttpStatus.NOT_FOUND, "Not Found", ex.getMessage());
+    }
+
+    /**
      * Обрабатывает некорректные аргументы запроса (HTTP 400).
      */
     @ExceptionHandler(IllegalArgumentException.class)
