@@ -11,14 +11,17 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import ru.mngerasimenko.todolist.dto.admin.FeatureFlagResponse;
 import ru.mngerasimenko.todolist.dto.admin.InactiveReminderTriggerResponse;
+import ru.mngerasimenko.todolist.dto.admin.SuggestionReseedReport;
 import ru.mngerasimenko.todolist.exception.SuggestionNotFoundException;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagNotFoundException;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.service.AdminService;
+import ru.mngerasimenko.todolist.service.SuggestionReseedService;
 import ru.mngerasimenko.todolist.service.SuggestionService;
 
 import java.util.List;
@@ -38,6 +41,7 @@ public class AdminController {
     private final AdminService adminService;
     private final FeatureFlagStore flagStore;
     private final SuggestionService suggestionService;
+    private final SuggestionReseedService suggestionReseedService;
 
     /**
      * Принудительно отправить напоминание о неактивности указанному пользователю.
@@ -117,5 +121,30 @@ public class AdminController {
         log.info("[admin] {} заблокировал строку словаря (len={})",
                 authentication.getName(), text.length());
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Ре-агрегация словаря подсказок под distinct-режим (seed 029, Server R-6).
+     * Пересчитывает {@code freq} = число РАЗНЫХ авторов из текущих НЕ приватных задач,
+     * заполняет таблицу авторов псевдонимами, удаляет строки с distinct &lt; min-freq,
+     * редакционные глаголы оставляет floor'ом. Заблокированные admin'ом строки не трогает.
+     * <p>
+     * По умолчанию {@code dryRun=true} — только отчёт без записи (сначала смотрим, потом применяем).
+     * Реальное применение — {@code ?dryRun=false}. Backfill → запускается вручную super-admin'ом.
+     *
+     * @return отчёт со счётчиками (что сделано / что было бы сделано)
+     */
+    @io.swagger.v3.oas.annotations.Hidden
+    @PostMapping("/suggestions/reseed")
+    public ResponseEntity<SuggestionReseedReport> reseedSuggestions(
+            @RequestParam(name = "dryRun", required = false, defaultValue = "true") boolean dryRun,
+            Authentication authentication) {
+        log.info("[admin] {} запустил reseed словаря подсказок (dryRun={})",
+                authentication.getName(), dryRun);
+        SuggestionReseedReport report = suggestionReseedService.reseed(dryRun);
+        log.info("[admin] reseed завершён (dryRun={}): kept={}, contributorRows={}, verbsFloored={}, deleted={}",
+                report.isDryRun(), report.getProductsKept(), report.getContributorRowsWritten(),
+                report.getEditorialVerbsFloored(), report.getNonBlockedDeleted());
+        return ResponseEntity.ok(report);
     }
 }

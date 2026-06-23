@@ -4,7 +4,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
@@ -51,7 +50,6 @@ class SuggestionServiceImplTest {
     @Mock
     private CryptoService cryptoService;
 
-    @InjectMocks
     private SuggestionServiceImpl service;
 
     private SuggestionProperties properties;
@@ -61,8 +59,11 @@ class SuggestionServiceImplTest {
     @BeforeEach
     void setUp() {
         properties = new SuggestionProperties();
+        // Реальный фильтр на тех же моках blacklist+properties — track-фильтры теперь
+        // в SuggestionTextFilter, поведение идентично прежнему (тесты сторожат).
+        SuggestionTextFilter filter = new SuggestionTextFilter(blacklist, properties);
         // Все дефолты используем как в production, кроме явных переопределений в тестах.
-        service = new SuggestionServiceImpl(repository, blacklist, properties, flagStore, cryptoService);
+        service = new SuggestionServiceImpl(repository, filter, properties, flagStore, cryptoService);
         // lenient — флаг проверяется только в track/suggest, в block/cacheKey не зовётся
         lenient().when(flagStore.isEnabled(FeatureFlag.SUGGESTIONS)).thenReturn(true);
         // blindIndex зовётся только в happy-path track; детерминированный стаб даёт предсказуемый

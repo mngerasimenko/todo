@@ -1,5 +1,6 @@
 package ru.mngerasimenko.todolist.repository;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -120,4 +121,15 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
      */
     @Query("SELECT DISTINCT t.user.id FROM Todo t WHERE t.createdAt > :since OR t.completedAt > :since")
     Set<Long> findActiveUserIdsSince(@Param("since") LocalDateTime since);
+
+    /**
+     * НЕ приватные задачи keyset-пагинацией (id ASC, id &gt; afterId) — источник distinct-агрегации
+     * словаря (seed 029). Keyset (а не OFFSET) устойчив к конкурентным вставкам во время скана:
+     * новые задачи получают больший id и попадают в последующие батчи, строки не перескакивают
+     * границу страницы. Поле {@code name} расшифровывается прозрачно через {@code EncryptedStringConverter},
+     * поэтому distinct по plaintext считаем в Java (в SQL заголовки зашифрованы). Лимит батча — через
+     * {@link Pageable} (без сортировки; порядок задаёт {@code ORDER BY} запроса).
+     */
+    @Query("SELECT t FROM Todo t WHERE t.isPrivate = false AND t.id > :afterId ORDER BY t.id ASC")
+    List<Todo> findNonPrivateForReseed(@Param("afterId") long afterId, Pageable pageable);
 }
