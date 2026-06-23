@@ -142,8 +142,8 @@ public class TodoServiceImplTest {
         verify(taskListRepository, times(1)).findById(1L);
         verify(todoRepository, times(1)).save(any(Todo.class));
         verify(todoMapper, times(1)).toDto(savedTodo);
-        // R-6 хук: публичная задача попадает в словарь подсказок с private=false.
-        verify(suggestionService, times(1)).track("New Todo", false);
+        // R-6 хук: публичная задача попадает в словарь подсказок с private=false и id автора.
+        verify(suggestionService, times(1)).track("New Todo", false, 1L);
     }
 
     @Test
@@ -173,8 +173,8 @@ public class TodoServiceImplTest {
 
         todoService.createTodo(newTodoDto);
 
-        // Приватная задача: хук обязан передать private=true (фактический skip — внутри track).
-        verify(suggestionService, times(1)).track("Секретное", true);
+        // Приватная задача: хук обязан передать private=true и id автора (skip — внутри track).
+        verify(suggestionService, times(1)).track("Секретное", true, 1L);
     }
 
     @Test
@@ -204,7 +204,7 @@ public class TodoServiceImplTest {
         when(todoRepository.save(any(Todo.class))).thenReturn(savedTodo);
         when(todoMapper.toDto(savedTodo)).thenReturn(savedTodoDto);
         doThrow(new RuntimeException("dictionary down"))
-                .when(suggestionService).track(anyString(), anyBoolean());
+                .when(suggestionService).track(anyString(), anyBoolean(), anyLong());
 
         // Сбой словаря подсказок НЕ должен ломать создание задачи (best-effort).
         TodoDto result = todoService.createTodo(newTodoDto);

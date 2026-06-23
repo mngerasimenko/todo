@@ -82,12 +82,15 @@ public class TodoServiceImpl implements TodoService {
         // REQUIRES_NEW на стороне SuggestionService гарантирует отдельную транзакцию для UPSERT.
         final String trackText = savedTodo.getName();
         final boolean trackPrivate = Boolean.TRUE.equals(savedTodo.getIsPrivate());
+        // userId нужен для distinct-учёта (k-анонимность): строка всплывает только при N разных
+        // авторах, поэтому track считает именно РАЗНЫХ пользователей (gate-чейн /ideas 2026-06-23).
+        final Long trackUserId = user.getId();
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
                     try {
-                        suggestionService.track(trackText, trackPrivate);
+                        suggestionService.track(trackText, trackPrivate, trackUserId);
                     } catch (RuntimeException ex) {
                         log.warn("[suggestions] afterCommit track failed: {}", ex.toString());
                     }
@@ -97,7 +100,7 @@ public class TodoServiceImpl implements TodoService {
             // Без активной TX (теоретически — если кто-то позовёт createTodo вне @Transactional):
             // tracking сразу же, в обычном потоке.
             try {
-                suggestionService.track(trackText, trackPrivate);
+                suggestionService.track(trackText, trackPrivate, trackUserId);
             } catch (RuntimeException ex) {
                 log.warn("[suggestions] inline track failed: {}", ex.toString());
             }

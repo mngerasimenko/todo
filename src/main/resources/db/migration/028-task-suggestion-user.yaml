@@ -1,0 +1,38 @@
+databaseChangeLog:
+  - changeSet:
+      id: 028-task-suggestion-user
+      author: mngerasimenko
+      comment: "Server R-6: distinct-учёт авторов по строке словаря (k-анонимность). После этого freq в task_suggestion = число РАЗНЫХ авторов, а не вхождений — юридическое условие режима 'обезличенных данных' (gate-чейн /ideas 2026-06-23). Автор хранится ПСЕВДОНИМОМ: user_hash = HMAC-SHA256(ключ, normalized + ':' + user_id) (CryptoService.blindIndex). Хеш per-text: один юзер по разным словам даёт разные хеши → восстановить 'слова юзера X' нельзя (152-ФЗ минимизация). FK на task_suggestion(text) ON DELETE CASCADE — cleanup чистит и эти строки. dbms не фильтруем: только переносимый DDL (createTable/addPrimaryKey/addForeignKeyConstraint), работает и на H2, и на Postgres."
+      preConditions:
+        - onFail: MARK_RAN
+        - and:
+            - tableExists:
+                tableName: task_suggestion
+            - not:
+                - tableExists:
+                    tableName: task_suggestion_user
+      changes:
+        - createTable:
+            tableName: task_suggestion_user
+            columns:
+              - column:
+                  name: text
+                  type: varchar(60)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: user_hash
+                  type: varchar(64)
+                  constraints:
+                    nullable: false
+        - addPrimaryKey:
+            tableName: task_suggestion_user
+            columnNames: text, user_hash
+            constraintName: pk_task_suggestion_user
+        - addForeignKeyConstraint:
+            baseTableName: task_suggestion_user
+            baseColumnNames: text
+            referencedTableName: task_suggestion
+            referencedColumnNames: text
+            constraintName: fk_tsu_suggestion
+            onDelete: CASCADE
