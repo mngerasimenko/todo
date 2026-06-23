@@ -171,7 +171,7 @@ class SuggestionServiceImplTest {
     // ===== track: happy path =====
 
     @Test
-    void track_HappyPath_UpsertsNormalizedTextWithOriginalDisplay() {
+    void track_HappyPath_UpsertsNormalizedTextAndLowercaseDisplay() {
         when(blacklist.contains(anyString())).thenReturn(false);
 
         service.track("Хлеб", false);
@@ -180,7 +180,8 @@ class SuggestionServiceImplTest {
         ArgumentCaptor<String> display = ArgumentCaptor.forClass(String.class);
         verify(repository).upsert(normalized.capture(), display.capture());
         assertThat(normalized.getValue()).isEqualTo("хлеб");
-        assertThat(display.getValue()).isEqualTo("Хлеб");
+        // text_display унифицирован в нижний регистр (= normalized).
+        assertThat(display.getValue()).isEqualTo("хлеб");
     }
 
     @Test
@@ -207,12 +208,12 @@ class SuggestionServiceImplTest {
     void track_NormalizeCollapsesNbsp() {
         when(blacklist.contains(anyString())).thenReturn(false);
 
-        // NBSP (U+00A0, частая вставка из iOS) — \s с (?U) его схлопывает, иначе
-        // «хлеб белый» и «хлеб белый» — две разные записи (panel-review iter3).
-        service.track("хлеб белый", false);
+        // NBSP (U+00A0, частая вставка из iOS) — regex \s с (?U) схлопывает его в
+        // обычный пробел. В коде вставляем через escape   (символ невидимый).
+        service.track("хлеб" + (char) 0xA0 + "белый", false);
 
-        // normalized — с обычным пробелом; display сохраняет оригинал (с NBSP).
-        verify(repository).upsert(eq("хлеб белый"), eq("хлеб белый"));
+        // И text, и display нормализованы (lowercase + обычный пробел).
+        verify(repository).upsert(eq("хлеб белый"), eq("хлеб белый"));
     }
 
     @Test

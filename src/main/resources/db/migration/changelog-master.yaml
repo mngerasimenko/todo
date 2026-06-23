@@ -49,3 +49,5 @@ databaseChangeLog:
       file: db/migration/025-task-suggestions.yaml
   - include:
       file: db/migration/026-seed-task-suggestions.yaml
+  - include:
+      file: db/migration/027-lowercase-task-suggestion-display.yaml
