@@ -18,21 +18,51 @@ import java.util.List;
 public interface TaskSuggestionRepository extends JpaRepository<TaskSuggestion, String> {
 
     /**
-     * Атомарный UPSERT записи в словарь. При первом появлении строки — INSERT с {@code freq=1};
-     * при повторе — {@code freq = freq + 1} и {@code last_used_at = NOW()}.
-     * {@code text_display} НЕ перезаписывается на конфликте, чтобы первое введённое
-     * пользователем оригинальное написание не подменялось на следующее.
+     * Шаг 1 distinct-учёта: гарантировать существование строки словаря БЕЗ инкремента частоты.
+     * При первом появлении — INSERT с {@code freq=0} (ещё ни одного distinct-автора не зачтено);
+     * при повторе — обновляем только {@code last_used_at} (freq не трогаем, им управляет
+     * {@link #incrementFreq}). {@code text_display} на конфликте НЕ перезаписывается, чтобы
+     * первое написание сохранялось.
+     * <p>
+     * Должен вызываться ДО {@link #addSuggestionUser}: FK {@code task_suggestion_user → task_suggestion(text)}
+     * требует существующей строки (обе в одной REQUIRES_NEW-транзакции).
      */
     @Modifying
     @Query(value = """
             INSERT INTO task_suggestion (text, text_display, freq, last_used_at, blocked)
-            VALUES (:text, :textDisplay, 1, NOW(), false)
+            VALUES (:text, :textDisplay, 0, NOW(), false)
             ON CONFLICT (text) DO UPDATE SET
-                freq = task_suggestion.freq + 1,
                 last_used_at = NOW()
             """, nativeQuery = true)
-    void upsert(@Param("text") String text,
-                @Param("textDisplay") String textDisplay);
+    void ensureSuggestion(@Param("text") String text,
+                          @Param("textDisplay") String textDisplay);
+
+    /**
+     * Шаг 2 distinct-учёта: отметить, что данный автор ввёл данную строку.
+     * Автор — псевдоним {@code userHash = HMAC(ключ, normalized + ':' + userId)} (per-text,
+     * необратим к user_id). {@code ON CONFLICT DO NOTHING} — повторный ввод тем же автором
+     * ничего не меняет. Возвращает 1, если это НОВЫЙ distinct-автор строки (строка реально
+     * вставлена), иначе 0 — по этому значению сервис решает, звать ли {@link #incrementFreq}.
+     * Так считаем именно РАЗНЫХ пользователей (k-анонимность), а не вхождения.
+     */
+    @Modifying
+    @Query(value = """
+            INSERT INTO task_suggestion_user (text, user_hash)
+            VALUES (:text, :userHash)
+            ON CONFLICT DO NOTHING
+            """, nativeQuery = true)
+    int addSuggestionUser(@Param("text") String text,
+                          @Param("userHash") String userHash);
+
+    /**
+     * Шаг 3 distinct-учёта: увеличить {@code freq} на 1. Вызывается сервисом ТОЛЬКО когда
+     * {@link #addSuggestionUser} вернул 1 (появился новый distinct-автор). {@code freq = freq + 1}
+     * атомарен (row lock), так что параллельные track разных юзеров считаются корректно.
+     */
+    @Modifying
+    @Query(value = "UPDATE task_suggestion SET freq = freq + 1 WHERE text = :text",
+            nativeQuery = true)
+    void incrementFreq(@Param("text") String text);
 
     /**
      * Топ-N подсказок по prefix, отсортированных по убыванию частоты,

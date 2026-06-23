@@ -9,6 +9,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import ru.mngerasimenko.todolist.crypto.CryptoService;
 import ru.mngerasimenko.todolist.dto.SuggestionResponse;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
@@ -47,18 +48,27 @@ class SuggestionServiceImplTest {
     @Mock
     private FeatureFlagStore flagStore;
 
+    @Mock
+    private CryptoService cryptoService;
+
     @InjectMocks
     private SuggestionServiceImpl service;
 
     private SuggestionProperties properties;
 
+    private static final long USER_ID = 42L;
+
     @BeforeEach
     void setUp() {
         properties = new SuggestionProperties();
         // Все дефолты используем как в production, кроме явных переопределений в тестах.
-        service = new SuggestionServiceImpl(repository, blacklist, properties, flagStore);
+        service = new SuggestionServiceImpl(repository, blacklist, properties, flagStore, cryptoService);
         // lenient — флаг проверяется только в track/suggest, в block/cacheKey не зовётся
         lenient().when(flagStore.isEnabled(FeatureFlag.SUGGESTIONS)).thenReturn(true);
+        // blindIndex зовётся только в happy-path track; детерминированный стаб даёт предсказуемый
+        // хеш-автор для проверки, что в HMAC уходит слово + userId (per-text псевдоним).
+        lenient().when(cryptoService.blindIndex(anyString()))
+                .thenAnswer(inv -> "hash::" + inv.getArgument(0));
     }
 
     // ===== track: фильтры =====
@@ -67,130 +77,152 @@ class SuggestionServiceImplTest {
     void track_FeatureFlagDisabled_DoesNothing() {
         when(flagStore.isEnabled(FeatureFlag.SUGGESTIONS)).thenReturn(false);
 
-        service.track("хлеб", false);
+        service.track("хлеб", false, USER_ID);
 
-        verify(repository, never()).upsert(anyString(), anyString());
+        verify(repository, never()).ensureSuggestion(anyString(), anyString());
     }
 
     @Test
-    void track_PrivateTodo_DoesNotUpsert() {
-        service.track("хлеб", true);
+    void track_PrivateTodo_DoesNotTrack() {
+        service.track("хлеб", true, USER_ID);
 
-        verify(repository, never()).upsert(anyString(), anyString());
+        verify(repository, never()).ensureSuggestion(anyString(), anyString());
     }
 
     @Test
     void track_NullText_DoesNothing() {
-        service.track(null, false);
+        service.track(null, false, USER_ID);
 
-        verify(repository, never()).upsert(anyString(), anyString());
+        verify(repository, never()).ensureSuggestion(anyString(), anyString());
+    }
+
+    @Test
+    void track_NullUserId_DoesNothing() {
+        // Без id автора нельзя сосчитать distinct-пользователей — skip.
+        service.track("хлеб", false, null);
+
+        verify(repository, never()).ensureSuggestion(anyString(), anyString());
     }
 
     @Test
     void track_BlankText_DoesNothing() {
-        service.track("   ", false);
+        service.track("   ", false, USER_ID);
 
-        verify(repository, never()).upsert(anyString(), anyString());
+        verify(repository, never()).ensureSuggestion(anyString(), anyString());
     }
 
     @Test
     void track_ShorterThanMinTrackLength_DoesNothing() {
         // В словарь кладём слова от 3 символов (minTrackLength=3) — 1-2-символьные пропускаем.
-        service.track("ок", false);
+        service.track("ок", false, USER_ID);
 
-        verify(repository, never()).upsert(anyString(), anyString());
+        verify(repository, never()).ensureSuggestion(anyString(), anyString());
     }
 
     @Test
     void track_ThreeChars_IsTracked() {
         when(blacklist.contains(anyString())).thenReturn(false);
 
-        service.track("чай", false); // ровно 3 символа — храним
+        service.track("чай", false, USER_ID); // ровно 3 символа — храним
 
-        verify(repository).upsert("чай", "чай");
+        verify(repository).ensureSuggestion("чай", "чай");
+        // автор уходит хешем; в HMAC — слово + ':' + userId (per-text псевдоним)
+        verify(repository).addSuggestionUser("чай", "hash::чай:42");
     }
 
     @Test
     void track_TooLong_DoesNothing() {
         properties.setMaxTextLength(10);
 
-        service.track("это очень длинное предложение", false);
+        service.track("это очень длинное предложение", false, USER_ID);
 
-        verify(repository, never()).upsert(anyString(), anyString());
+        verify(repository, never()).ensureSuggestion(anyString(), anyString());
     }
 
     @Test
     void track_LooksLikeEmail_DoesNothing() {
-        service.track("user@mail.ru", false);
+        service.track("user@mail.ru", false, USER_ID);
         // расширенный EMAIL_LIKE: спецсимволы +/-/. перед @
-        service.track("me+tag@example.com", false);
-        service.track("user-name@x.y", false);
+        service.track("me+tag@example.com", false, USER_ID);
+        service.track("user-name@x.y", false, USER_ID);
 
-        verify(repository, never()).upsert(anyString(), anyString());
+        verify(repository, never()).ensureSuggestion(anyString(), anyString());
     }
 
     @Test
     void track_HasTwoOrMoreDigits_DoesNothing() {
         // ≥2 подряд = вероятный номер / адрес / сумма (ужесточено с 3 в panel-review)
-        service.track("8927", false);
-        service.track("Купить 12 чего-то", false);
+        service.track("8927", false, USER_ID);
+        service.track("Купить 12 чего-то", false, USER_ID);
 
-        verify(repository, never()).upsert(anyString(), anyString());
+        verify(repository, never()).ensureSuggestion(anyString(), anyString());
     }
 
     @Test
     void track_HasUnicodeDigits_DoesNothing() {
         // Не-ASCII цифры (полноширинные / арабско-индийские) — тоже номер/адрес.
         // \d с UNICODE_CHARACTER_CLASS ловит \p{Nd} (panel-review iter3).
-        service.track("Ленина １２", false);   // full-width
-        service.track("Ленина ١٢", false);    // arabic-indic
+        service.track("Ленина １２", false, USER_ID);   // full-width
+        service.track("Ленина ١٢", false, USER_ID);    // arabic-indic
 
-        verify(repository, never()).upsert(anyString(), anyString());
+        verify(repository, never()).ensureSuggestion(anyString(), anyString());
     }
 
     @Test
     void track_NoLetters_DoesNothing() {
         // emoji-only / цифры-only / пунктуация-only — мусор в словаре.
         // Letter-check срабатывает до blacklist'а, поэтому blacklist даже не зовём.
-        service.track("🍞🥖🥐", false);
-        service.track("???", false);
-        service.track("...", false);
+        service.track("🍞🥖🥐", false, USER_ID);
+        service.track("???", false, USER_ID);
+        service.track("...", false, USER_ID);
 
-        verify(repository, never()).upsert(anyString(), anyString());
+        verify(repository, never()).ensureSuggestion(anyString(), anyString());
     }
 
     @Test
     void track_BlacklistHit_DoesNothing() {
         when(blacklist.contains("ругательство")).thenReturn(true);
 
-        service.track("ругательство", false);
+        service.track("ругательство", false, USER_ID);
 
-        verify(repository, never()).upsert(anyString(), anyString());
+        verify(repository, never()).ensureSuggestion(anyString(), anyString());
     }
 
-    // ===== track: happy path =====
+    // ===== track: happy path (distinct-flow) =====
 
     @Test
-    void track_HappyPath_UpsertsNormalizedTextAndLowercaseDisplay() {
+    void track_HappyPath_NewAuthor_EnsuresAddsUserAndIncrementsFreq() {
         when(blacklist.contains(anyString())).thenReturn(false);
+        when(repository.addSuggestionUser(anyString(), anyString())).thenReturn(1); // новый distinct-автор
 
-        service.track("Хлеб", false);
+        service.track("Хлеб", false, USER_ID);
 
-        ArgumentCaptor<String> normalized = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<String> display = ArgumentCaptor.forClass(String.class);
-        verify(repository).upsert(normalized.capture(), display.capture());
-        assertThat(normalized.getValue()).isEqualTo("хлеб");
-        // text_display унифицирован в нижний регистр (= normalized).
-        assertThat(display.getValue()).isEqualTo("хлеб");
+        // text/display нормализованы в нижний регистр (= normalized)
+        verify(repository).ensureSuggestion("хлеб", "хлеб");
+        verify(repository).addSuggestionUser("хлеб", "hash::хлеб:42"); // автор — хеш(слово+userId)
+        verify(repository).incrementFreq("хлеб"); // автор новый → freq++
+    }
+
+    @Test
+    void track_DuplicateAuthorForSameText_DoesNotIncrementFreq() {
+        when(blacklist.contains(anyString())).thenReturn(false);
+        when(repository.addSuggestionUser(anyString(), anyString())).thenReturn(0); // тот же автор — дубль
+
+        service.track("хлеб", false, USER_ID);
+
+        verify(repository).ensureSuggestion("хлеб", "хлеб");
+        verify(repository).addSuggestionUser("хлеб", "hash::хлеб:42");
+        verify(repository, never()).incrementFreq(anyString()); // distinct-счётчик не растёт
     }
 
     @Test
     void track_TrimWhitespace() {
         when(blacklist.contains(anyString())).thenReturn(false);
 
-        service.track("  молоко  ", false);
+        service.track("  молоко  ", false, USER_ID);
 
-        verify(repository).upsert(eq("молоко"), eq("молоко"));
+        verify(repository).ensureSuggestion(eq("молоко"), eq("молоко"));
+        verify(repository).addSuggestionUser(eq("молоко"), eq("hash::молоко:42"));
     }
 
     @Test
@@ -199,9 +231,9 @@ class SuggestionServiceImplTest {
 
         // «х л е б» с табуляцией / множественными пробелами нормализуется к одному
         // пробелу — дедуп ↔ симметрия с suggest.
-        service.track("х л е б", false);
+        service.track("х л е б", false, USER_ID);
 
-        verify(repository).upsert(eq("х л е б"), eq("х л е б"));
+        verify(repository).ensureSuggestion(eq("х л е б"), eq("х л е б"));
     }
 
     @Test
@@ -209,21 +241,21 @@ class SuggestionServiceImplTest {
         when(blacklist.contains(anyString())).thenReturn(false);
 
         // NBSP (U+00A0, частая вставка из iOS) — regex \s с (?U) схлопывает его в
-        // обычный пробел. В коде вставляем через escape   (символ невидимый).
-        service.track("хлеб" + (char) 0xA0 + "белый", false);
+        // обычный пробел. В коде вставляем через escape (символ невидимый).
+        service.track("хлеб" + (char) 0xA0 + "белый", false, USER_ID);
 
         // И text, и display нормализованы (lowercase + обычный пробел).
-        verify(repository).upsert(eq("хлеб белый"), eq("хлеб белый"));
+        verify(repository).ensureSuggestion(eq("хлеб белый"), eq("хлеб белый"));
     }
 
     @Test
     void track_RepositoryException_DoesNotBubbleUp() {
         when(blacklist.contains(anyString())).thenReturn(false);
         org.mockito.Mockito.doThrow(new RuntimeException("DB down"))
-                .when(repository).upsert(anyString(), anyString());
+                .when(repository).ensureSuggestion(anyString(), anyString());
 
         // НЕ должно бросить наружу — tracking не критичен
-        service.track("молоко", false);
+        service.track("молоко", false, USER_ID);
     }
 
     // ===== suggest =====

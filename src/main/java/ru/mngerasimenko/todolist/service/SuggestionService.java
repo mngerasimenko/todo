@@ -18,7 +18,8 @@ public interface SuggestionService {
      * <p>
      * Применяет цепочку фильтров: приватная задача → skip, пустая/короткая/слишком длинная →
      * skip, выглядит как email/телефон → skip, содержит мат → skip. Если фильтры пройдены —
-     * атомарный UPSERT в {@code task_suggestion} с {@code freq = freq + 1}.
+     * учитываем строку с distinct-семантикой: {@code freq} = число РАЗНЫХ пользователей,
+     * введших её. Повторный ввод тем же пользователем частоту не повышает (k-анонимность).
      * <p>
      * Метод никогда не бросает исключение наружу: ошибка сохранения логируется и
      * проглатывается (tracking — не критичный путь для пользователя). Это важно, потому что
@@ -27,8 +28,9 @@ public interface SuggestionService {
      *
      * @param rawText сырой текст задачи (как ввёл пользователь, без обработки)
      * @param isPrivate true, если задача создана как приватная (не tracking)
+     * @param userId id автора задачи — для distinct-учёта; при {@code null} tracking пропускается
      */
-    void track(String rawText, boolean isPrivate);
+    void track(String rawText, boolean isPrivate, Long userId);
 
     /**
      * Топ-N подсказок по prefix. Возвращает пустой список если префикс короче

@@ -6,25 +6,37 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import ru.mngerasimenko.todolist.AbstractIntegrationTest;
 import ru.mngerasimenko.todolist.model.TaskSuggestion;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Integration-тест для миграции 025 + native UPSERT в {@link TaskSuggestionRepository}.
+ * Integration-тест для миграций 025/028 + distinct-учёта в {@link TaskSuggestionRepository}.
  * <p>
- * Особо проверяет, что:
+ * {@code @Modifying}-методы репозитория требуют транзакцию (в проде её даёт вызывающий —
+ * track {@code REQUIRES_NEW} / scheduler / service.block). Здесь каждую запись оборачиваем в
+ * {@link TransactionTemplate} (своя коммит-транзакция на операцию, как REQUIRES_NEW сервиса),
+ * а чтения (findById/findTopByPrefix self-transactional, jdbcTemplate auto-commit) идут после
+ * коммита → всегда свежие, без stale L1-cache.
+ * <p>
+ * Автор хранится псевдонимом (hash) — здесь используются синтетические хеши ("u1"/"u2"):
+ * репозиторий проверяет SQL-механику distinct (одинаковый хеш = тот же автор), само HMAC —
+ * на уровне сервиса. Особо проверяет, что:
  * <ul>
- *   <li>таблица создалась с корректной схемой и default'ами (freq=1, last_used_at=NOW, blocked=false);</li>
- *   <li>UPSERT при повторном вызове увеличивает freq на 1 и обновляет last_used_at;</li>
- *   <li>UPSERT НЕ перезаписывает text_display (первое написание остаётся);</li>
+ *   <li>ensureSuggestion создаёт строку с freq=0 и НЕ перезаписывает text_display на конфликте;</li>
+ *   <li>addSuggestionUser возвращает 1 для нового автора и 0 для повторного (ON CONFLICT DO NOTHING);</li>
+ *   <li>distinct-flow даёт freq = число РАЗНЫХ авторов = COUNT строк-авторов;</li>
+ *   <li>порог: 3 разных автора всплывают на minFreq=3, а 2 — нет (end-to-end gate);</li>
  *   <li>findTopByPrefix фильтрует blocked=true и freq &lt; minFreq, сортирует по freq DESC;</li>
  *   <li>block переводит запись в blocked=true (повторный — no-op);</li>
- *   <li>deleteOlderThanDays чистит только записи старше cutoff.</li>
+ *   <li>deleteOlderThanDays чистит только старые записи И каскадит в task_suggestion_user (FK).</li>
  * </ul>
  */
 @Tag("integration")
@@ -36,35 +48,118 @@ class TaskSuggestionRepositoryIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private PlatformTransactionManager txManager;
+
+    private TransactionTemplate tx;
+
     @BeforeEach
     void cleanup() {
+        tx = new TransactionTemplate(txManager);
+        // FK task_suggestion_user → task_suggestion(text) ON DELETE CASCADE: удаление родителя
+        // чистит и дочерние строки, но чистим явно для независимости от порядка.
+        jdbcTemplate.execute("DELETE FROM task_suggestion_user");
         jdbcTemplate.execute("DELETE FROM task_suggestion");
     }
 
+    /** Выполнить запись в собственной коммит-транзакции (как REQUIRES_NEW сервиса). */
+    private void inTx(Runnable r) {
+        tx.executeWithoutResult(status -> r.run());
+    }
+
+    /** То же, но с возвратом значения (для @Modifying-методов, отдающих rows-affected). */
+    private <T> T inTxGet(Supplier<T> s) {
+        return tx.execute(status -> s.get());
+    }
+
+    /** Повторяет distinct-flow сервиса в одной транзакции: ensure → addUser → (если новый) increment. */
+    private void trackOnce(String text, String display, String userHash) {
+        inTx(() -> {
+            repository.ensureSuggestion(text, display);
+            if (repository.addSuggestionUser(text, userHash) > 0) {
+                repository.incrementFreq(text);
+            }
+        });
+    }
+
+    private long freqOf(String text) {
+        return repository.findById(text).orElseThrow().getFreq();
+    }
+
+    private int authorCountOf(String text) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM task_suggestion_user WHERE text = ?", Integer.class, text);
+    }
+
     @Test
-    void upsert_NewText_InsertsWithFreq1AndOriginalDisplay() {
-        repository.upsert("молоко", "Молоко");
+    void ensureSuggestion_NewText_InsertsWithFreq0AndOriginalDisplay() {
+        inTx(() -> repository.ensureSuggestion("молоко", "Молоко"));
 
         List<TaskSuggestion> rows = repository.findAll();
         assertThat(rows).hasSize(1);
         TaskSuggestion s = rows.get(0);
         assertThat(s.getText()).isEqualTo("молоко");
         assertThat(s.getTextDisplay()).isEqualTo("Молоко");
-        assertThat(s.getFreq()).isEqualTo(1);
+        assertThat(s.getFreq()).isZero(); // ещё ни одного distinct-автора
         assertThat(s.getLastUsedAt()).isNotNull();
         assertThat(s.isBlocked()).isFalse();
     }
 
     @Test
-    void upsert_ExistingText_IncrementsFreqAndKeepsOriginalDisplay() {
-        repository.upsert("молоко", "Молоко");
-        repository.upsert("молоко", "МОЛОКО");
-        repository.upsert("молоко", "молоко");
+    void ensureSuggestion_ExistingText_KeepsFreqAndOriginalDisplay() {
+        inTx(() -> {
+            repository.ensureSuggestion("молоко", "Молоко");
+            repository.incrementFreq("молоко"); // freq=1
+        });
+        inTx(() -> repository.ensureSuggestion("молоко", "МОЛОКО")); // повтор — не трогает freq и display
 
         TaskSuggestion s = repository.findById("молоко").orElseThrow();
-        assertThat(s.getFreq()).isEqualTo(3);
-        // text_display не перезаписывается на конфликте
+        assertThat(s.getFreq()).isEqualTo(1);
         assertThat(s.getTextDisplay()).isEqualTo("Молоко");
+    }
+
+    @Test
+    void addSuggestionUser_NewAuthorReturnsOne_DuplicateReturnsZero() {
+        inTx(() -> repository.ensureSuggestion("молоко", "Молоко"));
+
+        assertThat(inTxGet(() -> repository.addSuggestionUser("молоко", "u1"))).isEqualTo(1); // новый автор
+        assertThat(inTxGet(() -> repository.addSuggestionUser("молоко", "u1"))).isZero();      // тот же — дубль
+        assertThat(inTxGet(() -> repository.addSuggestionUser("молоко", "u2"))).isEqualTo(1); // другой автор
+    }
+
+    @Test
+    void distinctFlow_FreqEqualsDistinctAuthorCount_NotOccurrences() {
+        trackOnce("молоко", "Молоко", "u1");
+        trackOnce("молоко", "Молоко", "u1"); // тот же автор повторно — freq не растёт
+        assertThat(freqOf("молоко")).isEqualTo(1);
+        assertThat(authorCountOf("молоко")).isEqualTo(1); // freq == число строк-авторов
+
+        trackOnce("молоко", "Молоко", "u2");
+        assertThat(freqOf("молоко")).isEqualTo(2);
+
+        trackOnce("молоко", "Молоко", "u2"); // повтор — без изменений
+        trackOnce("молоко", "Молоко", "u3");
+        assertThat(freqOf("молоко")).isEqualTo(3);
+        assertThat(authorCountOf("молоко")).isEqualTo(3); // инвариант держится
+
+        // text_display сохраняется от первого вызова
+        assertThat(repository.findById("молоко").orElseThrow().getTextDisplay()).isEqualTo("Молоко");
+    }
+
+    @Test
+    void gate_ThreeDistinctAuthors_SurfaceAtThreshold3_NotAt2() {
+        // end-to-end доказательство юр-условия: строку видно ТОЛЬКО при >=3 разных авторах
+        trackOnce("кефир", "кефир", "u1");
+        trackOnce("кефир", "кефир", "u1"); // тот же автор дважды — всё ещё 1 distinct
+        trackOnce("кефир", "кефир", "u2");
+        assertThat(repository.findTopByPrefix("кеф%", 3L, PageRequest.of(0, 5)))
+                .as("2 разных автора < порога 3 — не всплывает").isEmpty();
+
+        trackOnce("кефир", "кефир", "u3"); // 3-й distinct-автор
+        assertThat(repository.findTopByPrefix("кеф%", 3L, PageRequest.of(0, 5)))
+                .extracting(TaskSuggestion::getText).containsExactly("кефир");
+        assertThat(freqOf("кефир")).isEqualTo(3);
+        assertThat(authorCountOf("кефир")).isEqualTo(3);
     }
 
     @Test
@@ -114,9 +209,9 @@ class TaskSuggestionRepositoryIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void block_ExistingText_ReturnsOneAndSetsFlag() {
-        repository.upsert("молоко", "Молоко");
+        inTx(() -> repository.ensureSuggestion("молоко", "Молоко"));
 
-        int affected = repository.block("молоко");
+        int affected = inTxGet(() -> repository.block("молоко"));
 
         assertThat(affected).isEqualTo(1);
         assertThat(repository.findById("молоко").orElseThrow().isBlocked()).isTrue();
@@ -124,7 +219,7 @@ class TaskSuggestionRepositoryIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void block_NonExistentText_ReturnsZero() {
-        int affected = repository.block("несуществует");
+        int affected = inTxGet(() -> repository.block("несуществует"));
 
         assertThat(affected).isEqualTo(0);
     }
@@ -141,10 +236,26 @@ class TaskSuggestionRepositoryIntegrationTest extends AbstractIntegrationTest {
         jdbcTemplate.update("INSERT INTO task_suggestion(text, text_display, freq, last_used_at, blocked) " +
                 "VALUES (?, ?, ?, ?, ?)", "old", "old", 1, LocalDateTime.now().minusDays(400), false);
 
-        int deleted = repository.deleteOlderThanDays(365);
+        int deleted = inTxGet(() -> repository.deleteOlderThanDays(365));
 
         assertThat(deleted).isEqualTo(1);
         assertThat(repository.findAll()).extracting(TaskSuggestion::getText)
                 .containsExactlyInAnyOrder("fresh", "medium");
+    }
+
+    @Test
+    void deleteOlderThanDays_CascadesToTaskSuggestionUser_ButKeepsFreshChildren() {
+        // строка-старьё с авторами, которую удалит cleanup
+        trackOnce("старьё", "старьё", "u1");
+        inTx(() -> repository.addSuggestionUser("старьё", "u2"));
+        jdbcTemplate.update("UPDATE task_suggestion SET last_used_at = ? WHERE text = ?",
+                LocalDateTime.now().minusDays(400), "старьё");
+        // свежая строка с автором — НЕ должна пострадать (CASCADE точечный, не глобальный)
+        trackOnce("свежак", "свежак", "u1");
+
+        inTx(() -> repository.deleteOlderThanDays(365));
+
+        assertThat(authorCountOf("старьё")).isZero();  // FK ON DELETE CASCADE убрал авторов
+        assertThat(authorCountOf("свежак")).isEqualTo(1); // чужие авторы целы
     }
 }

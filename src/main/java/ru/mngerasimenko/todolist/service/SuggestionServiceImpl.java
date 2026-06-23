@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import ru.mngerasimenko.todolist.config.RedisCacheConfig;
+import ru.mngerasimenko.todolist.crypto.CryptoService;
 import ru.mngerasimenko.todolist.dto.SuggestionResponse;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
@@ -32,8 +33,9 @@ import java.util.regex.Pattern;
  *   <li>Нет ни одной буквы (emoji-only / цифры-only / пунктуация-only) → skip</li>
  *   <li>{@link BlacklistService}-hit → skip</li>
  * </ol>
- * Если все фильтры пройдены — атомарный UPSERT через
- * {@link TaskSuggestionRepository#upsert} на нормализованной форме.
+ * Если все фильтры пройдены — distinct-учёт через
+ * {@link TaskSuggestionRepository#ensureSuggestion} + {@link TaskSuggestionRepository#addSuggestionUser}
+ * + {@link TaskSuggestionRepository#incrementFreq}: {@code freq} = число РАЗНЫХ авторов строки.
  */
 @Slf4j
 @Service
@@ -63,10 +65,11 @@ public class SuggestionServiceImpl implements SuggestionService {
     private final BlacklistService blacklist;
     private final SuggestionProperties properties;
     private final FeatureFlagStore flagStore;
+    private final CryptoService cryptoService;
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void track(String rawText, boolean isPrivate) {
+    public void track(String rawText, boolean isPrivate, Long userId) {
         if (!flagStore.isEnabled(FeatureFlag.SUGGESTIONS)) {
             return;
         }
@@ -74,6 +77,11 @@ public class SuggestionServiceImpl implements SuggestionService {
             return;
         }
         if (rawText == null) {
+            return;
+        }
+        // userId обязателен для distinct-учёта (k-анонимность). Без автора нельзя сосчитать
+        // РАЗНЫХ пользователей, поэтому — skip (в норме хук всегда передаёт id автора задачи).
+        if (userId == null) {
             return;
         }
         String trimmed = rawText.trim();
@@ -101,9 +109,17 @@ public class SuggestionServiceImpl implements SuggestionService {
             return;
         }
         try {
-            // text_display унифицирован в нижний регистр (= normalized): пользователи
-            // в основном пишут продукты с маленькой (owner-решение 2026-06-22).
-            repository.upsert(normalized, normalized);
+            // Distinct-учёт: text_display унифицирован в нижний регистр (= normalized) —
+            // пользователи в основном пишут продукты с маленькой (owner-решение 2026-06-22).
+            // (1) гарантируем строку (freq не трогаем), (2) отмечаем автора ПСЕВДОНИМОМ,
+            // (3) если автор новый для строки — повышаем freq. Так freq = число РАЗНЫХ авторов.
+            // userHash = HMAC(ключ, слово + ':' + userId): per-text псевдоним, необратим к user_id;
+            // один юзер по разным словам даёт разные хеши → его слова не связать (152-ФЗ минимизация).
+            repository.ensureSuggestion(normalized, normalized);
+            String userHash = cryptoService.blindIndex(normalized + ":" + userId);
+            if (repository.addSuggestionUser(normalized, userHash) > 0) {
+                repository.incrementFreq(normalized);
+            }
         } catch (RuntimeException ex) {
             // Tracking не должен ломать создание задачи — это nice-to-have. Логируем и проглатываем.
             log.warn("[suggestions] не удалось обновить словарь, length={}: {}",
