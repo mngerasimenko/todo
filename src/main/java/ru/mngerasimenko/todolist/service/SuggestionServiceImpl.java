@@ -18,21 +18,12 @@ import ru.mngerasimenko.todolist.repository.TaskSuggestionRepository;
 import ru.mngerasimenko.todolist.settings.SuggestionProperties;
 
 import java.util.List;
-import java.util.Locale;
-import java.util.regex.Pattern;
+import java.util.Optional;
 
 /**
  * Реализация {@link SuggestionService}.
  * <p>
- * Track-фильтры (выбраны в плане R-6, 2026-06-05; ужесточены 2026-06-21 после panel-review):
- * <ol>
- *   <li>Приватная задача → skip (не tracking приватные)</li>
- *   <li>Пустая / короче {@code min-track-length} (храним слова от 3 символов) / длиннее {@code max-text-length} → skip</li>
- *   <li>Похоже на email → skip (символ {@code @} с буквой/цифрой/{@code +_-.} до и после)</li>
- *   <li>≥{@code 2} цифры подряд → skip (номер телефона / адрес / сумма) — ужесточено с 3</li>
- *   <li>Нет ни одной буквы (emoji-only / цифры-only / пунктуация-only) → skip</li>
- *   <li>{@link BlacklistService}-hit → skip</li>
- * </ol>
+ * Нормализация и track-фильтры вынесены в {@link SuggestionTextFilter} (общие с reseed 029).
  * Если все фильтры пройдены — distinct-учёт через
  * {@link TaskSuggestionRepository#ensureSuggestion} + {@link TaskSuggestionRepository#addSuggestionUser}
  * + {@link TaskSuggestionRepository#incrementFreq}: {@code freq} = число РАЗНЫХ авторов строки.
@@ -41,15 +32,6 @@ import java.util.regex.Pattern;
 @Service
 @RequiredArgsConstructor
 public class SuggestionServiceImpl implements SuggestionService {
-
-    // EMAIL_LIKE: учитываем спецсимволы '+', '-', '.', '_' перед '@' — иначе
-    // "me+tag@example.com" и "user-name@x.y" проходят как обычные подсказки.
-    private static final Pattern EMAIL_LIKE = Pattern.compile(".*[\\p{L}\\p{N}._+\\-]@[\\p{L}\\p{N}.\\-].*");
-    // 2 цифры подряд — порог достаточно консервативный, чтобы ловить «ул. Ленина 5»
-    // и «42 76 12» (после нормализации пробелов). UNICODE_CHARACTER_CLASS: \d ловит и
-    // не-ASCII цифры (арабско-индийские ١٢, полноширинные １２), иначе ПД-номер такими
-    // цифрами обходит фильтр (panel-review iter3, 2026-06-22).
-    private static final Pattern PHONE_LIKE = Pattern.compile(".*\\d{2,}.*", Pattern.UNICODE_CHARACTER_CLASS);
 
     /**
      * SpEL-условие @Cacheable: кеш «suggestions» работает, только если разрешён
@@ -62,7 +44,7 @@ public class SuggestionServiceImpl implements SuggestionService {
                     + " and @featureFlagStore.isEnabled(T(ru.mngerasimenko.todolist.featureflags.FeatureFlag).SUGGESTIONS)";
 
     private final TaskSuggestionRepository repository;
-    private final BlacklistService blacklist;
+    private final SuggestionTextFilter filter;
     private final SuggestionProperties properties;
     private final FeatureFlagStore flagStore;
     private final CryptoService cryptoService;
@@ -73,41 +55,16 @@ public class SuggestionServiceImpl implements SuggestionService {
         if (!flagStore.isEnabled(FeatureFlag.SUGGESTIONS)) {
             return;
         }
-        if (isPrivate) {
-            return;
-        }
-        if (rawText == null) {
-            return;
-        }
         // userId обязателен для distinct-учёта (k-анонимность). Без автора нельзя сосчитать
         // РАЗНЫХ пользователей, поэтому — skip (в норме хук всегда передаёт id автора задачи).
         if (userId == null) {
             return;
         }
-        String trimmed = rawText.trim();
-        if (trimmed.isEmpty()) {
+        Optional<String> trackable = filter.normalizeIfTrackable(rawText, isPrivate);
+        if (trackable.isEmpty()) {
             return;
         }
-        if (trimmed.length() < properties.getMinTrackLength()
-                || trimmed.length() > properties.getMaxTextLength()) {
-            return;
-        }
-        if (EMAIL_LIKE.matcher(trimmed).matches() || PHONE_LIKE.matcher(trimmed).matches()) {
-            return;
-        }
-        // Emoji-only / пунктуация-only / цифры-only: codepoint-aware проверка,
-        // не ломает кириллицу / латиницу / mixed-scripts. Защищает от «🍞🥖🥐»-мусора в БД.
-        if (trimmed.codePoints().noneMatch(Character::isLetter)) {
-            return;
-        }
-        if (blacklist.contains(trimmed)) {
-            log.debug("[suggestions] blacklist hit, skip tracking for length={}", trimmed.length());
-            return;
-        }
-        String normalized = normalize(trimmed);
-        if (normalized.isEmpty() || normalized.length() > properties.getMaxTextLength()) {
-            return;
-        }
+        String normalized = trackable.get();
         try {
             // Distinct-учёт: text_display унифицирован в нижний регистр (= normalized) —
             // пользователи в основном пишут продукты с маленькой (owner-решение 2026-06-22).
@@ -123,7 +80,7 @@ public class SuggestionServiceImpl implements SuggestionService {
         } catch (RuntimeException ex) {
             // Tracking не должен ломать создание задачи — это nice-to-have. Логируем и проглатываем.
             log.warn("[suggestions] не удалось обновить словарь, length={}: {}",
-                    trimmed.length(), ex.toString());
+                    normalized.length(), ex.toString());
         }
     }
 
@@ -141,7 +98,7 @@ public class SuggestionServiceImpl implements SuggestionService {
         if (rawPrefix == null) {
             return List.of();
         }
-        String normalized = normalize(rawPrefix.trim());
+        String normalized = filter.normalize(rawPrefix.trim());
         if (normalized.length() < properties.getMinPrefixLength()) {
             return List.of();
         }
@@ -171,7 +128,7 @@ public class SuggestionServiceImpl implements SuggestionService {
         if (rawText == null) {
             return false;
         }
-        String normalized = normalize(rawText.trim());
+        String normalized = filter.normalize(rawText.trim());
         if (normalized.isEmpty()) {
             return false;
         }
@@ -189,23 +146,12 @@ public class SuggestionServiceImpl implements SuggestionService {
      * «Хле» и «хле» делили один кеш-ключ.
      */
     public String cacheKey(String rawPrefix, int limit) {
-        String normalized = rawPrefix == null ? "" : normalize(rawPrefix.trim());
+        String normalized = rawPrefix == null ? "" : filter.normalize(rawPrefix.trim());
         int safeLimit = Math.min(
                 Math.max(limit, 1),
                 properties.getMaxLimit()
         );
         return normalized + ":" + safeLimit;
-    }
-
-    /**
-     * Нормализация: trim, схлопывание любых whitespace-последовательностей в один пробел,
-     * нижний регистр по {@link Locale#ROOT}. Схлопывание пробелов важно для дедупа
-     * («хлеб» и «х л е б» — одна запись) и симметрии track ↔ suggest.
-     */
-    private String normalize(String text) {
-        // (?U) — \s ловит Unicode-пробелы (NBSP U+00A0, narrow-NBSP, ideographic space),
-        // иначе вставка из iOS с NBSP даёт дубликат записи (panel-review iter3, 2026-06-22).
-        return text.replaceAll("(?U)\\s+", " ").trim().toLowerCase(Locale.ROOT);
     }
 
     /**

@@ -106,4 +106,58 @@ public interface TaskSuggestionRepository extends JpaRepository<TaskSuggestion, 
             WHERE last_used_at < NOW() - make_interval(days => :cutoffDays)
             """, nativeQuery = true)
     int deleteOlderThanDays(@Param("cutoffDays") int cutoffDays);
+
+    // ===== Reseed (seed 029): ре-агрегация distinct из прод-данных =====
+
+    /**
+     * Reseed-шаг: число НЕ заблокированных записей (для отчёта — сколько будет удалено
+     * перед перестроением). Заблокированные admin'ом сохраняются и в счёт не идут.
+     */
+    @Query("SELECT COUNT(s) FROM TaskSuggestion s WHERE s.blocked = false")
+    long countNonBlocked();
+
+    /**
+     * Reseed-шаг: нормализованные тексты всех заблокированных admin'ом записей.
+     * Reseed их НЕ трогает (blocked сохраняется, строки не перестраиваются).
+     */
+    @Query("SELECT s.text FROM TaskSuggestion s WHERE s.blocked = true")
+    List<String> findBlockedTexts();
+
+    /**
+     * Reseed-шаг 1: удалить все НЕ заблокированные записи перед перестроением.
+     * FK {@code task_suggestion_user → task_suggestion(text) ON DELETE CASCADE} автоматически
+     * чистит привязанных авторов. Заблокированные admin'ом строки (+ их авторы) остаются.
+     * Выполняется в одной транзакции с reseed-вставками → нет окна пустого словаря для readers.
+     */
+    @Modifying
+    @Query(value = "DELETE FROM task_suggestion WHERE blocked = false", nativeQuery = true)
+    int deleteAllNonBlocked();
+
+    /**
+     * Reseed-шаг 2: записать строку словаря с ЯВНЫМ distinct-счётчиком {@code freq}
+     * (= число разных авторов из агрегации, либо editorial-floor). После {@link #deleteAllNonBlocked}
+     * конфликт возможен только с заблокированной строкой — но reseed их пропускает в коде,
+     * поэтому {@code ON CONFLICT} здесь лишь страховка идемпотентности (не понижает freq повторного прогона).
+     */
+    @Modifying
+    @Query(value = """
+            INSERT INTO task_suggestion (text, text_display, freq, last_used_at, blocked)
+            VALUES (:text, :textDisplay, :freq, NOW(), false)
+            ON CONFLICT (text) DO UPDATE SET
+                freq = EXCLUDED.freq,
+                text_display = EXCLUDED.text_display,
+                last_used_at = NOW()
+            """, nativeQuery = true)
+    void insertReseed(@Param("text") String text,
+                      @Param("textDisplay") String textDisplay,
+                      @Param("freq") long freq);
+
+    /**
+     * Reseed-шаг 0: попытаться взять транзакционный advisory-lock (сериализует прогоны reseed).
+     * Возвращает {@code true}, если лок взят; {@code false}, если его уже держит другая транзакция
+     * (значит reseed уже выполняется). Лок автоматически освобождается при commit/rollback —
+     * поэтому вызывается ТОЛЬКО внутри {@code @Transactional}-метода reseed.
+     */
+    @Query(value = "SELECT pg_try_advisory_xact_lock(:key)", nativeQuery = true)
+    boolean tryReseedAdvisoryLock(@Param("key") long key);
 }

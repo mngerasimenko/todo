@@ -17,7 +17,9 @@ import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.featureflags.FlagSource;
 import ru.mngerasimenko.todolist.security.ApiSecurityConfig;
 import ru.mngerasimenko.todolist.security.SuperAdminGuard;
+import ru.mngerasimenko.todolist.dto.admin.SuggestionReseedReport;
 import ru.mngerasimenko.todolist.service.AdminService;
+import ru.mngerasimenko.todolist.service.SuggestionReseedService;
 import ru.mngerasimenko.todolist.service.SuggestionService;
 
 import java.util.EnumMap;
@@ -57,6 +59,9 @@ class AdminControllerTest {
 
     @MockitoBean
     private SuggestionService suggestionService;
+
+    @MockitoBean
+    private SuggestionReseedService suggestionReseedService;
 
     @BeforeEach
     void setUp() {
@@ -262,5 +267,69 @@ class AdminControllerTest {
                 .andExpect(jsonPath("$.message").value("Suggestion not found in dictionary"));
 
         verify(suggestionService).block("несуществует");
+    }
+
+    // ===== Suggestion reseed (029) =====
+
+    @Test
+    void reseedSuggestions_withoutAuth_Returns401() throws Exception {
+        mockMvc.perform(post("/api/admin/suggestions/reseed"))
+                .andExpect(status().isUnauthorized());
+
+        verify(suggestionReseedService, never()).reseed(org.mockito.ArgumentMatchers.anyBoolean());
+    }
+
+    @Test
+    @WithMockUser(username = "regular@mail.ru")
+    void reseedSuggestions_regularUser_Returns404() throws Exception {
+        mockMvc.perform(post("/api/admin/suggestions/reseed"))
+                .andExpect(status().isNotFound());
+
+        verify(suggestionReseedService, never()).reseed(org.mockito.ArgumentMatchers.anyBoolean());
+    }
+
+    @Test
+    @WithMockUser(username = ADMIN_EMAIL)
+    void reseedSuggestions_superAdmin_DefaultsToDryRun_Returns200WithReport() throws Exception {
+        when(suggestionReseedService.reseed(true)).thenReturn(
+                SuggestionReseedReport.builder()
+                        .dryRun(true)
+                        .productsKept(5)
+                        .contributorRowsWritten(20)
+                        .editorialVerbsFloored(22)
+                        .nonBlockedDeleted(40)
+                        .minFreqApplied(3)
+                        .topSample(List.of())
+                        .build());
+
+        mockMvc.perform(post("/api/admin/suggestions/reseed"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dry_run").value(true))
+                .andExpect(jsonPath("$.products_kept").value(5));
+
+        // дефолт — dryRun=true (сначала смотрим, потом применяем)
+        verify(suggestionReseedService).reseed(true);
+    }
+
+    @Test
+    @WithMockUser(username = ADMIN_EMAIL)
+    void reseedSuggestions_dryRunFalse_AppliesAndReturnsReport() throws Exception {
+        when(suggestionReseedService.reseed(false)).thenReturn(
+                SuggestionReseedReport.builder()
+                        .dryRun(false)
+                        .productsKept(5)
+                        .contributorRowsWritten(20)
+                        .editorialVerbsFloored(22)
+                        .nonBlockedDeleted(40)
+                        .minFreqApplied(3)
+                        .topSample(List.of())
+                        .build());
+
+        mockMvc.perform(post("/api/admin/suggestions/reseed").param("dryRun", "false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dry_run").value(false))
+                .andExpect(jsonPath("$.contributor_rows_written").value(20));
+
+        verify(suggestionReseedService).reseed(false);
     }
 }
