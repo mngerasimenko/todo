@@ -291,6 +291,30 @@ class RateLimitFilterTest {
         }
 
         @Test
+        @DisplayName("GET /api/suggestions/all → suggestions-all:IP")
+        void suggestionsBulkEndpoint() {
+            String key = filter.resolveBucketKey("/api/suggestions/all", "GET", "1.2.3.4");
+            assertThat(key).isEqualTo("suggestions-all:1.2.3.4");
+        }
+
+        @Test
+        @DisplayName("GET /api/suggestions → suggestions:IP")
+        void suggestionsEndpoint() {
+            String key = filter.resolveBucketKey("/api/suggestions", "GET", "1.2.3.4");
+            assertThat(key).isEqualTo("suggestions:1.2.3.4");
+        }
+
+        @Test
+        @DisplayName("Fail-safe: прочий /api/suggestions/* падает в suggestions, не в general")
+        void suggestionsSubPath_FailsSafeToSuggestionsBucket() {
+            // вариант, который exact-проверки не ловят (напр. trailing slash) — НЕ должен утечь в general
+            assertThat(filter.resolveBucketKey("/api/suggestions/all/", "GET", "1.2.3.4"))
+                    .isEqualTo("suggestions:1.2.3.4");
+            assertThat(filter.resolveBucketKey("/api/suggestions/foo", "GET", "1.2.3.4"))
+                    .isEqualTo("suggestions:1.2.3.4");
+        }
+
+        @Test
         @DisplayName("/api/status → null (без ограничений)")
         void statusEndpoint_ReturnsNull() {
             String key = filter.resolveBucketKey("/api/status", "GET", "1.2.3.4");

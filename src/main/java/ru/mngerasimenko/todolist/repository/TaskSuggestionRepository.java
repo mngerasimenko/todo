@@ -89,6 +89,20 @@ public interface TaskSuggestionRepository extends JpaRepository<TaskSuggestion, 
                                          org.springframework.data.domain.Pageable pageable);
 
     /**
+     * Весь видимый словарь для bulk-выгрузки (Server R-7): {@code blocked = false} И
+     * {@code freq >= :minFreq}. Порядок {@code freq DESC, text ASC} — детерминированный
+     * (text — PK, уникален), чтобы ETag/контент-хеш на контроллере был стабилен между
+     * вызовами при неизменных данных. Без prefix-фильтра: клиент кладёт результат в Room и
+     * матчит локально. Объём мал (десятки строк), зовётся редко (синк ~1/сутки) — full scan ок.
+     */
+    @Query("""
+            SELECT s FROM TaskSuggestion s
+            WHERE s.blocked = false AND s.freq >= :minFreq
+            ORDER BY s.freq DESC, s.text ASC
+            """)
+    List<TaskSuggestion> findAllVisible(@Param("minFreq") long minFreq);
+
+    /**
      * Установить {@code blocked = true} для конкретной нормализованной строки.
      * Возвращает число затронутых строк (0 если такой строки нет).
      */

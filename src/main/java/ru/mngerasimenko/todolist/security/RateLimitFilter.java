@@ -176,9 +176,24 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return null;
         }
 
+        // Публичный GET /api/suggestions/all — bulk-выгрузка словаря (Server R-7).
+        // Отдельный, более строгий bucket: ответ тяжелее (весь словарь), зовётся редко (~1/сутки).
+        if ("GET".equalsIgnoreCase(method) && uri.equals("/api/suggestions/all")) {
+            return "suggestions-all:" + clientIp;
+        }
+
         // Публичный GET /api/suggestions — отдельный bucket, иначе анонимные
         // клиенты будут есть general-бюджет авторизованного пользователя по тому же IP.
         if ("GET".equalsIgnoreCase(method) && uri.equals("/api/suggestions")) {
+            return "suggestions:" + clientIp;
+        }
+
+        // Fail-safe: любой прочий путь под /api/suggestions/ — в (более строгий) suggestions-bucket,
+        // а НЕ в general. Exact-сравнение выше использует raw URI, тогда как роутинг Spring нормализует
+        // путь — если нормализация когда-нибудь пропустит вариант, которого exact не поймал, он не должен
+        // утекать в более щедрый general (100/60). Сейчас StrictHttpFirewall закрывает такие варианты,
+        // но защита fail-safe не должна на это полагаться.
+        if ("GET".equalsIgnoreCase(method) && uri.startsWith("/api/suggestions/")) {
             return "suggestions:" + clientIp;
         }
 
@@ -269,7 +284,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
             if (uri.equals("/api/auth/change-email")) return properties.getChangeEmail();
             if (uri.equals("/api/auth/logout")) return properties.getLogout();
         }
+        if ("GET".equalsIgnoreCase(method) && uri.equals("/api/suggestions/all")) {
+            return properties.getSuggestionsBulk();
+        }
         if ("GET".equalsIgnoreCase(method) && uri.equals("/api/suggestions")) {
+            return properties.getSuggestions();
+        }
+        // Fail-safe (см. resolveBucketKey): прочие /api/suggestions/ берут лимит suggestions, не general.
+        if ("GET".equalsIgnoreCase(method) && uri.startsWith("/api/suggestions/")) {
             return properties.getSuggestions();
         }
         return properties.getGeneral();

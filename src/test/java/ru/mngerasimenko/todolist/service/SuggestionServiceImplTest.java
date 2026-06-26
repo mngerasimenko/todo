@@ -10,6 +10,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import ru.mngerasimenko.todolist.crypto.CryptoService;
+import ru.mngerasimenko.todolist.dto.SuggestionBulkResponse;
 import ru.mngerasimenko.todolist.dto.SuggestionResponse;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
@@ -361,6 +362,36 @@ class SuggestionServiceImplTest {
 
         assertThat(result).extracting(SuggestionResponse::getText)
                 .containsExactly("Молоко", "Молочка");
+    }
+
+    // ===== findAllVisible (bulk, Server R-7) =====
+
+    @Test
+    void findAllVisible_FeatureFlagDisabled_ReturnsEmpty() {
+        when(flagStore.isEnabled(FeatureFlag.SUGGESTIONS)).thenReturn(false);
+
+        List<SuggestionBulkResponse> result = service.findAllVisible();
+
+        assertThat(result).isEmpty();
+        verify(repository, never()).findAllVisible(anyLong());
+    }
+
+    @Test
+    void findAllVisible_MapsRowsAndQueriesWithServerMinFreq() {
+        // Порог берётся из properties (server-authoritative), клиент его не дублирует.
+        when(repository.findAllVisible(properties.getMinFreq()))
+                .thenReturn(List.of(sample("молоко", "Молоко", 9), sample("масло", "Масло", 3)));
+
+        List<SuggestionBulkResponse> result = service.findAllVisible();
+
+        assertThat(result).hasSize(2);
+        assertThat(result).extracting(SuggestionBulkResponse::getText)
+                .containsExactly("молоко", "масло");
+        assertThat(result).extracting(SuggestionBulkResponse::getTextDisplay)
+                .containsExactly("Молоко", "Масло");
+        assertThat(result).extracting(SuggestionBulkResponse::getFreq)
+                .containsExactly(9L, 3L);
+        verify(repository).findAllVisible(properties.getMinFreq());
     }
 
     // ===== block =====

@@ -208,6 +208,48 @@ class TaskSuggestionRepositoryIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void findAllVisible_FiltersBlockedAndBelowMinFreq_OrdersByFreqDesc() {
+        // Bulk-выгрузка (Server R-7): freq>=3 И blocked=false попадают; freq<3 и blocked отрезаются.
+        // Частоты различны → порядок задаётся freq DESC независимо от collation тай-брейка по text.
+        jdbcTemplate.update("INSERT INTO task_suggestion(text, text_display, freq, last_used_at, blocked) " +
+                "VALUES (?, ?, ?, NOW(), ?)", "молоко", "Молоко", 9, false);
+        jdbcTemplate.update("INSERT INTO task_suggestion(text, text_display, freq, last_used_at, blocked) " +
+                "VALUES (?, ?, ?, NOW(), ?)", "масло", "Масло", 5, false);
+        jdbcTemplate.update("INSERT INTO task_suggestion(text, text_display, freq, last_used_at, blocked) " +
+                "VALUES (?, ?, ?, NOW(), ?)", "мясо", "Мясо", 3, false);
+        jdbcTemplate.update("INSERT INTO task_suggestion(text, text_display, freq, last_used_at, blocked) " +
+                "VALUES (?, ?, ?, NOW(), ?)", "редкое", "редкое", 2, false); // < minFreq=3 → отрезается
+        jdbcTemplate.update("INSERT INTO task_suggestion(text, text_display, freq, last_used_at, blocked) " +
+                "VALUES (?, ?, ?, NOW(), ?)", "мат", "мат", 7, true);        // blocked → скрыт
+
+        List<TaskSuggestion> rows = repository.findAllVisible(3L);
+
+        assertThat(rows).extracting(TaskSuggestion::getText)
+                .containsExactly("молоко", "масло", "мясо");
+        // text_display и freq переносятся как есть (для локального ранжирования на клиенте)
+        assertThat(rows.get(0).getTextDisplay()).isEqualTo("Молоко");
+        assertThat(rows.get(0).getFreq()).isEqualTo(9);
+    }
+
+    @Test
+    void findAllVisible_DeterministicOrderForStableETag() {
+        // При равной частоте порядок добивается text ASC (PK уникален) → выдача стабильна между
+        // вызовами при неизменных данных. Это и есть гарантия стабильного ETag на контроллере.
+        // Вставляем намеренно вперемешку, чтобы проверить именно тай-брейк, а не физический порядок.
+        for (int i : new int[]{3, 0, 4, 1, 2}) {
+            jdbcTemplate.update("INSERT INTO task_suggestion(text, text_display, freq, last_used_at, blocked) " +
+                    "VALUES (?, ?, ?, NOW(), ?)", "p" + i, "p" + i, 3, false);
+        }
+
+        List<TaskSuggestion> rows = repository.findAllVisible(3L);
+
+        // Точный порядок (а не просто «два вызова совпали»): тай-брейк text ASC обязателен —
+        // без него ETag мог бы плыть. ASCII-ключи p0..p4 не зависят от collation.
+        assertThat(rows).extracting(TaskSuggestion::getText)
+                .containsExactly("p0", "p1", "p2", "p3", "p4");
+    }
+
+    @Test
     void block_ExistingText_ReturnsOneAndSetsFlag() {
         inTx(() -> repository.ensureSuggestion("молоко", "Молоко"));
 
