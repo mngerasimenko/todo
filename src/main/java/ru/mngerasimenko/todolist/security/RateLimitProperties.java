@@ -37,6 +37,14 @@ public class RateLimitProperties {
      * и чтобы у анонимного клиента был свой потолок.
      */
     private EndpointLimit suggestions = new EndpointLimit(60, 60);
+    /**
+     * GET /api/suggestions/all — публичная bulk-выгрузка словаря для локального кэша клиента
+     * (Server R-7). Ключ — только по IP, поэтому за CGNAT/корпоративным NAT один публичный IP
+     * представляет десятки тысяч устройств: лимит держим на уровне {@link #suggestions} (60/60с),
+     * иначе app-launch синки многих юзеров с одного carrier-IP ложно ловят 429. Словарь публичен
+     * и мал, так что 60 дампов/мин — пренебрежимая нагрузка; защита от скрейпа здесь вторична.
+     */
+    private EndpointLimit suggestionsBulk = new EndpointLimit(60, 60);
     private EndpointLimit general = new EndpointLimit(100, 60);
 
     @Getter

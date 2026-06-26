@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import ru.mngerasimenko.todolist.config.RedisCacheConfig;
 import ru.mngerasimenko.todolist.crypto.CryptoService;
+import ru.mngerasimenko.todolist.dto.SuggestionBulkResponse;
 import ru.mngerasimenko.todolist.dto.SuggestionResponse;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
@@ -118,6 +119,26 @@ public class SuggestionServiceImpl implements SuggestionService {
         );
         return rows.stream()
                 .map(s -> SuggestionResponse.builder().text(s.getTextDisplay()).build())
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<SuggestionBulkResponse> findAllVisible() {
+        // Тот же gate, что и suggest: фича выключена → пустой словарь (клиент очистит локальный кэш).
+        if (!flagStore.isEnabled(FeatureFlag.SUGGESTIONS)) {
+            return List.of();
+        }
+        // Намеренно НЕ @Cacheable: эндпоинт зовётся редко (синк клиента ~1/сутки), запрос по
+        // индексу дешёвый, а отдельный Redis-serializer + точки eviction (block/reseed) дали бы
+        // лишнюю поверхность и риск stale. Свежесть/трафик закрывает ETag на контроллере.
+        // minFreq — server-authoritative (env-override), клиент порог не дублирует.
+        return repository.findAllVisible(properties.getMinFreq()).stream()
+                .map(s -> SuggestionBulkResponse.builder()
+                        .text(s.getText())
+                        .textDisplay(s.getTextDisplay())
+                        .freq(s.getFreq())
+                        .build())
                 .toList();
     }
 

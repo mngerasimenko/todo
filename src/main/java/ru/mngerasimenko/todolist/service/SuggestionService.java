@@ -1,5 +1,6 @@
 package ru.mngerasimenko.todolist.service;
 
+import ru.mngerasimenko.todolist.dto.SuggestionBulkResponse;
 import ru.mngerasimenko.todolist.dto.SuggestionResponse;
 
 import java.util.List;
@@ -40,6 +41,17 @@ public interface SuggestionService {
      * @param limit запрошенное число подсказок; обрезается до {@code app.suggestions.max-limit}
      */
     List<SuggestionResponse> suggest(String rawPrefix, int limit);
+
+    /**
+     * Весь видимый словарь подсказок для bulk-выгрузки на клиент (Server R-7).
+     * <p>
+     * Возвращает строки с {@code blocked = false} И {@code freq >= app.suggestions.min-freq}
+     * (порог остаётся server-authoritative — клиент его не дублирует), отсортированные по
+     * {@code freq DESC, text ASC} (детерминированно — для стабильного ETag). При выключенной
+     * фиче {@code FeatureFlag.SUGGESTIONS} — пустой список. Клиент кладёт результат в локальную
+     * Room-БД и матчит prefix офлайн без обращения к серверу на каждый символ.
+     */
+    List<SuggestionBulkResponse> findAllVisible();
 
     /**
      * Принудительно скрыть строку из выдачи (admin API). Не удаляет запись —
