@@ -207,6 +207,7 @@ jobs:
             LATEST_ANDROID_VERSION=${{ env.LATEST_ANDROID_VERSION }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
             JWT_SECRET=${{ secrets.JWT_SECRET }}
+            SUPER_ADMIN_EMAILS=${{ secrets.SUPER_ADMIN_EMAILS }}
             MAIL_USERNAME=${{ secrets.MAIL_USERNAME }}
             MAIL_PASSWORD=${{ secrets.MAIL_PASSWORD }}
             FIREBASE_ENABLED=true
