@@ -89,16 +89,16 @@ class SuggestionReseedServiceImplTest {
 
     @Test
     void reseed_KeepsAtThresholdThree_DropsBelow() {
-        // "молоко": 3 разных автора → kept; "сок": 2 → ниже порога, не пишем.
+        // "молоко": 3 разных автора → kept; "творог": 2 → ниже порога, не пишем.
         givenTodos(
                 todo("молоко", 1L), todo("молоко", 2L), todo("молоко", 3L),
-                todo("сок", 1L), todo("сок", 2L)
+                todo("творог", 1L), todo("творог", 2L)
         );
 
         SuggestionReseedReport report = service.reseed(false);
 
         verify(suggestionRepository).insertReseed("молоко", "молоко", 3L);
-        verify(suggestionRepository, never()).insertReseed(eq("сок"), anyString(), anyLong());
+        verify(suggestionRepository, never()).insertReseed(eq("творог"), anyString(), anyLong());
         assertThat(report.getProductsKept()).isEqualTo(1);
         assertThat(report.getDistinctProductsTotal()).isEqualTo(2);
     }
@@ -162,7 +162,7 @@ class SuggestionReseedServiceImplTest {
         verify(suggestionRepository).insertReseed("купить", "купить", 3L);
         verify(suggestionRepository, never()).addSuggestionUser(eq("купить"), anyString());
         assertThat(report.getEditorialVerbsFloored())
-                .isEqualTo(SuggestionSeedVerbs.EDITORIAL_VERBS.size());
+                .isEqualTo(SuggestionSeedTerms.EDITORIAL_TERMS.size());
     }
 
     @Test
@@ -178,7 +178,18 @@ class SuggestionReseedServiceImplTest {
         verify(suggestionRepository).addSuggestionUser("позвонить", "h:позвонить:1"); // есть авторы
         // floor-набор на 1 меньше полного (позвонить ушёл в реальные)
         assertThat(report.getEditorialVerbsFloored())
-                .isEqualTo(SuggestionSeedVerbs.EDITORIAL_VERBS.size() - 1);
+                .isEqualTo(SuggestionSeedTerms.EDITORIAL_TERMS.size() - 1);
+    }
+
+    @Test
+    void reseed_AnchorNounNotInData_FlooredWithoutAuthors() {
+        givenTodos(todo("молоко", 1L), todo("молоко", 2L), todo("молоко", 3L));
+
+        service.reseed(false);
+
+        // "сыр" — продукт-якорь (EDITORIAL_NOUNS), в данных нет → floor freq=3, без строк-авторов
+        verify(suggestionRepository).insertReseed("сыр", "сыр", 3L);
+        verify(suggestionRepository, never()).addSuggestionUser(eq("сыр"), anyString());
     }
 
     // ===== blocked сохраняется =====
@@ -208,7 +219,7 @@ class SuggestionReseedServiceImplTest {
 
         verify(suggestionRepository, never()).insertReseed(eq("купить"), anyString(), anyLong());
         assertThat(report.getEditorialVerbsFloored())
-                .isEqualTo(SuggestionSeedVerbs.EDITORIAL_VERBS.size() - 1);
+                .isEqualTo(SuggestionSeedTerms.EDITORIAL_TERMS.size() - 1);
     }
 
     // ===== фильтры применяются (как у live-track) =====
@@ -238,7 +249,7 @@ class SuggestionReseedServiceImplTest {
     void reseed_DryRun_ComputesButDoesNotWrite() {
         givenTodos(
                 todo("молоко", 1L), todo("молоко", 2L), todo("молоко", 3L),
-                todo("сок", 1L), todo("сок", 2L)
+                todo("творог", 1L), todo("творог", 2L)
         );
         when(suggestionRepository.countNonBlocked()).thenReturn(40L);
 
@@ -253,7 +264,7 @@ class SuggestionReseedServiceImplTest {
         assertThat(report.getProductsKept()).isEqualTo(1); // молоко
         assertThat(report.getNonBlockedDeleted()).isEqualTo(40L); // сколько БЫ удалили
         assertThat(report.getEditorialVerbsFloored())
-                .isEqualTo(SuggestionSeedVerbs.EDITORIAL_VERBS.size());
+                .isEqualTo(SuggestionSeedTerms.EDITORIAL_TERMS.size());
     }
 
     @Test

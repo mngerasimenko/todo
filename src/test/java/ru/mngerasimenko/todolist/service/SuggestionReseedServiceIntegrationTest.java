@@ -132,9 +132,9 @@ class SuggestionReseedServiceIntegrationTest extends AbstractIntegrationTest {
         todo("Молоко", u1, false);
         todo("молоко", u2, false);
         todo("  молоко  ", u3, false);
-        // "сок": 2 разных автора → ниже порога 3 → отбрасывается
-        todo("сок", u1, false);
-        todo("сок", u2, false);
+        // "творог": 2 разных автора → ниже порога 3 → отбрасывается
+        todo("творог", u1, false);
+        todo("творог", u2, false);
         // "секрет": один автор ×3 → distinct=1 → отбрасывается (occurrence-дыра закрыта)
         todo("секрет", u1, false);
         todo("секрет", u1, false);
@@ -163,7 +163,7 @@ class SuggestionReseedServiceIntegrationTest extends AbstractIntegrationTest {
                 cryptoService.blindIndex("молоко:" + u3));
 
         // --- ниже порога / один автор / приватные — отсутствуют ---
-        assertThat(suggestionRepository.findById("сок")).isEmpty();
+        assertThat(suggestionRepository.findById("творог")).isEmpty();
         assertThat(suggestionRepository.findById("секрет")).isEmpty();
         assertThat(suggestionRepository.findById("приват")).isEmpty();
 
@@ -191,7 +191,7 @@ class SuggestionReseedServiceIntegrationTest extends AbstractIntegrationTest {
         assertThat(report.getBlockedPreserved()).isEqualTo(1);
         assertThat(report.getNonBlockedDeleted()).isEqualTo(1); // "старое"
         assertThat(report.getEditorialVerbsFloored())
-                .isEqualTo(SuggestionSeedVerbs.EDITORIAL_VERBS.size());
+                .isEqualTo(SuggestionSeedTerms.EDITORIAL_TERMS.size());
         assertThat(report.getMinFreqApplied()).isEqualTo(3);
     }
 

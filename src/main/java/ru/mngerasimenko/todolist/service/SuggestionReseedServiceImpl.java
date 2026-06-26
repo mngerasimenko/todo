@@ -39,8 +39,9 @@ import java.util.Set;
  *   <li>Записать (если не dry-run): удалить НЕ заблокированные строки → для каждой строки с
  *       {@code distinct-авторов ≥ minFreq} (и не заблокированной) выставить {@code freq=distinctCount}
  *       и записать авторов псевдонимами {@code blindIndex(normalized + ":" + userId)}.</li>
- *   <li>Редакционные глаголы ({@link SuggestionSeedVerbs}) — floor {@code freq=minFreq} без авторов,
- *       если не всплыли из реальных данных и проходят те же фильтры (blacklist и т.п.).</li>
+ *   <li>Редакционные термины ({@link SuggestionSeedTerms}: глаголы + продукты-якоря) — floor
+ *       {@code freq=minFreq} без авторов, если не всплыли из реальных данных и проходят те же
+ *       фильтры (blacklist и т.п.).</li>
  * </ol>
  * Корректность хеша гарантируется переиспользованием боевого {@link CryptoService#blindIndex},
  * корректность фильтров — переиспользованием {@link SuggestionTextFilter}.
@@ -89,10 +90,10 @@ public class SuggestionReseedServiceImpl implements SuggestionReseedService {
                 .filter(e -> !blocked.contains(e.getKey()))
                 .toList();
 
-        // Редакционные глаголы под floor: не заблокированы, проходят те же track-фильтры
-        // (blacklist/длина/...) — чтобы reseed не вводил строки, которые live-track отверг бы,
+        // Редакционные термины под floor (глаголы + продукты-якоря): не заблокированы, проходят те же
+        // track-фильтры (blacklist/длина/...) — чтобы reseed не вводил строки, которые live-track отверг бы,
         // и не всплыли из реальных данных с ≥ minFreq (тогда реальная агрегация выигрывает).
-        List<String> flooredVerbs = SuggestionSeedVerbs.EDITORIAL_VERBS.stream()
+        List<String> flooredTerms = SuggestionSeedTerms.EDITORIAL_TERMS.stream()
                 .filter(v -> !blocked.contains(v))
                 .filter(v -> filter.normalizeIfTrackable(v, false).isPresent())
                 .filter(v -> {
@@ -105,13 +106,13 @@ public class SuggestionReseedServiceImpl implements SuggestionReseedService {
         long nonBlockedExisting = suggestionRepository.countNonBlocked();
 
         if (!dryRun) {
-            applyReseed(kept, flooredVerbs, minFreq);
+            applyReseed(kept, flooredTerms, minFreq);
             registerCacheEvictAfterCommit();
             log.info("[reseed] применено: kept={}, contributorRows={}, verbsFloored={}, deletedNonBlocked={}, minFreq={}",
-                    kept.size(), contributorRows, flooredVerbs.size(), nonBlockedExisting, minFreq);
+                    kept.size(), contributorRows, flooredTerms.size(), nonBlockedExisting, minFreq);
         } else {
             log.info("[reseed] dry-run: kept={}, contributorRows={}, verbsFloored={}, wouldDelete={}, minFreq={}",
-                    kept.size(), contributorRows, flooredVerbs.size(), nonBlockedExisting, minFreq);
+                    kept.size(), contributorRows, flooredTerms.size(), nonBlockedExisting, minFreq);
         }
 
         return SuggestionReseedReport.builder()
@@ -121,11 +122,11 @@ public class SuggestionReseedServiceImpl implements SuggestionReseedService {
                 .distinctProductsTotal(agg.distinctAuthorsByText().size())
                 .productsKept(kept.size())
                 .contributorRowsWritten(contributorRows)
-                .editorialVerbsFloored(flooredVerbs.size())
+                .editorialVerbsFloored(flooredTerms.size())
                 .blockedPreserved(blocked.size())
                 .nonBlockedDeleted(nonBlockedExisting)
                 .minFreqApplied(minFreq)
-                .topSample(buildTopSample(kept, flooredVerbs, minFreq))
+                .topSample(buildTopSample(kept, flooredTerms, minFreq))
                 .build();
     }
 
@@ -138,7 +139,7 @@ public class SuggestionReseedServiceImpl implements SuggestionReseedService {
      * здесь была бы no-op (private self-invocation), поэтому её нет намеренно.
      */
     private void applyReseed(List<Map.Entry<String, Set<Long>>> kept,
-                             List<String> flooredVerbs,
+                             List<String> flooredTerms,
                              long minFreq) {
         suggestionRepository.deleteAllNonBlocked();
 
@@ -155,10 +156,10 @@ public class SuggestionReseedServiceImpl implements SuggestionReseedService {
             }
         }
 
-        // Редакционные глаголы — синтетический floor без строк-авторов (могут дрейфовать вверх,
+        // Редакционные термины — синтетический floor без строк-авторов (могут дрейфовать вверх,
         // когда реальные пользователи их введут после деплоя; это допустимо и только вверх).
-        for (String verb : flooredVerbs) {
-            suggestionRepository.insertReseed(verb, verb, minFreq);
+        for (String term : flooredTerms) {
+            suggestionRepository.insertReseed(term, term, minFreq);
         }
     }
 
@@ -217,11 +218,11 @@ public class SuggestionReseedServiceImpl implements SuggestionReseedService {
 
     private List<SuggestionReseedReport.TopEntry> buildTopSample(
             List<Map.Entry<String, Set<Long>>> kept,
-            List<String> flooredVerbs,
+            List<String> flooredTerms,
             long minFreq) {
         List<SuggestionReseedReport.TopEntry> sample = new ArrayList<>();
         kept.forEach(e -> sample.add(new SuggestionReseedReport.TopEntry(e.getKey(), e.getValue().size())));
-        flooredVerbs.forEach(v -> sample.add(new SuggestionReseedReport.TopEntry(v, minFreq)));
+        flooredTerms.forEach(v -> sample.add(new SuggestionReseedReport.TopEntry(v, minFreq)));
         return sample.stream()
                 .sorted(Comparator.comparingLong(SuggestionReseedReport.TopEntry::freq).reversed())
                 .limit(TOP_SAMPLE_SIZE)
