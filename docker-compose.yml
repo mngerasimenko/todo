@@ -72,8 +72,15 @@ services:
 
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-db:5432/todo
-      - SPRING_DATASOURCE_USERNAME=postgres
-      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
+      # App runtime connects as a DML-only role (least privilege; security audit
+      # 2026-06-30 fix #1). Falls back to the postgres superuser ONLY until the
+      # scoped role is provisioned (db/roles/least-privilege-roles.sql).
+      - SPRING_DATASOURCE_USERNAME=${APP_DB_USER:-postgres}
+      - SPRING_DATASOURCE_PASSWORD=${APP_DB_PASSWORD:-${POSTGRES_PASSWORD}}
+      # Liquibase runs under a separate DDL-capable role that OWNS the todo
+      # objects (not a cluster superuser). Falls back to postgres until set.
+      - SPRING_LIQUIBASE_USER=${MIGRATOR_DB_USER:-postgres}
+      - SPRING_LIQUIBASE_PASSWORD=${MIGRATOR_DB_PASSWORD:-${POSTGRES_PASSWORD}}
       - SPRING_PROFILES_ACTIVE=production
       # JacksonConfig serializes LocalDateTime as "...Z" assuming the container runs in UTC. Keep this explicit.
       - TZ=UTC

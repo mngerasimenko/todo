@@ -206,6 +206,14 @@ jobs:
             MIN_ANDROID_VERSION=${{ env.MIN_ANDROID_VERSION }}
             LATEST_ANDROID_VERSION=${{ env.LATEST_ANDROID_VERSION }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            # Least-privilege DB roles (security audit 2026-06-30 fix #1).
+            # Empty secrets -> docker-compose falls back to postgres/POSTGRES_PASSWORD
+            # (current behavior). Provision roles FIRST (db/roles/least-privilege-roles.sql),
+            # then add these secrets, then deploy. See deployment.md runbook.
+            APP_DB_USER=${{ secrets.APP_DB_USER }}
+            APP_DB_PASSWORD=${{ secrets.APP_DB_PASSWORD }}
+            MIGRATOR_DB_USER=${{ secrets.MIGRATOR_DB_USER }}
+            MIGRATOR_DB_PASSWORD=${{ secrets.MIGRATOR_DB_PASSWORD }}
             JWT_SECRET=${{ secrets.JWT_SECRET }}
             SUPER_ADMIN_EMAILS=${{ secrets.SUPER_ADMIN_EMAILS }}
             MAIL_USERNAME=${{ secrets.MAIL_USERNAME }}
