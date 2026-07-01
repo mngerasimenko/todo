@@ -92,13 +92,13 @@ END$$;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO todouser;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO todouser;
 
--- 5a. Runtime role has no business with Liquibase bookkeeping — revoke if present.
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'databasechangelog') THEN
-    EXECUTE 'REVOKE ALL ON databasechangelog, databasechangeloglock FROM todouser';
-  END IF;
-END$$;
+-- 5a. NOTE: todouser intentionally KEEPS DML on databasechangelog. The app's
+--     runtime connection reads/writes it at startup: DataEncryptionMigration
+--     runs `SELECT COUNT(*) FROM databasechangelog WHERE id='017-data-encrypted'`
+--     (flag check) and, on first run, `INSERT INTO databasechangelog ...`.
+--     Revoking it here caused a startup crash-loop (caught on staging 2026-07-01).
+--     These are Liquibase bookkeeping tables (no user PII); the runtime role
+--     still cannot DDL, so leaving DML here is an acceptable, necessary grant.
 
 -- 6. Default privileges: new objects created by todo_migrator (future Liquibase
 --    tables/sequences) auto-grant DML to todouser — no manual GRANT per release.
