@@ -50,7 +50,7 @@
       "pluginVersion": "10.0.0",
       "targets": [
         {
-          "expr": "sum by (cache) (rate(cache_gets_total{result=\"hit\"}[5m])) / sum by (cache) (rate(cache_gets_total[5m])) * 100",
+          "expr": "sum by (cache) (increase(cache_gets_total{result=\"hit\"}[6h])) / sum by (cache) (increase(cache_gets_total[6h])) * 100",
           "legendFormat": "{{cache}}",
           "refId": "A"
         }
@@ -117,12 +117,12 @@
       "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "single"}},
       "targets": [
         {
-          "expr": "sum by (cache) (rate(cache_evictions_total[1m]))",
+          "expr": "sum by (cache) (rate(cache_removals_total[1m]))",
           "legendFormat": "{{cache}}",
           "refId": "A"
         }
       ],
-      "title": "Cache Evictions/sec",
+      "title": "Cache Removals/sec (@CacheEvict)",
       "type": "timeseries"
     },
     {
@@ -146,7 +146,7 @@
       "options": {"legend": {"displayMode": "list"}, "tooltip": {"mode": "single"}},
       "targets": [
         {
-          "expr": "sum by (cache, operation) (rate(cache_errors_total[1m]))",
+          "expr": "sum by (cache, operation) (rate(cache_errors_total[1m])) or on() vector(0)",
           "legendFormat": "{{cache}} / {{operation}}",
           "refId": "A"
         }
@@ -175,7 +175,7 @@
       "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
       "targets": [
         {
-          "expr": "sum by (component) (rate(redis_fallback_total[1m]))",
+          "expr": "sum by (component) (rate(redis_fallback_total[1m])) or on() vector(0)",
           "legendFormat": "{{component}}",
           "refId": "A"
         }
