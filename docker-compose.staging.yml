@@ -6,8 +6,14 @@ services:
       - "8090:8090"
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://staging-db:5432/todo
-      - SPRING_DATASOURCE_USERNAME=postgres
-      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      # App runtime connects as a DML-only role (least privilege; security audit
+      # 2026-06-30 fix #1). Falls back to postgres until the scoped role is
+      # provisioned on staging-db (db/roles/least-privilege-roles.sql).
+      - SPRING_DATASOURCE_USERNAME=${APP_DB_USER:-postgres}
+      - SPRING_DATASOURCE_PASSWORD=${APP_DB_PASSWORD:-${POSTGRES_PASSWORD:-postgres}}
+      # Liquibase runs under a separate DDL-capable owner role (not superuser).
+      - SPRING_LIQUIBASE_USER=${MIGRATOR_DB_USER:-postgres}
+      - SPRING_LIQUIBASE_PASSWORD=${MIGRATOR_DB_PASSWORD:-${POSTGRES_PASSWORD:-postgres}}
       - SPRING_PROFILES_ACTIVE=production
       # JacksonConfig serializes LocalDateTime as "...Z" assuming the container runs in UTC. Keep this explicit.
       - TZ=UTC
