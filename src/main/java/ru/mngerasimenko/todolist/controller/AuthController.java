@@ -185,7 +185,7 @@ public class AuthController {
             refreshTokenService.revokeByRawToken(logoutRequest.getRefreshToken());
         }
 
-        log.info("Выход пользователя: {}", userDetails.getUsername());
+        log.info("Выход пользователя: {}", maskEmail(userDetails.getUsername()));
         return ResponseEntity.ok(Map.of("message", "Выход выполнен"));
     }
 

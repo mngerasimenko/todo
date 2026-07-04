@@ -1,7 +1,11 @@
 package ru.mngerasimenko.todolist.security.jwt;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.Base64;
@@ -63,5 +67,37 @@ class JwtTokenProviderTest {
 
         Instant expiration = jwtTokenProvider.getExpirationFromToken(token);
         assertTrue(expiration.isAfter(Instant.now()));
+    }
+
+    @Test
+    void parseExpiredToken_MasksEmailInWarnLog() {
+        // Провайдер с отрицательным сроком → токен истекает мгновенно
+        JwtProperties expiredProps = new JwtProperties();
+        expiredProps.setSecret(Base64.getEncoder().encodeToString(
+                "test-secret-key-for-jwt-testing-256-bits!!".getBytes()));
+        expiredProps.setAccessTokenExpiration(-1000L);
+        JwtTokenProvider expiredProvider = new JwtTokenProvider(expiredProps);
+        String expiredToken = expiredProvider.generateAccessToken("user@test.com");
+
+        Logger logger = (Logger) LoggerFactory.getLogger(JwtTokenProvider.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            // parseClaims ловит ExpiredJwtException и пишет WARN
+            assertFalse(expiredProvider.validateToken(expiredToken));
+        } finally {
+            logger.detachAppender(appender);
+        }
+
+        String logged = appender.list.stream()
+                .map(ILoggingEvent::getFormattedMessage)
+                .filter(m -> m.contains("истёк"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Ожидался WARN об истёкшем токене"));
+        assertTrue(logged.contains("us***@test.com"),
+                "email должен быть замаскирован, а лог: " + logged);
+        assertFalse(logged.contains("user@test.com"),
+                "полный email не должен попадать в лог, а лог: " + logged);
     }
 }
