@@ -1,9 +1,13 @@
 package ru.mngerasimenko.todolist.controller;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -929,6 +933,37 @@ class AuthControllerTest {
 
         verify(tokenBlacklistService).blacklistAccessToken(eq("test-access-token"), any());
         verify(refreshTokenService, never()).revokeByRawToken(anyString());
+    }
+
+    @Test
+    @WithMockUser(username = "test@example.com")
+    void logout_MasksEmailInInfoLog() throws Exception {
+        // Arrange
+        when(jwtTokenProvider.validateAccessToken(anyString())).thenReturn(true);
+        when(jwtTokenProvider.getExpirationFromToken(anyString()))
+                .thenReturn(java.time.Instant.now().plusSeconds(3600));
+
+        Logger logger = (Logger) LoggerFactory.getLogger(AuthController.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            mockMvc.perform(post("/api/auth/logout")
+                            .header("Authorization", "Bearer test-access-token")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isOk());
+        } finally {
+            logger.detachAppender(appender);
+        }
+
+        String logged = appender.list.stream()
+                .map(ILoggingEvent::getFormattedMessage)
+                .filter(m -> m.contains("Выход пользователя"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Ожидался INFO о выходе пользователя"));
+        assertThat(logged).contains("te***@example.com");
+        assertThat(logged).doesNotContain("test@example.com");
     }
 
     @Test

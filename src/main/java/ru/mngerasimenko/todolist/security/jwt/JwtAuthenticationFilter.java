@@ -19,6 +19,8 @@ import ru.mngerasimenko.todolist.service.TokenBlacklistService;
 
 import java.io.IOException;
 
+import static ru.mngerasimenko.todolist.util.LogUtils.maskEmail;
+
 /**
  * Фильтр для проверки JWT токена в каждом запросе.
  * Извлекает токен из заголовка Authorization и устанавливает аутентификацию в SecurityContext.
@@ -57,7 +59,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
-                log.debug("Установлена аутентификация для пользователя: {}", username);
+                log.debug("Установлена аутентификация для пользователя: {}", maskEmail(username));
             }
         } catch (Exception ex) {
             log.error("Не удалось установить аутентификацию пользователя в security context", ex);

@@ -13,6 +13,8 @@ import javax.crypto.SecretKey;
 import java.time.Instant;
 import java.util.Date;
 
+import static ru.mngerasimenko.todolist.util.LogUtils.maskEmail;
+
 /**
  * Провайдер для генерации и валидации JWT токенов.
  * Использует библиотеку JJWT для работы с токенами.
@@ -45,7 +47,7 @@ public class JwtTokenProvider {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtProperties.getAccessTokenExpiration());
 
-        log.debug("Выдача access токена: user={}, истекает через {}с", username, jwtProperties.getAccessTokenExpiration() / 1000);
+        log.debug("Выдача access токена: user={}, истекает через {}с", maskEmail(username), jwtProperties.getAccessTokenExpiration() / 1000);
 
         return Jwts.builder()
                 .subject(username)
@@ -115,7 +117,7 @@ public class JwtTokenProvider {
         } catch (MalformedJwtException ex) {
             log.warn("Некорректный JWT токен");
         } catch (ExpiredJwtException ex) {
-            log.warn("JWT токен истёк: user={}", ex.getClaims().getSubject());
+            log.warn("JWT токен истёк: user={}", maskEmail(ex.getClaims().getSubject()));
         } catch (UnsupportedJwtException ex) {
             log.warn("Неподдерживаемый JWT токен");
         } catch (IllegalArgumentException ex) {
