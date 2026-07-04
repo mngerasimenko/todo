@@ -33,4 +33,12 @@ public class JwtProperties {
      * По умолчанию: 604800000 (7 дней)
      */
     private long refreshTokenExpiration = 604800000L;
+
+    /**
+     * Флаг Secure для refresh-cookie веб-клиента.
+     * true (по умолчанию) — cookie передаётся только по HTTPS (production).
+     * Для локальной разработки/staging без TLS можно выключить через
+     * JWT_REFRESH_COOKIE_SECURE=false (иначе браузер не примет cookie по http).
+     */
+    private boolean refreshCookieSecure = true;
 }

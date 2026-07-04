@@ -38,6 +38,10 @@ import ru.mngerasimenko.todolist.service.UserService;
 
 import java.util.Collections;
 
+import jakarta.servlet.http.Cookie;
+import org.springframework.http.HttpHeaders;
+
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -99,6 +103,9 @@ class AuthControllerTest {
 
         // Настройка JwtProperties
         when(jwtProperties.getAccessTokenExpiration()).thenReturn(3600000L); // 1 час
+        // Параметры refresh-cookie (веб-клиент, #259 httpOnly-cookie)
+        when(jwtProperties.getRefreshTokenExpiration()).thenReturn(604800000L); // 7 дней
+        when(jwtProperties.isRefreshCookieSecure()).thenReturn(true);
     }
 
     // ==================== LOGIN TESTS ====================
@@ -139,6 +146,59 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.user.id").value(1))
                 .andExpect(jsonPath("$.user.email").value("test@example.com"))
                 .andExpect(jsonPath("$.user.name").value("testUser"));
+    }
+
+    // #259: login дополнительно ставит refresh-токен в HttpOnly-cookie для веб-клиента.
+    // Тело ответа с refresh_token сохраняется (Android читает его оттуда).
+    @Test
+    void login_SetsHttpOnlyRefreshCookie() throws Exception {
+        LoginRequest loginRequest = LoginRequest.builder()
+                .email("test@example.com").password("password123").build();
+        Authentication authentication = new UsernamePasswordAuthenticationToken(
+                "test@example.com", "password123",
+                Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER")));
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenReturn(authentication);
+        when(userService.getUserByEmail("test@example.com")).thenReturn(testUserDto);
+        when(userMapper.toResponse(testUserDto)).thenReturn(testUserResponse);
+        when(jwtTokenProvider.generateAccessToken(any(Authentication.class))).thenReturn("access-token-123");
+        when(refreshTokenService.createRefreshToken(1L)).thenReturn("refresh-token-123");
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isOk())
+                // cookie присутствует и правильно атрибутирована
+                .andExpect(cookie().value("refresh_token", "refresh-token-123"))
+                .andExpect(cookie().httpOnly("refresh_token", true))
+                .andExpect(cookie().secure("refresh_token", true))
+                .andExpect(cookie().path("refresh_token", "/api/auth"))
+                .andExpect(cookie().maxAge("refresh_token", 604800))
+                // SameSite=Strict проверяем по сырому заголовку (Servlet Cookie его не моделирует)
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("SameSite=Strict")))
+                // тело по-прежнему содержит refresh_token (для Android)
+                .andExpect(jsonPath("$.refresh_token").value("refresh-token-123"));
+    }
+
+    @Test
+    void register_SetsHttpOnlyRefreshCookie() throws Exception {
+        RegisterRequest registerRequest = RegisterRequest.builder()
+                .email("new@example.com").name("newUser").password("password123").build();
+        UserDto newUserDto = UserDto.builder().id(2L).email("new@example.com").name("newUser").build();
+        when(userService.createUser(any(UserDto.class))).thenReturn(newUserDto);
+        when(jwtTokenProvider.generateAccessToken("new@example.com")).thenReturn("new-access-token");
+        when(refreshTokenService.createRefreshToken(2L)).thenReturn("new-refresh-token");
+        when(userMapper.toResponse(newUserDto)).thenReturn(UserResponse.builder().id(2L).build());
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(registerRequest)))
+                .andExpect(status().isCreated())
+                .andExpect(cookie().value("refresh_token", "new-refresh-token"))
+                .andExpect(cookie().httpOnly("refresh_token", true))
+                .andExpect(cookie().path("refresh_token", "/api/auth"))
+                .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("SameSite=Strict")))
+                .andExpect(jsonPath("$.refresh_token").value("new-refresh-token"));
     }
 
     @Test
@@ -486,31 +546,90 @@ class AuthControllerTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    // #259: refresh-токен может прийти либо в теле (Android), либо в HttpOnly-cookie (веб).
+    // Пустой/null токен в теле БЕЗ cookie — это «токен не предоставлен» → 401 (раньше было 400
+    // из-за @NotBlank; теперь тело опционально, отсутствие токена в обоих источниках = auth failure).
     @Test
-    void refresh_EmptyToken_ReturnsBadRequest() throws Exception {
-        // Arrange
+    void refresh_EmptyTokenNoCookie_ReturnsUnauthorized() throws Exception {
         RefreshTokenRequest refreshTokenRequest = RefreshTokenRequest.builder()
                 .refreshToken("")
                 .build();
 
-        // Act & Assert
         mockMvc.perform(post("/api/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(refreshTokenRequest)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message.refreshToken").exists());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
-    void refresh_NullToken_ReturnsBadRequest() throws Exception {
-        // Arrange
+    void refresh_NullTokenNoCookie_ReturnsUnauthorized() throws Exception {
         String invalidJson = "{\"refreshToken\": null}";
 
-        // Act & Assert
         mockMvc.perform(post("/api/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidJson))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void refresh_NoBodyNoCookie_ReturnsUnauthorized() throws Exception {
+        // Ни тела, ни cookie — токен не предоставлен
+        mockMvc.perform(post("/api/auth/refresh"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    // Веб-путь: refresh-токен приходит из HttpOnly-cookie, тело пустое.
+    @Test
+    void refresh_ReadsTokenFromCookie_WhenBodyEmpty() throws Exception {
+        when(refreshTokenService.rotateRefreshToken("cookie-refresh-token"))
+                .thenReturn(new RefreshTokenRotationResult("new-refresh-token", "test@example.com"));
+        when(jwtTokenProvider.generateAccessToken("test@example.com")).thenReturn("new-access-token");
+        when(userService.getUserByEmail("test@example.com")).thenReturn(testUserDto);
+        when(userMapper.toResponse(testUserDto)).thenReturn(testUserResponse);
+
+        mockMvc.perform(post("/api/auth/refresh")
+                        .cookie(new Cookie("refresh_token", "cookie-refresh-token")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.access_token").value("new-access-token"))
+                // ротация выставляет новую cookie
+                .andExpect(cookie().value("refresh_token", "new-refresh-token"))
+                .andExpect(cookie().httpOnly("refresh_token", true));
+
+        verify(refreshTokenService).rotateRefreshToken("cookie-refresh-token");
+    }
+
+    // Fail-closed на cookie-пути: невалидная cookie → сервис бросает → 401, ротации нет.
+    @Test
+    void refresh_InvalidCookie_ReturnsUnauthorized() throws Exception {
+        when(refreshTokenService.rotateRefreshToken("bad-cookie-token"))
+                .thenThrow(new BadCredentialsException("Невалидный refresh-токен"));
+
+        mockMvc.perform(post("/api/auth/refresh")
+                        .cookie(new Cookie("refresh_token", "bad-cookie-token")))
+                .andExpect(status().isUnauthorized());
+    }
+
+    // Android-путь сохранён: токен в теле имеет приоритет над cookie.
+    @Test
+    void refresh_BodyTokenTakesPrecedenceOverCookie() throws Exception {
+        RefreshTokenRequest refreshTokenRequest = RefreshTokenRequest.builder()
+                .refreshToken("body-refresh-token")
+                .build();
+        when(refreshTokenService.rotateRefreshToken("body-refresh-token"))
+                .thenReturn(new RefreshTokenRotationResult("new-refresh-token", "test@example.com"));
+        when(jwtTokenProvider.generateAccessToken("test@example.com")).thenReturn("new-access-token");
+        when(userService.getUserByEmail("test@example.com")).thenReturn(testUserDto);
+        when(userMapper.toResponse(testUserDto)).thenReturn(testUserResponse);
+
+        mockMvc.perform(post("/api/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(refreshTokenRequest))
+                        .cookie(new Cookie("refresh_token", "cookie-refresh-token")))
+                .andExpect(status().isOk());
+
+        // должен использоваться токен из тела, не из cookie
+        verify(refreshTokenService).rotateRefreshToken("body-refresh-token");
+        verify(refreshTokenService, never()).rotateRefreshToken("cookie-refresh-token");
     }
 
     // ==================== CONTENT TYPE TESTS ====================
@@ -933,6 +1052,64 @@ class AuthControllerTest {
 
         verify(tokenBlacklistService).blacklistAccessToken(eq("test-access-token"), any());
         verify(refreshTokenService, never()).revokeByRawToken(anyString());
+    }
+
+    // #259: веб-logout не шлёт refresh в теле — сервер берёт его из HttpOnly-cookie и отзывает.
+    @Test
+    @WithMockUser(username = "test@example.com")
+    void logout_RevokesRefreshFromCookie_WhenBodyEmpty() throws Exception {
+        when(jwtTokenProvider.validateAccessToken(anyString())).thenReturn(true);
+        when(jwtTokenProvider.getExpirationFromToken(anyString()))
+                .thenReturn(java.time.Instant.now().plusSeconds(3600));
+
+        mockMvc.perform(post("/api/auth/logout")
+                        .header("Authorization", "Bearer test-access-token")
+                        .cookie(new Cookie("refresh_token", "cookie-refresh-token"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk());
+
+        verify(tokenBlacklistService).blacklistAccessToken(eq("test-access-token"), any());
+        verify(refreshTokenService).revokeByRawToken("cookie-refresh-token");
+    }
+
+    // #259: logout гасит refresh-cookie (Max-Age=0), чтобы браузер её удалил.
+    @Test
+    @WithMockUser(username = "test@example.com")
+    void logout_ClearsRefreshCookie() throws Exception {
+        when(jwtTokenProvider.validateAccessToken(anyString())).thenReturn(true);
+        when(jwtTokenProvider.getExpirationFromToken(anyString()))
+                .thenReturn(java.time.Instant.now().plusSeconds(3600));
+
+        mockMvc.perform(post("/api/auth/logout")
+                        .header("Authorization", "Bearer test-access-token")
+                        .cookie(new Cookie("refresh_token", "cookie-refresh-token"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(cookie().maxAge("refresh_token", 0))
+                .andExpect(cookie().value("refresh_token", ""));
+    }
+
+    // Приоритет тела над cookie сохраняется и на logout (Android шлёт refresh в теле).
+    @Test
+    @WithMockUser(username = "test@example.com")
+    void logout_BodyRefreshTakesPrecedenceOverCookie() throws Exception {
+        LogoutRequest logoutRequest = LogoutRequest.builder()
+                .refreshToken("body-refresh-token").build();
+        when(jwtTokenProvider.validateAccessToken(anyString())).thenReturn(true);
+        when(jwtTokenProvider.getExpirationFromToken(anyString()))
+                .thenReturn(java.time.Instant.now().plusSeconds(3600));
+
+        mockMvc.perform(post("/api/auth/logout")
+                        .header("Authorization", "Bearer test-access-token")
+                        .cookie(new Cookie("refresh_token", "cookie-refresh-token"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(logoutRequest)))
+                .andExpect(status().isOk());
+
+        verify(refreshTokenService).revokeByRawToken("body-refresh-token");
+        verify(refreshTokenService, never()).revokeByRawToken("cookie-refresh-token");
     }
 
     @Test

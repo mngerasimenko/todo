@@ -5,8 +5,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -43,6 +45,13 @@ public class AuthController {
     private final JwtProperties jwtProperties;
     private final RefreshTokenService refreshTokenService;
     private final TokenBlacklistService tokenBlacklistService;
+
+    /**
+     * Имя HttpOnly-cookie с refresh-токеном (веб-клиент, #259).
+     * Path ограничен /api/auth — cookie не уходит на бизнес-эндпоинты.
+     */
+    private static final String REFRESH_COOKIE = "refresh_token";
+    private static final String REFRESH_COOKIE_PATH = "/api/auth";
 
     /**
      * Вход пользователя в систему
@@ -82,7 +91,9 @@ public class AuthController {
 
         userService.updateLastActiveAt(userDto.getId());
         log.info("Успешный вход пользователя: {}", maskEmail(loginRequest.getEmail()));
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, buildRefreshCookie(refreshToken).toString())
+                .body(response);
     }
 
     /**
@@ -125,7 +136,9 @@ public class AuthController {
                 .build();
 
         log.info("Успешная регистрация пользователя: {}", registerRequest.getName());
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .header(HttpHeaders.SET_COOKIE, buildRefreshCookie(refreshToken).toString())
+                .body(response);
     }
 
     /**
@@ -135,12 +148,18 @@ public class AuthController {
      * @return новые JWT токены
      */
     @PostMapping("/refresh")
-    public ResponseEntity<LoginResponse> refresh(@Valid @RequestBody RefreshTokenRequest refreshTokenRequest) {
+    public ResponseEntity<LoginResponse> refresh(
+            @RequestBody(required = false) RefreshTokenRequest refreshTokenRequest,
+            @CookieValue(value = REFRESH_COOKIE, required = false) String refreshCookie) {
         log.debug("POST /api/auth/refresh — запрос получен");
 
+        // Refresh-токен приходит из тела (Android) либо из HttpOnly-cookie (веб, #259).
+        String rawToken = resolveRefreshToken(
+                refreshTokenRequest != null ? refreshTokenRequest.getRefreshToken() : null,
+                refreshCookie);
+
         // Ротация opaque refresh-токена (валидация + reuse detection внутри сервиса)
-        RefreshTokenRotationResult result = refreshTokenService.rotateRefreshToken(
-                refreshTokenRequest.getRefreshToken());
+        RefreshTokenRotationResult result = refreshTokenService.rotateRefreshToken(rawToken);
 
         // Генерация нового access JWT
         String newAccessToken = jwtTokenProvider.generateAccessToken(result.email());
@@ -159,7 +178,10 @@ public class AuthController {
 
         userService.updateLastActiveAt(userDto.getId());
         log.info("Успешное обновление токена для пользователя: {}", maskEmail(result.email()));
-        return ResponseEntity.ok(response);
+        // Ротация обновляет refresh-cookie новым значением
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, buildRefreshCookie(result.newRawToken()).toString())
+                .body(response);
     }
 
     /**
@@ -169,7 +191,8 @@ public class AuthController {
     public ResponseEntity<Map<String, String>> logout(
             @AuthenticationPrincipal UserDetails userDetails,
             @RequestHeader("Authorization") String authHeader,
-            @RequestBody(required = false) LogoutRequest logoutRequest) {
+            @RequestBody(required = false) LogoutRequest logoutRequest,
+            @CookieValue(value = REFRESH_COOKIE, required = false) String refreshCookie) {
 
         // Blacklist текущего access-токена
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -179,14 +202,18 @@ public class AuthController {
         tokenBlacklistService.blacklistAccessToken(
                 accessToken, jwtTokenProvider.getExpirationFromToken(accessToken));
 
-        // Отзыв refresh-токена если передан
-        if (logoutRequest != null && logoutRequest.getRefreshToken() != null
-                && !logoutRequest.getRefreshToken().isBlank()) {
-            refreshTokenService.revokeByRawToken(logoutRequest.getRefreshToken());
+        // Отзыв refresh-токена: из тела (Android) либо из HttpOnly-cookie (веб, #259)
+        String bodyRefresh = logoutRequest != null ? logoutRequest.getRefreshToken() : null;
+        String refreshToRevoke = (bodyRefresh != null && !bodyRefresh.isBlank()) ? bodyRefresh : refreshCookie;
+        if (refreshToRevoke != null && !refreshToRevoke.isBlank()) {
+            refreshTokenService.revokeByRawToken(refreshToRevoke);
         }
 
         log.info("Выход пользователя: {}", maskEmail(userDetails.getUsername()));
-        return ResponseEntity.ok(Map.of("message", "Выход выполнен"));
+        // Гасим refresh-cookie у веб-клиента (Max-Age=0), чтобы браузер её удалил
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, clearRefreshCookie().toString())
+                .body(Map.of("message", "Выход выполнен"));
     }
 
     /**
@@ -271,5 +298,49 @@ public class AuthController {
             }
         }
         return "ru";
+    }
+
+    /**
+     * Строит HttpOnly-cookie с refresh-токеном для веб-клиента (#259).
+     * SameSite=Strict + Path=/api/auth: cookie уходит только на auth-эндпоинты
+     * и только при same-site запросах — CSRF на /refresh практически закрыт.
+     * Secure управляется {@code jwt.refresh-cookie-secure} (true в production).
+     */
+    private ResponseCookie buildRefreshCookie(String rawToken) {
+        return ResponseCookie.from(REFRESH_COOKIE, rawToken)
+                .httpOnly(true)
+                .secure(jwtProperties.isRefreshCookieSecure())
+                .sameSite("Strict")
+                .path(REFRESH_COOKIE_PATH)
+                .maxAge(jwtProperties.getRefreshTokenExpiration() / 1000)
+                .build();
+    }
+
+    /**
+     * Cookie-«ластик»: то же имя/path/атрибуты, но пустое значение и Max-Age=0 —
+     * браузер немедленно удаляет refresh-cookie при выходе.
+     */
+    private ResponseCookie clearRefreshCookie() {
+        return ResponseCookie.from(REFRESH_COOKIE, "")
+                .httpOnly(true)
+                .secure(jwtProperties.isRefreshCookieSecure())
+                .sameSite("Strict")
+                .path(REFRESH_COOKIE_PATH)
+                .maxAge(0)
+                .build();
+    }
+
+    /**
+     * Извлекает refresh-токен из двух источников: тело запроса (Android) имеет
+     * приоритет над HttpOnly-cookie (веб). Если токена нет нигде — 401.
+     */
+    private String resolveRefreshToken(String bodyToken, String cookieToken) {
+        if (bodyToken != null && !bodyToken.isBlank()) {
+            return bodyToken;
+        }
+        if (cookieToken != null && !cookieToken.isBlank()) {
+            return cookieToken;
+        }
+        throw new BadCredentialsException("Refresh-токен не предоставлен");
     }
 }
