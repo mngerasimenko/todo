@@ -143,4 +143,15 @@ public interface UserService {
      * @throws ru.mngerasimenko.todolist.exception.UserNotFoundException если userId не существует
      */
     UserDto updateSortPreferences(Long userId, String email, SortPreferencesRequest request);
+
+    /**
+     * Сменить пароль в сессии (зная текущий). Проверяет текущий пароль, отклоняет
+     * совпадение нового с текущим, шифрует новый и атомарно отзывает ВСЕ refresh-токены
+     * пользователя (revokeAllForUser). Blacklist текущего access-токена и выдача новых
+     * токенов текущему устройству — на стороне контроллера.
+     *
+     * @throws IllegalArgumentException текущий пароль неверен ИЛИ новый совпадает с текущим
+     * @throws ru.mngerasimenko.todolist.exception.UserNotFoundException userId не существует
+     */
+    void changePassword(Long userId, String currentPassword, String newPassword);
 }

@@ -54,6 +54,7 @@ public class UserServiceImpl implements UserService {
     private final TodoRepository todoRepository;
     private final ru.mngerasimenko.todolist.crypto.CryptoService cryptoService;
     private final CacheManager cacheManager;
+    private final RefreshTokenService refreshTokenService;
 
     @Override
     @Transactional(readOnly = true)
@@ -423,6 +424,33 @@ public class UserServiceImpl implements UserService {
         // Evict кэша по старому и новому email
         evictUserCache(oldEmail);
         evictUserCache(normalizedEmail);
+    }
+
+    @Override
+    @Transactional
+    public void changePassword(Long userId, String currentPassword, String newPassword) {
+        User user = repository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
+
+        // Доказательство владения: текущий пароль должен совпасть
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new IllegalArgumentException("Текущий пароль неверен");
+        }
+        // Новый пароль не должен совпадать с текущим
+        if (currentPassword.equals(newPassword)) {
+            throw new IllegalArgumentException("Новый пароль совпадает с текущим");
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        repository.saveAndFlush(user);
+
+        // Атомарно (в этой же транзакции) отзываем ВСЕ refresh-токены пользователя.
+        // Иначе выживший refresh-токен на чужом устройстве продолжит выдавать access
+        // (refresh пароль не перепроверяет) — смена пароля не разлогинила бы злоумышленника.
+        refreshTokenService.revokeAllForUser(userId);
+
+        log.info("Пароль изменён (in-session): userId={}", userId);
+        evictUserCache(user.getEmail());
     }
 
     @Override
