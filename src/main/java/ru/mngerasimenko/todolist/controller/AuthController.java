@@ -258,6 +258,46 @@ public class AuthController {
     }
 
     /**
+     * Смена пароля в сессии (зная текущий). Требует JWT.
+     * Отзывает все refresh-токены (внутри сервиса) + blacklist текущего access,
+     * затем выдаёт новые access+refresh текущему устройству — оно не выкидывается.
+     */
+    @PostMapping("/change-password")
+    public ResponseEntity<LoginResponse> changePassword(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestHeader("Authorization") String authHeader,
+            @Valid @RequestBody ChangePasswordRequest request) {
+        UserDto userDto = userService.getUserByEmail(userDetails.getUsername());
+
+        // Смена пароля + отзыв всех refresh-токенов (атомарно в сервисе).
+        // Неверный текущий / совпадение с текущим → IllegalArgumentException → 400.
+        userService.changePassword(userDto.getId(), request.getCurrentPassword(), request.getNewPassword());
+
+        // Blacklist текущего access-токена (как в logout)
+        String oldAccessToken = authHeader.substring(7);
+        tokenBlacklistService.blacklistAccessToken(
+                oldAccessToken, jwtTokenProvider.getExpirationFromToken(oldAccessToken));
+
+        // Выдаём новые токены текущему устройству
+        String newAccessToken = jwtTokenProvider.generateAccessToken(userDto.getEmail());
+        String newRefreshToken = refreshTokenService.createRefreshToken(userDto.getId());
+        UserResponse userResponse = userMapper.toResponse(userDto);
+
+        LoginResponse response = LoginResponse.builder()
+                .accessToken(newAccessToken)
+                .refreshToken(newRefreshToken)
+                .expiresIn(jwtProperties.getAccessTokenExpiration() / 1000)
+                .tokenType("Bearer")
+                .user(userResponse)
+                .build();
+
+        log.info("Пароль изменён: {}", maskEmail(userDetails.getUsername()));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, buildRefreshCookie(newRefreshToken).toString())
+                .body(response);
+    }
+
+    /**
      * Смена email с повторной верификацией (требует JWT)
      */
     @PostMapping("/change-email")
