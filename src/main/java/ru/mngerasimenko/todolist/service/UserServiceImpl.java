@@ -57,14 +57,6 @@ public class UserServiceImpl implements UserService {
     private final RefreshTokenService refreshTokenService;
 
     @Override
-    @Transactional(readOnly = true)
-    public List<UserDto> getAll() {
-        return repository.findAll().stream()
-                .map(mapper::toDto)
-                .toList();
-    }
-
-    @Override
     @Transactional
     public void delete(long id) {
         User userToDelete = repository.findById(id)

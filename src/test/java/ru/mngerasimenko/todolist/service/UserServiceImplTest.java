@@ -25,7 +25,6 @@ import ru.mngerasimenko.todolist.repository.UserRepository;
 import ru.mngerasimenko.todolist.settings.EmailProperties;
 
 import java.time.LocalDateTime;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -100,37 +99,6 @@ class UserServiceImplTest {
 
         // Мок для создания токена верификации в createUser
         lenient().when(emailProperties.getVerificationTokenTtlHours()).thenReturn(24);
-    }
-
-    @Test
-    void getAll_ReturnsListOfUsers() {
-        User user2 = new User();
-        user2.setId(2L);
-        user2.setAuthId("AuthId2");
-        user2.setName("user2");
-        user2.setEmail("user2@mail.ru");
-        user2.setPassword("pass2");
-
-        UserDto dto2 = new UserDto();
-        dto2.setId(2L);
-        dto2.setAuthId("AuthId2");
-        dto2.setName("user2");
-        dto2.setEmail("user2@mail.ru");
-        dto2.setPassword("pass2");
-
-        List<User> users = Arrays.asList(user, user2);
-        when(repository.findAll()).thenReturn(users);
-        when(mapper.toDto(user)).thenReturn(userDto);
-        when(mapper.toDto(user2)).thenReturn(dto2);
-
-        List<UserDto> result = userService.getAll();
-
-        assertThat(result).hasSize(2);
-        assertThat(result).containsExactlyInAnyOrder(userDto, dto2);
-        assertEquals(result.get(0).getId(), userDto.getId());
-        assertEquals(result.get(1).getId(), dto2.getId());
-        verify(repository, times(1)).findAll();
-        verify(mapper, times(2)).toDto(any(User.class));
     }
 
     @Test

@@ -53,7 +53,6 @@ Todos → Update Todo
 #### Шаг 3: Работа с пользователями
 
 ```
-Users → Get All Users
 Users → Get User by ID
 Users → Create User
 Users → Update User
@@ -83,7 +82,6 @@ Users → Update User
 - **PUT** `/api/todos/{id}` — обновление задачи
 
 ### 3. Users (Пользователи) 🔒
-- **GET** `/api/users/all` — список пользователей
 - **GET** `/api/users/{id}` — пользователь по ID
 - **PUT** `/api/users/{id}` — обновление пользователя
 - **DELETE** `/api/users/{id}` — удаление пользователя

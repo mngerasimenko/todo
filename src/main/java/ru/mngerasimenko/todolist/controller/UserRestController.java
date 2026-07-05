@@ -5,7 +5,6 @@ import jakarta.validation.Validator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.validation.annotation.Validated;
@@ -24,8 +23,6 @@ import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.service.PushNotificationService;
 import ru.mngerasimenko.todolist.service.SubscriptionService;
 import ru.mngerasimenko.todolist.service.UserService;
-
-import java.util.List;
 
 /**
  * REST-контроллер для управления пользователями.
@@ -56,17 +53,6 @@ public class UserRestController {
     public ResponseEntity<SubscriptionStatusResponse> getSubscriptionStatus(
             @AuthenticationPrincipal UserDetails userDetails) {
         SubscriptionStatusResponse response = subscriptionService.getSubscriptionStatus(userDetails.getUsername());
-        return ResponseEntity.ok(response);
-    }
-
-    /** Получение списка всех пользователей (только суперадмин) */
-    @GetMapping("/all")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<UserResponse>> showAll() {
-        List<UserDto> users = userService.getAll();
-        List<UserResponse> response = users.stream()
-                .map(userMapper::toResponse)
-                .toList();
         return ResponseEntity.ok(response);
     }
 

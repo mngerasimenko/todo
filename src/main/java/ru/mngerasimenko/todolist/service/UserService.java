@@ -13,9 +13,6 @@ import java.util.List;
  */
 public interface UserService {
 
-    /** Возвращает список всех пользователей */
-    List<UserDto> getAll();
-
     /** Удаляет пользователя по ID */
     void delete(long id);
 

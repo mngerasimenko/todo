@@ -168,9 +168,9 @@ class RateLimitFilterTest {
                         new MockHttpServletResponse(), filterChain);
             }
 
-            // 5 запросов на /api/users/all
+            // 5 запросов на /api/users/me
             for (int i = 0; i < 5; i++) {
-                filter.doFilterInternal(createRequest("GET", "/api/users/all"),
+                filter.doFilterInternal(createRequest("GET", "/api/users/me"),
                         new MockHttpServletResponse(), filterChain);
             }
 
