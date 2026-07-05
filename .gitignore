@@ -54,3 +54,12 @@ monitoring/rustore-position.md
 /monitoring/user-activity.html
 /monitoring/rustore-position.html
 /monitoring/stats/user-stats.html
+
+### Agent / superpowers working files (kept out of the public repo) ###
+spool/worktrees/
+docs/superpowers/
+
+### Analytics exports (owned by /ideas — GA4/Firebase Data API dumps) ###
+# Firebase_overview.csv stays tracked (legacy); new export snapshots are ignored.
+monitoring/firebase/*.csv
+monitoring/firebase/*.json
