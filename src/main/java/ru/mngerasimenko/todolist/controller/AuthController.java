@@ -258,6 +258,60 @@ public class AuthController {
     }
 
     /**
+     * Смена пароля в сессии (зная текущий). Требует JWT.
+     * Отзывает все refresh-токены (внутри сервиса) + blacklist текущего access,
+     * затем выдаёт новые access+refresh текущему устройству — оно не выкидывается.
+     */
+    @PostMapping("/change-password")
+    public ResponseEntity<LoginResponse> changePassword(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestHeader("Authorization") String authHeader,
+            @Valid @RequestBody ChangePasswordRequest request) {
+        // Валидируем заголовок и достаём старый access-токен ДО любой мутации (fail closed):
+        // если не "Bearer ...", отдаём 401, не тронув пароль и токены.
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        String oldAccessToken = authHeader.substring(7);
+
+        UserDto userDto = userService.getUserByEmail(userDetails.getUsername());
+        if (userDto == null) {
+            // Пользователь удалён между аутентификацией и этим вызовом — fail closed
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        // Смена пароля + отзыв всех refresh-токенов (атомарно в сервисе).
+        // Неверный текущий / совпадение с текущим → IllegalArgumentException → 400.
+        userService.changePassword(userDto.getId(), request.getCurrentPassword(), request.getNewPassword());
+
+        // Blacklist текущего access-токена (как в logout)
+        tokenBlacklistService.blacklistAccessToken(
+                oldAccessToken, jwtTokenProvider.getExpirationFromToken(oldAccessToken));
+
+        // Выдаём новые токены текущему устройству.
+        // ПРИНЯТОЕ ОГРАНИЧЕНИЕ (#2, owner-решение 2026-07-05): blacklist + выдача новых токенов идут
+        // ПОСЛЕ коммита сервисной транзакции (смена пароля + отзыв всех refresh атомарны сами по себе).
+        // Если этот пост-commit шаг упадёт (DB/Redis-блип), текущее устройство тоже уйдёт в релогин —
+        // fail-safe (юзер входит новым паролем), не security-дыра.
+        String newAccessToken = jwtTokenProvider.generateAccessToken(userDto.getEmail());
+        String newRefreshToken = refreshTokenService.createRefreshToken(userDto.getId());
+        UserResponse userResponse = userMapper.toResponse(userDto);
+
+        LoginResponse response = LoginResponse.builder()
+                .accessToken(newAccessToken)
+                .refreshToken(newRefreshToken)
+                .expiresIn(jwtProperties.getAccessTokenExpiration() / 1000)
+                .tokenType("Bearer")
+                .user(userResponse)
+                .build();
+
+        log.info("Пароль изменён: {}", maskEmail(userDetails.getUsername()));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, buildRefreshCookie(newRefreshToken).toString())
+                .body(response);
+    }
+
+    /**
      * Смена email с повторной верификацией (требует JWT)
      */
     @PostMapping("/change-email")

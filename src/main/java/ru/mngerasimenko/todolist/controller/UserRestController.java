@@ -11,6 +11,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import ru.mngerasimenko.todolist.dto.ChangeNameRequest;
 import ru.mngerasimenko.todolist.dto.SortPreferencesRequest;
 import ru.mngerasimenko.todolist.dto.SubscriptionStatusResponse;
 import ru.mngerasimenko.todolist.dto.UpdateColorsRequest;
@@ -187,6 +188,18 @@ public class UserRestController {
         UserDto currentUser = requireCurrentUser(userDetails);
         userService.updateEmailLocale(currentUser.getId(), request.getLocale());
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Сменить отображаемое имя текущего пользователя.
+     */
+    @PatchMapping("/me/name")
+    public ResponseEntity<UserResponse> updateName(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @Valid @RequestBody ChangeNameRequest request) {
+        UserDto currentUser = requireCurrentUser(userDetails);
+        UserDto updated = userService.updateName(currentUser.getId(), request.getName());
+        return ResponseEntity.ok(userMapper.toResponse(updated));
     }
 
     /**

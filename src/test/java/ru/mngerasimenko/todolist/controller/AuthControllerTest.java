@@ -1151,4 +1151,106 @@ class AuthControllerTest {
                         .content("{}"))
                 .andExpect(status().isUnauthorized());
     }
+
+    // ==================== CHANGE PASSWORD TESTS ====================
+
+    @Test
+    @WithMockUser(username = "test@example.com")
+    void changePassword_Valid_ReturnsNewTokensAndBlacklistsOld() throws Exception {
+        when(userService.getUserByEmail("test@example.com")).thenReturn(testUserDto);
+        when(userMapper.toResponse(testUserDto)).thenReturn(testUserResponse);
+        doNothing().when(userService).changePassword(1L, "oldPass", "newPass123");
+        when(jwtTokenProvider.getExpirationFromToken(anyString()))
+                .thenReturn(java.time.Instant.now().plusSeconds(3600));
+        when(jwtTokenProvider.generateAccessToken("test@example.com")).thenReturn("new-access-token");
+        when(refreshTokenService.createRefreshToken(1L)).thenReturn("new-refresh-token");
+
+        ChangePasswordRequest request = ChangePasswordRequest.builder()
+                .currentPassword("oldPass").newPassword("newPass123").build();
+
+        mockMvc.perform(post("/api/auth/change-password")
+                        .header("Authorization", "Bearer old-access-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.access_token").value("new-access-token"))
+                .andExpect(jsonPath("$.refresh_token").value("new-refresh-token"))
+                .andExpect(jsonPath("$.user.email").value("test@example.com"));
+
+        verify(userService).changePassword(1L, "oldPass", "newPass123");
+        verify(tokenBlacklistService).blacklistAccessToken(eq("old-access-token"), any());
+    }
+
+    @Test
+    void changePassword_NoAuth_ReturnsUnauthorized() throws Exception {
+        ChangePasswordRequest request = ChangePasswordRequest.builder()
+                .currentPassword("oldPass").newPassword("newPass123").build();
+        mockMvc.perform(post("/api/auth/change-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @WithMockUser(username = "test@example.com")
+    void changePassword_WrongCurrent_ReturnsBadRequest() throws Exception {
+        when(userService.getUserByEmail("test@example.com")).thenReturn(testUserDto);
+        doThrow(new IllegalArgumentException("Текущий пароль неверен"))
+                .when(userService).changePassword(1L, "wrong", "newPass123");
+
+        ChangePasswordRequest request = ChangePasswordRequest.builder()
+                .currentPassword("wrong").newPassword("newPass123").build();
+
+        mockMvc.perform(post("/api/auth/change-password")
+                        .header("Authorization", "Bearer old-access-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+
+        verify(refreshTokenService, never()).createRefreshToken(anyLong());
+        // #5b: blacklist не должен вызываться при неверном текущем пароле
+        verify(tokenBlacklistService, never()).blacklistAccessToken(anyString(), any());
+    }
+
+    @Test
+    @WithMockUser(username = "test@example.com")
+    void changePassword_NonBearerHeader_ReturnsUnauthorizedAndNoMutation() throws Exception {
+        ChangePasswordRequest request = ChangePasswordRequest.builder()
+                .currentPassword("oldPass").newPassword("newPass123").build();
+        mockMvc.perform(post("/api/auth/change-password")
+                        .header("Authorization", "Basic something")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized());
+        verify(userService, never()).changePassword(anyLong(), anyString(), anyString());
+    }
+
+    @Test
+    @WithMockUser(username = "ghost@example.com")
+    void changePassword_UserNotFound_ReturnsUnauthorized() throws Exception {
+        when(userService.getUserByEmail("ghost@example.com")).thenReturn(null);
+        ChangePasswordRequest request = ChangePasswordRequest.builder()
+                .currentPassword("oldPass").newPassword("newPass123").build();
+        mockMvc.perform(post("/api/auth/change-password")
+                        .header("Authorization", "Bearer old-access-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized());
+        verify(userService, never()).changePassword(anyLong(), anyString(), anyString());
+    }
+
+    @Test
+    @WithMockUser(username = "test@example.com")
+    void changePassword_ShortNewPassword_ReturnsBadRequest() throws Exception {
+        ChangePasswordRequest request = ChangePasswordRequest.builder()
+                .currentPassword("oldPass").newPassword("abc").build();
+
+        mockMvc.perform(post("/api/auth/change-password")
+                        .header("Authorization", "Bearer old-access-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(userService);
+    }
 }

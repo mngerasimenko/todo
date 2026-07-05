@@ -284,6 +284,13 @@ class RateLimitFilterTest {
         }
 
         @Test
+        @DisplayName("POST /api/auth/change-password → changePassword:IP")
+        void changePasswordEndpoint() {
+            String key = filter.resolveBucketKey("/api/auth/change-password", "POST", "1.2.3.4");
+            assertThat(key).isEqualTo("changePassword:1.2.3.4");
+        }
+
+        @Test
         @DisplayName("GET /api/todos/all → general:IP")
         void generalEndpoint() {
             String key = filter.resolveBucketKey("/api/todos/all", "GET", "1.2.3.4");

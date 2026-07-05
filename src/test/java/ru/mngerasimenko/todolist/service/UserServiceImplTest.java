@@ -69,6 +69,9 @@ class UserServiceImplTest {
     @Mock
     private org.springframework.cache.CacheManager cacheManager;
 
+    @Mock
+    private RefreshTokenService refreshTokenService;
+
     @InjectMocks
     private UserServiceImpl userService;
 
@@ -1204,5 +1207,86 @@ class UserServiceImplTest {
         verify(repository, never()).saveAndFlush(any());
         // При исключении evict кэша не должен вызываться
         verify(cacheManager, never()).getCache(anyString());
+    }
+
+    @Test
+    void updateName_ExistingUser_UpdatesNameAndReturnsDto() {
+        when(repository.findById(1L)).thenReturn(Optional.of(user));
+        when(repository.saveAndFlush(user)).thenReturn(user);
+        when(mapper.toDto(user)).thenReturn(userDto);
+
+        UserDto result = userService.updateName(1L, "Новое Имя");
+
+        assertThat(user.getName()).isEqualTo("Новое Имя");
+        verify(repository).saveAndFlush(user);
+        assertThat(result).isEqualTo(userDto);
+    }
+
+    @Test
+    void updateName_UserNotFound_Throws() {
+        when(repository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.updateName(99L, "X"))
+                .isInstanceOf(UserNotFoundException.class);
+    }
+
+    // ===== changePassword =====
+
+    @Test
+    void changePassword_ValidCurrent_EncodesNewAndRevokesTokens() {
+        when(repository.findById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password", "password")).thenReturn(true);
+        when(passwordEncoder.encode("newSecret")).thenReturn("ENC(newSecret)");
+        when(repository.saveAndFlush(user)).thenReturn(user);
+
+        userService.changePassword(1L, "password", "newSecret");
+
+        assertThat(user.getPassword()).isEqualTo("ENC(newSecret)");
+        verify(repository).saveAndFlush(user);
+        verify(refreshTokenService).revokeAllForUser(1L);
+    }
+
+    @Test
+    void changePassword_WrongCurrent_ThrowsAndDoesNotRevoke() {
+        when(repository.findById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("wrong", "password")).thenReturn(false);
+
+        assertThatThrownBy(() -> userService.changePassword(1L, "wrong", "newSecret"))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(repository, never()).saveAndFlush(any());
+        verify(refreshTokenService, never()).revokeAllForUser(anyLong());
+    }
+
+    @Test
+    void changePassword_NewEqualsCurrent_ThrowsBeforeSave() {
+        when(repository.findById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password", "password")).thenReturn(true);
+
+        assertThatThrownBy(() -> userService.changePassword(1L, "password", "password"))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(repository, never()).saveAndFlush(any());
+        verify(refreshTokenService, never()).revokeAllForUser(anyLong());
+    }
+
+    @Test
+    void changePassword_UserNotFound_Throws() {
+        when(repository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.changePassword(99L, "a", "b"))
+                .isInstanceOf(UserNotFoundException.class);
+    }
+
+    @Test
+    void changePassword_RevokeThrows_PropagatesException() {
+        when(repository.findById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password", "password")).thenReturn(true);
+        when(passwordEncoder.encode("newSecret")).thenReturn("ENC(newSecret)");
+        when(repository.saveAndFlush(user)).thenReturn(user);
+        doThrow(new RuntimeException("db down")).when(refreshTokenService).revokeAllForUser(1L);
+
+        assertThatThrownBy(() -> userService.changePassword(1L, "password", "newSecret"))
+                .isInstanceOf(RuntimeException.class);
     }
 }

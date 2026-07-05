@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+import ru.mngerasimenko.todolist.dto.ChangeNameRequest;
 import ru.mngerasimenko.todolist.dto.SortPreferencesRequest;
 import ru.mngerasimenko.todolist.dto.SubscriptionStatusResponse;
 import ru.mngerasimenko.todolist.dto.UpdateColorsRequest;
@@ -29,6 +30,8 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -649,5 +652,72 @@ class UserRestControllerTest {
                 .andExpect(status().isUnauthorized());
 
         verify(userService, never()).updateSortPreferences(any(), any(), any());
+    }
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void updateName_Authenticated_ReturnsOk() throws Exception {
+        when(userService.getUserByEmail("test@mail.ru")).thenReturn(testUserDto);
+        UserDto updated = new UserDto();
+        updated.setId(1L);
+        updated.setName("Новое Имя");
+        updated.setEmail("test@mail.ru");
+        when(userService.updateName(1L, "Новое Имя")).thenReturn(updated);
+        UserResponse resp = new UserResponse();
+        resp.setId(1L);
+        resp.setName("Новое Имя");
+        resp.setEmail("test@mail.ru");
+        when(userMapper.toResponse(updated)).thenReturn(resp);
+
+        ChangeNameRequest request = ChangeNameRequest.builder().name("Новое Имя").build();
+
+        mockMvc.perform(patch("/api/users/me/name")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Новое Имя"));
+
+        verify(userService).updateName(1L, "Новое Имя");
+    }
+
+    @Test
+    void updateName_NoAuth_ReturnsUnauthorized() throws Exception {
+        ChangeNameRequest request = ChangeNameRequest.builder().name("Имя Имя").build();
+        mockMvc.perform(patch("/api/users/me/name")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void updateName_BlankName_ReturnsBadRequest() throws Exception {
+        ChangeNameRequest request = ChangeNameRequest.builder().name("").build();
+        mockMvc.perform(patch("/api/users/me/name")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void updateName_NameWithAngleBrackets_ReturnsBadRequest() throws Exception {
+        ChangeNameRequest request = ChangeNameRequest.builder().name("<script>").build();
+        mockMvc.perform(patch("/api/users/me/name")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+        verify(userService, never()).updateName(anyLong(), anyString());
+    }
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void updateName_TooLongName_ReturnsBadRequest() throws Exception {
+        ChangeNameRequest request = ChangeNameRequest.builder().name("a".repeat(129)).build();
+        mockMvc.perform(patch("/api/users/me/name")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+        verify(userService, never()).updateName(anyLong(), anyString());
     }
 }
