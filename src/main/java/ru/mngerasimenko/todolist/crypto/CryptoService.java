@@ -10,6 +10,7 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.ByteBuffer;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
 
@@ -28,6 +29,8 @@ public class CryptoService {
     private static final String HMAC_SHA256 = "HmacSHA256";
     private static final int GCM_IV_LENGTH = 12;
     private static final int GCM_TAG_LENGTH = 128; // бит
+    // Truncated hex signature length (16 hex = 8 bytes = 64 bits) — URL-friendly, enough against low-risk forgery
+    private static final int SIGNATURE_HEX_LENGTH = 16;
 
     private final SecretKey secretKey;
     private final SecureRandom secureRandom = new SecureRandom();
@@ -131,6 +134,43 @@ public class CryptoService {
             log.error("Ошибка вычисления blind index", e);
             throw new RuntimeException("Ошибка вычисления blind index", e);
         }
+    }
+
+    /**
+     * HMAC-SHA256 подпись для защиты публичных ссылок email-трекинга от подделки.
+     * Отдельный метод от {@link #blindIndex}: НЕ приводит вход к lowercase (подпись
+     * чувствительна к регистру) и усечён до 16 hex-символов (URL-friendly, 64 бита —
+     * достаточно против подделки низкорисковых метрик). Ключ — тот же ENCRYPTION_KEY;
+     * отдельная деривация ключа для подписи отложена (см. blindIndex key-separation audit).
+     *
+     * @return усечённая hex-подпись, либо {@code null} если шифрование выключено
+     */
+    public String sign(String data) {
+        if (data == null) return null;
+        if (secretKey == null) return null;
+
+        try {
+            Mac mac = Mac.getInstance(HMAC_SHA256);
+            mac.init(secretKey);
+            byte[] hash = mac.doFinal(data.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return bytesToHex(hash).substring(0, SIGNATURE_HEX_LENGTH);
+        } catch (Exception e) {
+            log.error("Ошибка вычисления подписи", e);
+            throw new RuntimeException("Ошибка вычисления подписи", e);
+        }
+    }
+
+    /**
+     * Проверить подпись в constant-time (защита от timing-атак через {@link MessageDigest#isEqual}).
+     * Возвращает {@code false}, если подпись отсутствует, шифрование выключено или подпись не совпала.
+     */
+    public boolean verifySignature(String data, String signature) {
+        if (signature == null || secretKey == null) return false;
+        String expected = sign(data);
+        if (expected == null) return false;
+        return MessageDigest.isEqual(
+                expected.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                signature.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     private static String bytesToHex(byte[] bytes) {

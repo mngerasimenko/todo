@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.util.HtmlUtils;
 import org.thymeleaf.context.Context;
 import org.thymeleaf.spring6.SpringTemplateEngine;
+import ru.mngerasimenko.todolist.crypto.CryptoService;
 import ru.mngerasimenko.todolist.settings.EmailProperties;
 
 import java.util.Locale;
@@ -42,6 +43,7 @@ public class EmailServiceImpl implements EmailService {
     private final EmailProperties emailProperties;
     private final SpringTemplateEngine templateEngine;
     private final MessageService messageService;
+    private final CryptoService cryptoService;
 
     /** Кешированный результат SMTP health check (обновляется раз в 15 минут через SmtpHealthScheduler) */
     private volatile boolean smtpHealthyCache = false;
@@ -103,10 +105,9 @@ public class EmailServiceImpl implements EmailService {
         Locale locale = resolveLocale(localeTag);
         String fallback = messageService.getMessage("email.inactive.fallback_name", locale);
         String safeName = HtmlUtils.htmlEscape(userName != null ? userName : fallback);
-        String baseUrl = emailProperties.getBaseUrl();
         String rustoreLink = "https://www.rustore.ru/catalog/app/ru.mngerasimenko.todolist";
-        String trackClickLink = baseUrl + "/api/track/click/" + userId;
-        String trackOpenLink = baseUrl + "/api/track/open/" + userId;
+        String trackClickLink = buildTrackLink("click", userId);
+        String trackOpenLink = buildTrackLink("open", userId);
         java.util.HashMap<String, Object> vars = new java.util.HashMap<>();
         vars.put("userName", safeName);
         vars.put("rustoreLink", rustoreLink);
@@ -125,9 +126,8 @@ public class EmailServiceImpl implements EmailService {
         // Используем тот же fallback name что и inactive-reminder — единый messages key.
         String fallback = messageService.getMessage("email.inactive.fallback_name", locale);
         String safeName = HtmlUtils.htmlEscape(userName != null ? userName : fallback);
-        String baseUrl = emailProperties.getBaseUrl();
-        String trackClickLink = baseUrl + "/api/track/click/" + userId;
-        String trackOpenLink = baseUrl + "/api/track/open/" + userId;
+        String trackClickLink = buildTrackLink("click", userId);
+        String trackOpenLink = buildTrackLink("open", userId);
         java.util.HashMap<String, Object> vars = new java.util.HashMap<>();
         vars.put("userName", safeName);
         vars.put("trackClickLink", trackClickLink);
@@ -146,6 +146,18 @@ public class EmailServiceImpl implements EmailService {
             return null;
         }
         return emailProperties.getBaseUrl() + "/api/users/unsubscribe-reminder?token=" + unsubscribeToken;
+    }
+
+    /**
+     * Построить подписанную ссылку email-трекинга: {@code /api/track/{type}/{userId}?s={HMAC}}.
+     * Подпись привязана к типу события и userId — событие нельзя подделать без ENCRYPTION_KEY.
+     * Если шифрование выключено (dev) — ссылка без подписи (контроллер не залогирует, но
+     * отдаст пиксель/редирект).
+     */
+    private String buildTrackLink(String type, Long userId) {
+        String url = emailProperties.getBaseUrl() + "/api/track/" + type + "/" + userId;
+        String signature = cryptoService.sign(type + ":" + userId);
+        return signature != null ? url + "?s=" + signature : url;
     }
 
     /**

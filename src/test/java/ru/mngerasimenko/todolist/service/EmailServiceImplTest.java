@@ -4,13 +4,16 @@ import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.thymeleaf.context.Context;
 import org.thymeleaf.spring6.SpringTemplateEngine;
+import ru.mngerasimenko.todolist.crypto.CryptoService;
 import ru.mngerasimenko.todolist.settings.EmailProperties;
 
+import java.util.Base64;
 import java.util.Locale;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,6 +40,7 @@ class EmailServiceImplTest {
     private MessageService messageService;
 
     private EmailProperties emailProperties;
+    private CryptoService cryptoService;
     private EmailServiceImpl emailService;
 
     @BeforeEach
@@ -46,7 +50,10 @@ class EmailServiceImplTest {
         emailProperties.setBaseUrl("https://todo.keepware.ru");
         emailProperties.setVerificationTokenTtlHours(24);
         emailProperties.setResetTokenTtlHours(1);
-        emailService = new EmailServiceImpl(mailSender, emailProperties, templateEngine, messageService);
+        // Реальный CryptoService с тестовым ключом — подпись трекинг-ссылок реально считается
+        cryptoService = new CryptoService(Base64.getEncoder().encodeToString(
+                "01234567890123456789012345678901".getBytes()));
+        emailService = new EmailServiceImpl(mailSender, emailProperties, templateEngine, messageService, cryptoService);
 
         // Loose stubbing — не падаем, если конкретный метод не вызвался в данном тесте.
         lenient().when(templateEngine.process(anyString(), any(Context.class))).thenReturn("<html>rendered</html>");
@@ -132,5 +139,28 @@ class EmailServiceImplTest {
         // чтобы письмо оставалось локализованным (раньше было hardcoded "друг").
         verify(messageService).getMessage(eq("email.inactive.fallback_name"), any(Locale.class));
         verify(mailSender).send(mimeMessage);
+    }
+
+    @Test
+    void sendInactiveReminderEmail_BuildsSignedTrackLinks() {
+        MimeMessage mimeMessage = mock(MimeMessage.class);
+        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+
+        emailService.sendInactiveReminderEmail("user@example.com", "Иван", 42L, "ru");
+
+        // Захватываем Context, переданный в шаблон, и проверяем, что трекинг-ссылки подписаны
+        ArgumentCaptor<Context> ctx = ArgumentCaptor.forClass(Context.class);
+        verify(templateEngine).process(eq("inactive-reminder"), ctx.capture());
+
+        String openLink = (String) ctx.getValue().getVariable("trackOpenLink");
+        String clickLink = (String) ctx.getValue().getVariable("trackClickLink");
+
+        assertThat(openLink).startsWith("https://todo.keepware.ru/api/track/open/42?s=");
+        assertThat(clickLink).startsWith("https://todo.keepware.ru/api/track/click/42?s=");
+        // подпись валидна и привязана к типу события + userId
+        assertThat(cryptoService.verifySignature("open:42",
+                openLink.substring(openLink.indexOf("?s=") + 3))).isTrue();
+        assertThat(cryptoService.verifySignature("click:42",
+                clickLink.substring(clickLink.indexOf("?s=") + 3))).isTrue();
     }
 }

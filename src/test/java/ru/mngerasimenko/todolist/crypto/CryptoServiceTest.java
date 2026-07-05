@@ -110,6 +110,63 @@ class CryptoServiceTest {
         assertThat(crypto.blindIndex(null)).isNull();
     }
 
+    // ===== sign / verifySignature =====
+
+    @Test
+    void sign_Deterministic() {
+        assertThat(crypto.sign("open:123")).isEqualTo(crypto.sign("open:123"));
+    }
+
+    @Test
+    void sign_Returns16CharHex() {
+        String sig = crypto.sign("open:123");
+
+        // усечение HMAC-SHA256 до 16 hex-символов (64 бита)
+        assertThat(sig).hasSize(16);
+        assertThat(sig).matches("[0-9a-f]+");
+    }
+
+    @Test
+    void sign_TypeAndValueBound_DifferentSignatures() {
+        // разный тип события → разная подпись
+        assertThat(crypto.sign("open:123")).isNotEqualTo(crypto.sign("click:123"));
+        // разный userId → разная подпись
+        assertThat(crypto.sign("open:123")).isNotEqualTo(crypto.sign("open:124"));
+    }
+
+    @Test
+    void sign_CaseSensitive() {
+        // в отличие от blindIndex, sign НЕ приводит вход к lowercase
+        assertThat(crypto.sign("Open:123")).isNotEqualTo(crypto.sign("open:123"));
+    }
+
+    @Test
+    void sign_Null_ReturnsNull() {
+        assertThat(crypto.sign(null)).isNull();
+    }
+
+    @Test
+    void verifySignature_ValidSignature_ReturnsTrue() {
+        String sig = crypto.sign("open:123");
+
+        assertThat(crypto.verifySignature("open:123", sig)).isTrue();
+    }
+
+    @Test
+    void verifySignature_TamperedOrMismatched_ReturnsFalse() {
+        String sig = crypto.sign("open:123");
+
+        // подпись валидна для open:123, но проверяем против другого userId
+        assertThat(crypto.verifySignature("open:124", sig)).isFalse();
+        // случайный мусор вместо подписи
+        assertThat(crypto.verifySignature("open:123", "deadbeefdeadbeef")).isFalse();
+    }
+
+    @Test
+    void verifySignature_NullSignature_ReturnsFalse() {
+        assertThat(crypto.verifySignature("open:123", null)).isFalse();
+    }
+
     // ===== disabled mode =====
 
     @Test
@@ -120,6 +177,9 @@ class CryptoServiceTest {
         assertThat(disabled.encrypt("secret")).isEqualTo("secret");
         assertThat(disabled.decrypt("secret")).isEqualTo("secret");
         assertThat(disabled.blindIndex("test@mail.ru")).isEqualTo("test@mail.ru");
+        // без ключа подпись недоступна: sign → null, verify → false
+        assertThat(disabled.sign("open:1")).isNull();
+        assertThat(disabled.verifySignature("open:1", "anything")).isFalse();
     }
 
     // ===== invalid key =====
