@@ -78,6 +78,12 @@ class SmtpSendTest {
 
         MessageService messageService = new MessageService(messageSource);
 
-        return new EmailServiceImpl(mailSender, emailProperties, templateEngine, messageService);
+        // CryptoService с тестовым ключом — трекинг-ссылки в письме подписываются как на проде
+        ru.mngerasimenko.todolist.crypto.CryptoService cryptoService =
+                new ru.mngerasimenko.todolist.crypto.CryptoService(
+                        java.util.Base64.getEncoder().encodeToString(
+                                "01234567890123456789012345678901".getBytes()));
+
+        return new EmailServiceImpl(mailSender, emailProperties, templateEngine, messageService, cryptoService);
     }
 }
