@@ -85,7 +85,6 @@ Users → Update User
 ### 3. Users (Пользователи) 🔒
 - **GET** `/api/users/all` — список пользователей
 - **GET** `/api/users/{id}` — пользователь по ID
-- **POST** `/api/users/create` — создание пользователя
 - **PUT** `/api/users/{id}` — обновление пользователя
 - **DELETE** `/api/users/{id}` — удаление пользователя
 

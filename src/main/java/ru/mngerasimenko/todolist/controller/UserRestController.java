@@ -3,7 +3,6 @@ package ru.mngerasimenko.todolist.controller;
 import jakarta.validation.Valid;
 import jakarta.validation.Validator;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -58,15 +57,6 @@ public class UserRestController {
             @AuthenticationPrincipal UserDetails userDetails) {
         SubscriptionStatusResponse response = subscriptionService.getSubscriptionStatus(userDetails.getUsername());
         return ResponseEntity.ok(response);
-    }
-
-    /** Создание нового пользователя */
-    @PostMapping("/create")
-    public ResponseEntity<UserResponse> create(@Valid @RequestBody UserRequest request) {
-        UserDto userDto = userMapper.toDto(request);
-        UserDto createdUser = userService.createUser(userDto);
-        UserResponse response = userMapper.toResponse(createdUser);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     /** Получение списка всех пользователей (только суперадмин) */

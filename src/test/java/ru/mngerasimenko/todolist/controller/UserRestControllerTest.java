@@ -125,64 +125,6 @@ class UserRestControllerTest {
 
     @Test
     @WithMockUser(username = "admin", roles = {"ADMIN"})
-    void createUser_ValidRequest_ReturnsCreatedUser() throws Exception {
-        UserDto createdUserDto = new UserDto();
-        createdUserDto.setId(2L);
-        createdUserDto.setName("newuser");
-        createdUserDto.setEmail("new@mail.ru");
-        createdUserDto.setPassword("newpass");
-
-        UserResponse createdResponse = new UserResponse();
-        createdResponse.setId(2L);
-        createdResponse.setName("newuser");
-        createdResponse.setEmail("new@mail.ru");
-
-        when(userMapper.toDto(any(UserRequest.class))).thenReturn(createdUserDto);
-        when(userService.createUser(any(UserDto.class))).thenReturn(createdUserDto);
-        when(userMapper.toResponse(any(UserDto.class))).thenReturn(createdResponse);
-
-        mockMvc.perform(post("/api/users/create")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(testUserRequest)))
-                .andExpect(status().isCreated())
-                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.id").value(2))
-                .andExpect(jsonPath("$.name").value("newuser"))
-                .andExpect(jsonPath("$.email").value("new@mail.ru"));
-
-        verify(userMapper, times(1)).toDto(any(UserRequest.class));
-        verify(userService, times(1)).createUser(any(UserDto.class));
-        verify(userMapper, times(1)).toResponse(any(UserDto.class));
-    }
-
-    @Test
-    @WithMockUser(username = "admin", roles = {"ADMIN"})
-    void createUser_InvalidRequest_ReturnsBadRequest() throws Exception {
-        UserRequest invalidRequest = new UserRequest();
-
-        mockMvc.perform(post("/api/users/create")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(invalidRequest)))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    @WithMockUser(username = "admin", roles = {"ADMIN"})
-    void createUser_DuplicateEmail_ReturnsConflict() throws Exception {
-        when(userMapper.toDto(any(UserRequest.class))).thenReturn(testUserDto);
-        when(userService.createUser(any(UserDto.class)))
-                .thenThrow(new IllegalArgumentException("User with email test@mail.ru already exists"));
-
-        mockMvc.perform(post("/api/users/create")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(testUserRequest)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("User with email test@mail.ru already exists"));
-    }
-
-
-    @Test
-    @WithMockUser(username = "admin", roles = {"ADMIN"})
     void showAll_ReturnsListOfUsers() throws Exception {
         UserDto user1 = new UserDto();
         user1.setId(1L);
@@ -548,41 +490,6 @@ class UserRestControllerTest {
                     .andExpect(status().isNoContent());
             verify(userService).updateEmailLocale(1L, ok);
         }
-    }
-
-    // === Тест create + get ===
-
-    @Test
-    @WithMockUser(username = "created@mail.ru", roles = {"USER"})
-    void createUserThenGetUser_ReturnsCreatedUser() throws Exception {
-        UserDto createdUserDto = new UserDto();
-        createdUserDto.setId(3L);
-        createdUserDto.setName("createduser");
-        createdUserDto.setEmail("created@mail.ru");
-
-        UserResponse createdResponse = new UserResponse();
-        createdResponse.setId(3L);
-        createdResponse.setName("createduser");
-        createdResponse.setEmail("created@mail.ru");
-
-        when(userMapper.toDto(any(UserRequest.class))).thenReturn(createdUserDto);
-        when(userService.createUser(any(UserDto.class))).thenReturn(createdUserDto);
-        when(userMapper.toResponse(any(UserDto.class))).thenReturn(createdResponse);
-
-        mockMvc.perform(post("/api/users/create")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(testUserRequest)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value(3));
-
-        when(userService.getUserByEmail("created@mail.ru")).thenReturn(createdUserDto);
-        when(userService.getUserById(3L)).thenReturn(createdUserDto);
-
-        mockMvc.perform(get("/api/users/3")
-                        .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(3))
-                .andExpect(jsonPath("$.name").value("createduser"));
     }
 
     // === PATCH /me/sort-preferences (Task 5) ===
