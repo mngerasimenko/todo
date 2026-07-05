@@ -120,6 +120,17 @@ public interface UserService {
     String issueUnsubscribeToken(Long userId);
 
     /**
+     * Сменить отображаемое имя пользователя. Имя не уникально (constraint удалён
+     * миграцией 012) — коллизий нет, проверка пароля не требуется.
+     *
+     * @param userId ID пользователя
+     * @param name   новое имя
+     * @return обновлённый UserDto
+     * @throws ru.mngerasimenko.todolist.exception.UserNotFoundException если userId не существует
+     */
+    UserDto updateName(Long userId, String name);
+
+    /**
      * Частичное обновление 4 sort-настроек юзера (lists и todos × mode и direction).
      * Только не-null поля из request обновляются. Если все поля null — no-op,
      * сохранение в БД не выполняется.

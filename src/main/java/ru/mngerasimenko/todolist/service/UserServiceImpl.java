@@ -520,6 +520,19 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
+    public UserDto updateName(Long userId, String name) {
+        User user = repository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));
+        user.setName(name);
+        User saved = repository.saveAndFlush(user);
+        log.info("Обновлено имя пользователя: id={}", userId);
+        // afterCommit-synchronization — strong consistency: при rollback кэш не чистим
+        evictUserCache(user.getEmail());
+        return mapper.toDto(saved);
+    }
+
+    @Override
+    @Transactional
     public UserDto updateSortPreferences(Long userId, String email, SortPreferencesRequest request) {
         User user = repository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("User not found with id: " + userId));

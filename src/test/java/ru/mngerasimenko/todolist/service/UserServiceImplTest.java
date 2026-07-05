@@ -1205,4 +1205,25 @@ class UserServiceImplTest {
         // При исключении evict кэша не должен вызываться
         verify(cacheManager, never()).getCache(anyString());
     }
+
+    @Test
+    void updateName_ExistingUser_UpdatesNameAndReturnsDto() {
+        when(repository.findById(1L)).thenReturn(Optional.of(user));
+        when(repository.saveAndFlush(user)).thenReturn(user);
+        when(mapper.toDto(user)).thenReturn(userDto);
+
+        UserDto result = userService.updateName(1L, "Новое Имя");
+
+        assertThat(user.getName()).isEqualTo("Новое Имя");
+        verify(repository).saveAndFlush(user);
+        assertThat(result).isEqualTo(userDto);
+    }
+
+    @Test
+    void updateName_UserNotFound_Throws() {
+        when(repository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.updateName(99L, "X"))
+                .isInstanceOf(UserNotFoundException.class);
+    }
 }
