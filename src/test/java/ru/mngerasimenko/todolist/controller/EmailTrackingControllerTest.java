@@ -108,6 +108,18 @@ class EmailTrackingControllerTest {
         assertThat(appender.list).isEmpty();
     }
 
+    @Test
+    void trackClick_MissingSignature_RedirectsButDoesNotLog() {
+        when(cryptoService.verifySignature("click:7", null)).thenReturn(false);
+
+        ResponseEntity<Void> response = controller.trackClick(7L, null);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FOUND);
+        assertThat(response.getHeaders().getFirst(HttpHeaders.LOCATION))
+                .isEqualTo("https://todo.keepware.ru/open");
+        assertThat(appender.list).isEmpty();
+    }
+
     private boolean loggedTracking() {
         return appender.list.stream()
                 .anyMatch(e -> e.getLevel() == Level.INFO

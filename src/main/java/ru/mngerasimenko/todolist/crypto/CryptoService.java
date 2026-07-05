@@ -168,6 +168,10 @@ public class CryptoService {
         if (signature == null || secretKey == null) return false;
         String expected = sign(data);
         if (expected == null) return false;
+        // Быстрый отсев по длине: сама длина эталона (16 hex) публична, секрета не раскрывает,
+        // зато исключает malleability (усечение более длинного входа с валидным префиксом).
+        // Секретное сравнение равных по длине массивов — constant-time через MessageDigest.isEqual.
+        if (signature.length() != expected.length()) return false;
         return MessageDigest.isEqual(
                 expected.getBytes(java.nio.charset.StandardCharsets.UTF_8),
                 signature.getBytes(java.nio.charset.StandardCharsets.UTF_8));

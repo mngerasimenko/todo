@@ -163,4 +163,25 @@ class EmailServiceImplTest {
         assertThat(cryptoService.verifySignature("click:42",
                 clickLink.substring(clickLink.indexOf("?s=") + 3))).isTrue();
     }
+
+    @Test
+    void sendOnboardingReminderEmail_BuildsSignedTrackLinks() {
+        MimeMessage mimeMessage = mock(MimeMessage.class);
+        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+
+        emailService.sendOnboardingReminderEmail("user@example.com", "Иван", 43L, "ru", null);
+
+        ArgumentCaptor<Context> ctx = ArgumentCaptor.forClass(Context.class);
+        verify(templateEngine).process(eq("onboarding-reminder"), ctx.capture());
+
+        String openLink = (String) ctx.getValue().getVariable("trackOpenLink");
+        String clickLink = (String) ctx.getValue().getVariable("trackClickLink");
+
+        assertThat(openLink).startsWith("https://todo.keepware.ru/api/track/open/43?s=");
+        assertThat(clickLink).startsWith("https://todo.keepware.ru/api/track/click/43?s=");
+        assertThat(cryptoService.verifySignature("open:43",
+                openLink.substring(openLink.indexOf("?s=") + 3))).isTrue();
+        assertThat(cryptoService.verifySignature("click:43",
+                clickLink.substring(clickLink.indexOf("?s=") + 3))).isTrue();
+    }
 }

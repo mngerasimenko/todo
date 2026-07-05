@@ -160,6 +160,9 @@ class CryptoServiceTest {
         assertThat(crypto.verifySignature("open:124", sig)).isFalse();
         // случайный мусор вместо подписи
         assertThat(crypto.verifySignature("open:123", "deadbeefdeadbeef")).isFalse();
+        // подпись неверной длины (короче / длиннее 16 hex) — нормализуется, но не совпадает
+        assertThat(crypto.verifySignature("open:123", "abc")).isFalse();
+        assertThat(crypto.verifySignature("open:123", sig + "extra")).isFalse();
     }
 
     @Test
