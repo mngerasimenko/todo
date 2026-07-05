@@ -30,6 +30,8 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -695,5 +697,27 @@ class UserRestControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void updateName_NameWithAngleBrackets_ReturnsBadRequest() throws Exception {
+        ChangeNameRequest request = ChangeNameRequest.builder().name("<script>").build();
+        mockMvc.perform(patch("/api/users/me/name")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+        verify(userService, never()).updateName(anyLong(), anyString());
+    }
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void updateName_TooLongName_ReturnsBadRequest() throws Exception {
+        ChangeNameRequest request = ChangeNameRequest.builder().name("a".repeat(129)).build();
+        mockMvc.perform(patch("/api/users/me/name")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+        verify(userService, never()).updateName(anyLong(), anyString());
     }
 }

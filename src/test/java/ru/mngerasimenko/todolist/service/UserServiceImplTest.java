@@ -1277,4 +1277,16 @@ class UserServiceImplTest {
         assertThatThrownBy(() -> userService.changePassword(99L, "a", "b"))
                 .isInstanceOf(UserNotFoundException.class);
     }
+
+    @Test
+    void changePassword_RevokeThrows_PropagatesException() {
+        when(repository.findById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password", "password")).thenReturn(true);
+        when(passwordEncoder.encode("newSecret")).thenReturn("ENC(newSecret)");
+        when(repository.saveAndFlush(user)).thenReturn(user);
+        doThrow(new RuntimeException("db down")).when(refreshTokenService).revokeAllForUser(1L);
+
+        assertThatThrownBy(() -> userService.changePassword(1L, "password", "newSecret"))
+                .isInstanceOf(RuntimeException.class);
+    }
 }
