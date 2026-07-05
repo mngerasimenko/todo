@@ -30,6 +30,12 @@ public class RateLimitProperties {
     private EndpointLimit resetPassword = new EndpointLimit(10, 60);
     private EndpointLimit resendVerification = new EndpointLimit(3, 3600);
     private EndpointLimit changeEmail = new EndpointLimit(3, 3600);
+    /**
+     * POST /api/auth/change-password — смена пароля в сессии. Credential-путь:
+     * атакующий с угнанным access-токеном может брутфорсить текущий пароль.
+     * Строгий лимит как у login (5/60с).
+     */
+    private EndpointLimit changePassword = new EndpointLimit(5, 60);
     private EndpointLimit logout = new EndpointLimit(10, 60);
     /**
      * GET /api/suggestions — публичный (без JWT). Отдельный лимит, чтобы прокачка

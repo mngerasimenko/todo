@@ -165,6 +165,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
             if (uri.equals("/api/auth/change-email")) {
                 return "changeEmail:" + clientIp;
             }
+            if (uri.equals("/api/auth/change-password")) {
+                return "changePassword:" + clientIp;
+            }
             if (uri.equals("/api/auth/logout")) {
                 return "logout:" + clientIp;
             }
@@ -282,6 +285,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             if (uri.equals("/api/auth/reset-password")) return properties.getResetPassword();
             if (uri.equals("/api/auth/resend-verification")) return properties.getResendVerification();
             if (uri.equals("/api/auth/change-email")) return properties.getChangeEmail();
+            if (uri.equals("/api/auth/change-password")) return properties.getChangePassword();
             if (uri.equals("/api/auth/logout")) return properties.getLogout();
         }
         if ("GET".equalsIgnoreCase(method) && uri.equals("/api/suggestions/all")) {

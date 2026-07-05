@@ -79,6 +79,7 @@ public class TestSecurityConfig {
         props.setRefresh(permissive);
         props.setGeneral(permissive);
         props.setChangeEmail(permissive);
+        props.setChangePassword(permissive);
         props.setForgotPassword(permissive);
         props.setVerifyEmail(permissive);
         props.setResetPassword(permissive);
