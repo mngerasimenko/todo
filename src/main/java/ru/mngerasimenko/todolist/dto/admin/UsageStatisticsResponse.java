@@ -116,6 +116,9 @@ public class UsageStatisticsResponse {
         @JsonProperty("active_users_last_7d")
         private long activeUsersLast7d;
 
+        @JsonProperty("active_users_last_30d")
+        private long activeUsersLast30d;
+
         @JsonProperty("active_invite_tokens")
         private long activeInviteTokens;
     }

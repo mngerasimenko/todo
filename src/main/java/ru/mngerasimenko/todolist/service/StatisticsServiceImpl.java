@@ -86,6 +86,7 @@ public class StatisticsServiceImpl implements StatisticsService {
         long activeUsersLast24h = countActiveUsersSince(now.minusHours(24));
         long activeUsersLast3d = countActiveUsersSince(now.minusDays(3));
         long activeUsersLast7d = countActiveUsersSince(now.minusDays(7));
+        long activeUsersLast30d = countActiveUsersSince(now.minusDays(30));
         long activeInviteTokens = inviteTokenRepository.countByExpiresAtAfter(now);
 
         return UsageStatisticsResponse.builder()
@@ -120,6 +121,7 @@ public class StatisticsServiceImpl implements StatisticsService {
                         .activeUsersLast24h(activeUsersLast24h)
                         .activeUsersLast3d(activeUsersLast3d)
                         .activeUsersLast7d(activeUsersLast7d)
+                        .activeUsersLast30d(activeUsersLast30d)
                         .activeInviteTokens(activeInviteTokens)
                         .build())
                 .build();
