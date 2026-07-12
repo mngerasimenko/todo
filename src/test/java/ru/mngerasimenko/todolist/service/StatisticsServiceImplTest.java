@@ -228,7 +228,7 @@ class StatisticsServiceImplTest {
         when(todoRepository.countByCreatedAtAfter(any())).thenReturn(0L);
         when(todoRepository.countByDoneTrue()).thenReturn(0L);
         when(todoRepository.countByCompletedAtAfter(any())).thenReturn(0L);
-        // Активность считается за 3 окна (24ч, 3д, 7д) — каждое мокаем тем же набором.
+        // Активность считается за 4 окна (24ч, 3д, 7д, 30д) — каждое мокаем тем же набором.
         // Todo: {1, 2}, TaskList: {3}, TaskListUser: {4} → объединение {1,2,3,4} = 4
         when(todoRepository.findActiveUserIdsSince(any())).thenReturn(Set.of(1L, 2L));
         when(taskListRepository.findActiveUserIdsSince(any())).thenReturn(Set.of(3L));
@@ -240,6 +240,7 @@ class StatisticsServiceImplTest {
         assertThat(result.getActivity().getActiveUsersLast24h()).isEqualTo(4);
         assertThat(result.getActivity().getActiveUsersLast3d()).isEqualTo(4);
         assertThat(result.getActivity().getActiveUsersLast7d()).isEqualTo(4);
+        assertThat(result.getActivity().getActiveUsersLast30d()).isEqualTo(4);
         assertThat(result.getActivity().getActiveInviteTokens()).isEqualTo(3);
     }
 
@@ -269,6 +270,7 @@ class StatisticsServiceImplTest {
         assertThat(result.getActivity().getActiveUsersLast24h()).isEqualTo(4);
         assertThat(result.getActivity().getActiveUsersLast3d()).isEqualTo(4);
         assertThat(result.getActivity().getActiveUsersLast7d()).isEqualTo(4);
+        assertThat(result.getActivity().getActiveUsersLast30d()).isEqualTo(4);
     }
 
     @Test
