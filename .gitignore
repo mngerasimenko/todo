@@ -58,6 +58,12 @@ monitoring/rustore-position.md
 ### Agent / superpowers working files (kept out of the public repo) ###
 spool/worktrees/
 docs/superpowers/
+# Private agent infra — versioned separately in a private repo (#260),
+# kept co-located so Claude Code resolves them from the project root.
+.claude/
+.superpowers/
+# Git dir of the co-located private repo (never tracked by the public repo).
+/.private-git/
 
 ### Analytics exports (owned by /ideas — GA4/Firebase Data API dumps) ###
 # Firebase_overview.csv stays tracked (legacy); new export snapshots are ignored.
