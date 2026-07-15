@@ -46,6 +46,14 @@ public interface TaskListService {
     void deleteList(Long listId, Long userId);
 
     /**
+     * Удалить участника из списка. Только ADMIN списка может удалить участника.
+     * Удалять можно только участника с ролью USER — нельзя удалить другого
+     * администратора или самого себя (для выхода используется {@link #leaveList}).
+     * Приватные задачи удаляемого в этом списке удаляются, общие — остаются.
+     */
+    void removeMember(Long listId, Long requesterId, Long targetUserId);
+
+    /**
      * Переименовать список задач (PATCH-семантика). Только ADMIN списка.
      * {@code null} name — не изменяется. Кеш {@code task-lists} инвалидируется для всех участников.
      * (Цвет больше не задаётся здесь — он per-user, см. {@link #updatePersonalization}.)

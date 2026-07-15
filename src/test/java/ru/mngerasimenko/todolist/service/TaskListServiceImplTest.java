@@ -471,6 +471,154 @@ class TaskListServiceImplTest {
         verify(taskListRepository, never()).deleteByListId(anyLong());
     }
 
+    // --- removeMember ---
+
+    @Test
+    void removeMember_WhenAdminRemovesUser_DeletesPrivateTodosAndMembership() {
+        // requester (id=1) — ADMIN, target (id=2) — USER, создатель списка — админ (id=1)
+        testTaskList.setCreatorId(1L);
+
+        TaskListUser adminMember = new TaskListUser();
+        adminMember.setId(new TaskListUserId(10L, 1L));
+        adminMember.setRole(TaskListRole.ADMIN);
+
+        TaskListUser targetMember = new TaskListUser();
+        targetMember.setId(new TaskListUserId(10L, 2L));
+        targetMember.setRole(TaskListRole.USER);
+        targetMember.setTaskList(testTaskList);
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
+                .thenReturn(Optional.of(adminMember));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 2L))
+                .thenReturn(Optional.of(targetMember));
+
+        taskListService.removeMember(10L, 1L, 2L);
+
+        // Приватные задачи удаляемого чистятся, membership удаляется через managed-entity (@Version-safe)
+        verify(todoRepository).deletePrivateTodosByListIdAndUserId(10L, 2L);
+        verify(taskListUserRepository).delete(targetMember);
+    }
+
+    @Test
+    void removeMember_WhenRequesterNotAdmin_ThrowsIllegalArgumentException() {
+        TaskListUser requester = new TaskListUser();
+        requester.setId(new TaskListUserId(10L, 2L));
+        requester.setRole(TaskListRole.USER);
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 2L))
+                .thenReturn(Optional.of(requester));
+
+        assertThatThrownBy(() -> taskListService.removeMember(10L, 2L, 3L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("может удалять");
+
+        verify(taskListUserRepository, never()).delete(any(TaskListUser.class));
+        verify(todoRepository, never()).deletePrivateTodosByListIdAndUserId(anyLong(), anyLong());
+    }
+
+    @Test
+    void removeMember_WhenTargetIsAdmin_ThrowsIllegalArgumentException() {
+        TaskListUser requester = new TaskListUser();
+        requester.setId(new TaskListUserId(10L, 1L));
+        requester.setRole(TaskListRole.ADMIN);
+
+        TaskListUser targetAdmin = new TaskListUser();
+        targetAdmin.setId(new TaskListUserId(10L, 2L));
+        targetAdmin.setRole(TaskListRole.ADMIN);
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
+                .thenReturn(Optional.of(requester));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 2L))
+                .thenReturn(Optional.of(targetAdmin));
+
+        assertThatThrownBy(() -> taskListService.removeMember(10L, 1L, 2L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("администратора");
+
+        verify(taskListUserRepository, never()).delete(any(TaskListUser.class));
+        verify(todoRepository, never()).deletePrivateTodosByListIdAndUserId(anyLong(), anyLong());
+    }
+
+    @Test
+    void removeMember_WhenTargetIsCreator_ThrowsIllegalArgumentException() {
+        // Явная защита создателя: даже если создатель оказался с ролью USER (рассинхрон
+        // роли и creator_id), удалить его нельзя.
+        TaskList list = new TaskList("Продукты", testUser);
+        list.setId(10L);
+        list.setCreatorId(2L); // создатель — target (id=2)
+
+        TaskListUser requester = new TaskListUser();
+        requester.setId(new TaskListUserId(10L, 1L));
+        requester.setRole(TaskListRole.ADMIN);
+
+        TaskListUser targetCreator = new TaskListUser();
+        targetCreator.setId(new TaskListUserId(10L, 2L));
+        targetCreator.setRole(TaskListRole.USER);
+        targetCreator.setTaskList(list);
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
+                .thenReturn(Optional.of(requester));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 2L))
+                .thenReturn(Optional.of(targetCreator));
+
+        assertThatThrownBy(() -> taskListService.removeMember(10L, 1L, 2L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("создателя");
+
+        verify(taskListUserRepository, never()).delete(any(TaskListUser.class));
+        verify(todoRepository, never()).deletePrivateTodosByListIdAndUserId(anyLong(), anyLong());
+    }
+
+    @Test
+    void removeMember_WhenTargetIsSelf_ThrowsIllegalArgumentException() {
+        // ADMIN пытается удалить сам себя — для выхода есть leaveList
+        TaskListUser requester = new TaskListUser();
+        requester.setId(new TaskListUserId(10L, 1L));
+        requester.setRole(TaskListRole.ADMIN);
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
+                .thenReturn(Optional.of(requester));
+
+        assertThatThrownBy(() -> taskListService.removeMember(10L, 1L, 1L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("самого себя");
+
+        verify(taskListUserRepository, never()).delete(any(TaskListUser.class));
+        verify(todoRepository, never()).deletePrivateTodosByListIdAndUserId(anyLong(), anyLong());
+    }
+
+    @Test
+    void removeMember_WhenTargetNotFound_ThrowsIllegalArgumentException() {
+        TaskListUser requester = new TaskListUser();
+        requester.setId(new TaskListUserId(10L, 1L));
+        requester.setRole(TaskListRole.ADMIN);
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
+                .thenReturn(Optional.of(requester));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 99L))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> taskListService.removeMember(10L, 1L, 99L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("не найден");
+
+        verify(taskListUserRepository, never()).delete(any(TaskListUser.class));
+        verify(todoRepository, never()).deletePrivateTodosByListIdAndUserId(anyLong(), anyLong());
+    }
+
+    @Test
+    void removeMember_WhenRequesterNotMember_ThrowsIllegalArgumentException() {
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 99L))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> taskListService.removeMember(10L, 99L, 2L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("участником");
+
+        verify(taskListUserRepository, never()).delete(any(TaskListUser.class));
+        verify(todoRepository, never()).deletePrivateTodosByListIdAndUserId(anyLong(), anyLong());
+    }
+
     // --- updateList ---
 
     @Test

@@ -114,6 +114,20 @@ public class TaskListController {
     }
 
     /**
+     * Удалить участника из списка. Только администратор списка.
+     * Удаляется участник с ролью USER; удаление админа или самого себя запрещено.
+     */
+    @DeleteMapping("/{id}/members/{userId}")
+    public ResponseEntity<Void> removeMember(
+            @PathVariable Long id,
+            @PathVariable Long userId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        Long requesterId = getUserId(userDetails);
+        taskListService.removeMember(id, requesterId, userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
      * Bulk-reorder списков для текущего юзера (per-user position).
      * ВАЖНО: должен идти ДО {@code @PatchMapping("/{id}")}, чтобы Spring
      * не пытался матчить "reorder" как {@code id}.

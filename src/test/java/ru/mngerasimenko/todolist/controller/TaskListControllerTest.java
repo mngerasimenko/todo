@@ -422,6 +422,68 @@ class TaskListControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
+    // === DELETE /api/lists/{id}/members/{userId} — удаление участника админом ===
+
+    @Test
+    @WithMockUser(username = "user@mail.ru")
+    void removeMember_Admin_ReturnsNoContent() throws Exception {
+        doNothing().when(taskListService).removeMember(1L, 1L, 2L);
+
+        mockMvc.perform(delete("/api/lists/1/members/2"))
+                .andExpect(status().isNoContent());
+
+        verify(taskListService).removeMember(1L, 1L, 2L);
+    }
+
+    @Test
+    @WithMockUser(username = "user@mail.ru")
+    void removeMember_NotAdmin_ReturnsBadRequest() throws Exception {
+        doThrow(new IllegalArgumentException("Только администратор может удалять участников"))
+                .when(taskListService).removeMember(1L, 1L, 2L);
+
+        mockMvc.perform(delete("/api/lists/1/members/2"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Только администратор может удалять участников"));
+    }
+
+    @Test
+    @WithMockUser(username = "user@mail.ru")
+    void removeMember_TargetNotFound_ReturnsBadRequest() throws Exception {
+        doThrow(new IllegalArgumentException("Участник не найден в списке"))
+                .when(taskListService).removeMember(1L, 1L, 99L);
+
+        mockMvc.perform(delete("/api/lists/1/members/99"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Участник не найден в списке"));
+    }
+
+    @Test
+    void removeMember_Unauthenticated_ReturnsUnauthorized() throws Exception {
+        mockMvc.perform(delete("/api/lists/1/members/2"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(taskListService);
+    }
+
+    @Test
+    @WithMockUser(username = "user@mail.ru")
+    void removeMember_InvalidUserIdFormat_ReturnsBadRequest() throws Exception {
+        // Нечисловой {userId} → MethodArgumentTypeMismatchException → 400, а не 500
+        mockMvc.perform(delete("/api/lists/1/members/abc"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(taskListService);
+    }
+
+    @Test
+    @WithMockUser(username = "user@mail.ru")
+    void removeMember_InvalidListIdFormat_ReturnsBadRequest() throws Exception {
+        mockMvc.perform(delete("/api/lists/abc/members/2"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(taskListService);
+    }
+
     // === PATCH /api/lists/{id} — переименование списка ===
 
     @Test

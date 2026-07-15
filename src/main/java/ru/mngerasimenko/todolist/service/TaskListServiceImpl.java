@@ -226,6 +226,52 @@ public class TaskListServiceImpl implements TaskListService {
 
     @Override
     @Transactional
+    public void removeMember(Long listId, Long requesterId, Long targetUserId) {
+        TaskListUser requester = taskListUserRepository.findByIdListIdAndIdUserId(listId, requesterId)
+                .orElseThrow(() -> new IllegalArgumentException("Вы не являетесь участником данного списка"));
+
+        if (requester.getRole() != TaskListRole.ADMIN) {
+            throw new IllegalArgumentException("Только администратор может удалять участников");
+        }
+
+        // Проверяем self до загрузки цели: у себя роль ADMIN, для выхода есть leaveList.
+        if (targetUserId.equals(requesterId)) {
+            throw new IllegalArgumentException("Нельзя удалить самого себя — используйте выход из списка");
+        }
+
+        TaskListUser target = taskListUserRepository.findByIdListIdAndIdUserId(listId, targetUserId)
+                .orElseThrow(() -> new IllegalArgumentException("Участник не найден в списке"));
+
+        if (target.getRole() == TaskListRole.ADMIN) {
+            throw new IllegalArgumentException("Нельзя удалить администратора списка");
+        }
+
+        // Явная защита создателя: в норме создатель всегда ADMIN (отсекается выше), но
+        // enforce'им требование напрямую по creator_id — на случай рассинхрона роли и creator_id.
+        Long creatorId = target.getTaskList().getCreatorId();
+        if (creatorId != null && creatorId.equals(targetUserId)) {
+            throw new IllegalArgumentException("Нельзя удалить создателя списка");
+        }
+
+        // Приватные задачи удаляемого чистим, общие — остаются в списке (как при выходе).
+        todoRepository.deletePrivateTodosByListIdAndUserId(listId, targetUserId);
+        // Удаляем связь через delete(target), а не bulk-запросом: так уважается @Version.
+        // (deletePrivateTodos выше — @Modifying(clearAutomatically=true) — очищает PC, поэтому
+        // target detached и delete идёт через merge, который тоже сверяет версию.) При гонке
+        // с leaveList (промоут цели в ADMIN) операция упрётся в устаревшую версию
+        // → ObjectOptimisticLockingFailureException → 409, а не осиротевший список без админа.
+        taskListUserRepository.delete(target);
+
+        // Инвалидируем кеш task-lists только удаляемого — у него список должен исчезнуть.
+        // Набор списков админа не меняется, его кеш не трогаем.
+        evictTaskListsCache(List.of(targetUserId));
+
+        log.info("Участник удалён из списка: listId={}, adminId={}, removedUserId={}",
+                listId, requesterId, targetUserId);
+    }
+
+    @Override
+    @Transactional
     public ListResponse updateList(Long listId, Long requesterId, String name) {
         TaskListUser membership = taskListUserRepository.findByIdListIdAndIdUserId(listId, requesterId)
                 .orElseThrow(() -> new IllegalArgumentException("Вы не являетесь участником данного списка"));
