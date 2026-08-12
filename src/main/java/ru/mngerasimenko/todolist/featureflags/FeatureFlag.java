@@ -39,15 +39,37 @@ public enum FeatureFlag {
             "Глобальный словарь подсказок при вводе задачи (Server R-6). " +
             "При false: GET /api/suggestions возвращает пустой список, хук в TodoServiceImpl " +
             "не пополняет словарь, cleanup-scheduler пропускает итерацию. " +
-            "Эндпоинт остаётся доступен (без 404), чтобы старые клиенты не ломались.");
+            "Эндпоинт остаётся доступен (без 404), чтобы старые клиенты не ломались. " +
+            "НЕ влияет на личную историю списка — она живёт только на клиенте (см. " +
+            "CLIENT_SUGGESTIONS_HISTORY)."),
+
+    CLIENT_SUGGESTIONS_HISTORY("client.suggestions.history.enabled", true, Audience.CLIENT,
+            "Личная история выполненных задач списка как источник подсказок (FR #5, Android 1.2.6). " +
+            "При false приложение перестаёт и записывать завершения в локальную историю, и " +
+            "показывать их — остаётся только глобальный словарь, то есть поведение до 1.2.6. " +
+            "Уже накопленная история не удаляется. Выключать, если запись в Room на завершение " +
+            "задачи начнёт мешать (перф) или подсказки из истории окажутся нежелательными."),
+
+    CLIENT_SUGGESTIONS_DEDUP("client.suggestions.dedup.enabled", true, Audience.CLIENT,
+            "Схлопывание подсказок, различающихся только эмодзи, регистром или краевой пунктуацией " +
+            "(Android 1.2.6): одно слово занимает один слот выдачи. При false возвращается поведение " +
+            "ДО фикса: точные совпадения по строгому ключу всё равно схлопываются, но «молоко» и " +
+            "«молоко 🥛» снова показываются двумя строками. Выключать, если правило начнёт прятать " +
+            "нужные подсказки. Действует со следующего холодного старта приложения.");
 
     private final String name;
     private final boolean defaultValue;
+    private final Audience audience;
     private final String description;
 
     FeatureFlag(String name, boolean defaultValue, String description) {
+        this(name, defaultValue, Audience.SERVER, description);
+    }
+
+    FeatureFlag(String name, boolean defaultValue, Audience audience, String description) {
         this.name = name;
         this.defaultValue = defaultValue;
+        this.audience = audience;
         this.description = description;
     }
 
@@ -57,6 +79,15 @@ public enum FeatureFlag {
 
     public boolean getDefaultValue() {
         return defaultValue;
+    }
+
+    public Audience getAudience() {
+        return audience;
+    }
+
+    /** Отдаётся ли флаг клиентскому приложению в {@code GET /api/status}. */
+    public boolean isClientVisible() {
+        return audience == Audience.CLIENT;
     }
 
     public String getDescription() {

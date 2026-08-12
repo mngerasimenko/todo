@@ -220,6 +220,12 @@ jobs:
             MAIL_PASSWORD=${{ secrets.MAIL_PASSWORD }}
             FIREBASE_ENABLED=true
             INACTIVE_REMINDER_ENABLED=${INACTIVE_REMINDER_ENABLED:-true}
+            # Break-glass клиентских feature-флагов. Источник — repository variables, потому что
+            # этот .env пересоздаётся с нуля на каждом деплое: строка, добавленная руками по ssh,
+            # исчезла бы при следующей выкатке и выключенная фича молча вернулась бы пользователям.
+            # Переменная не задана -> пустая строка -> в compose сработает \${VAR:-true}.
+            CLIENT_SUGGESTIONS_HISTORY_ENABLED=${{ vars.CLIENT_SUGGESTIONS_HISTORY_ENABLED }}
+            CLIENT_SUGGESTIONS_DEDUP_ENABLED=${{ vars.CLIENT_SUGGESTIONS_DEDUP_ENABLED }}
             ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}
             REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
             GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}
