@@ -42,6 +42,15 @@ jobs:
       - name: Run tests with JaCoCo coverage
         run: mvn clean test
 
+      # Логин до Testcontainers: шаг ниже тянет postgres:15-alpine и ryuk с Docker Hub, а job
+      # test гейтит build → deploy. Анонимные pull'ы делят квоту по IP раннера, поэтому 429 от
+      # Hub заблокировал бы в том числе ручной прод-деплой — ровно тогда, когда он нужен срочно.
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
       # Долговечность feature-флагов проверяется ТОЛЬКО здесь: обычный прогон исключает группу
       # integration (см. excludedGroups в pom.xml), а долговечность нельзя проверить на моках —
       # правка, из-за которой падала каждая запись в БД, проходила весь unit-набор зелёной.

@@ -117,8 +117,11 @@ class FeatureFlagOverrideDurabilityTest extends AbstractIntegrationTest {
     @Test
     void protectionFlagKeepsItsOldBehaviourEndToEnd() {
         // Прямая проверка того, что ветка НЕ сломала прежние флаги. Полный цикл rate-limit:
-        // значение из env → ручное переключение действует немедленно → рестарт возвращает env
-        // (а не дефолт и не сохранённое значение) → в таблице после всего этого пусто.
+        // ручное переключение действует немедленно → рестарт возвращает исходное значение (а НЕ
+        // сохранённое) → в таблице после всего этого пусто. Приоритет env над дефолтом здесь не
+        // проверяется: `rate-limit.enabled` не задан ни в одном property source этого контекста,
+        // так что шаги 3-4 сверяются с enum-дефолтом. Саму связку env → runtime → дефолт
+        // покрывают unit-тесты reset_removesRuntimeButKeepsEnv и isEnabled_envOverridesEnumDefault.
         FeatureFlagStore store = new FeatureFlagStore(environment, overrideRepository);
 
         // 1. Ручное выключение действует сразу.
