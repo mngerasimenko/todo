@@ -84,6 +84,10 @@ public class FeatureFlagStore {
                     continue;
                 }
                 runtimeOverrides.put(flag, row.isEnabled());
+                // Без этой строки восстановленный из БД override показывается в пульте как
+                // RUNTIME, то есть «слетит на ближайшем рестарте» — ровно наоборот тому, что
+                // произошло. Оператор увидел бы, что аварийное выключение вот-вот отменится.
+                persistedFlags.add(flag);
                 log.info("[flags] восстановлен override {}={}", flag.getName(), row.isEnabled());
             }
         } catch (RuntimeException e) {

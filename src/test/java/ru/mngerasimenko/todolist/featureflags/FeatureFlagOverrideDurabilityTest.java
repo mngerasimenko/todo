@@ -50,8 +50,15 @@ class FeatureFlagOverrideDurabilityTest extends AbstractIntegrationTest {
         assertTrue(before.set(FeatureFlag.CLIENT_SUGGESTIONS_DEDUP, false, "admin@test"),
                 "переключение флага фичи обязано сохраняться");
 
-        assertFalse(restarted().isEnabled(FeatureFlag.CLIENT_SUGGESTIONS_DEDUP),
+        FeatureFlagStore afterRestart = restarted();
+
+        assertFalse(afterRestart.isEnabled(FeatureFlag.CLIENT_SUGGESTIONS_DEDUP),
                 "после рестарта выключенная фича вернулась сама — ровно то, что чинила эта ветка");
+        // И источник тоже: значение может пережить рестарт, а пульт при этом показывать RUNTIME
+        // («слетит на рестарте»). Набор этого не замечал — проверял только значение.
+        assertEquals(FlagSource.PERSISTED,
+                afterRestart.snapshot().get(FeatureFlag.CLIENT_SUGGESTIONS_DEDUP).source(),
+                "восстановленный из БД override обязан показываться как PERSISTED");
     }
 
     @Test
@@ -161,7 +168,7 @@ class FeatureFlagOverrideDurabilityTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void TEMP_repeatToggleOfTheSameFeatureFlagSurvives() {
+    void repeatToggleOfTheSameFlagOverwritesTheSameRow() {
         FeatureFlagStore store = new FeatureFlagStore(environment, overrideRepository);
         store.set(FeatureFlag.CLIENT_SUGGESTIONS_DEDUP, false, "admin@test");
         assertTrue(store.set(FeatureFlag.CLIENT_SUGGESTIONS_DEDUP, true, "admin@test"),
