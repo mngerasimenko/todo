@@ -45,7 +45,12 @@ jobs:
       # Логин до Testcontainers: шаг ниже тянет postgres:15-alpine и ryuk с Docker Hub, а job
       # test гейтит build → deploy. Анонимные pull'ы делят квоту по IP раннера, поэтому 429 от
       # Hub заблокировал бы в том числе ручной прод-деплой — ровно тогда, когда он нужен срочно.
+      # continue-on-error обязателен: workflow срабатывает и на pull_request, а PR из форка
+      # секретов не получает — жёсткий шаг логина валил бы такие PR всегда. И сбой самого Hub
+      # не должен превращать вероятную блокировку деплоя в гарантированную: не залогинились —
+      # пробуем анонимно, как было до этого шага.
       - name: Login to Docker Hub
+        continue-on-error: true
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
