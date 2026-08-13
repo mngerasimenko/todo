@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import ru.mngerasimenko.todolist.dto.admin.FeatureFlagResponse;
 import ru.mngerasimenko.todolist.dto.admin.InactiveReminderTriggerResponse;
+import ru.mngerasimenko.todolist.dto.admin.FeatureFlagUpdateResponse;
 import ru.mngerasimenko.todolist.dto.admin.SuggestionReseedReport;
 import ru.mngerasimenko.todolist.exception.SuggestionNotFoundException;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
@@ -62,6 +63,8 @@ public class AdminController {
                         .enabled(e.getValue().value())
                         .defaultValue(e.getKey().getDefaultValue())
                         .source(e.getValue().source().name())
+                        .overrideLifetime(e.getKey().getOverrideLifetime().name())
+                        .audience(e.getKey().getAudience().name())
                         .description(e.getKey().getDescription())
                         .build())
                 .toList();
@@ -74,13 +77,22 @@ public class AdminController {
      * Неизвестное имя флага → 404 (FeatureFlagNotFoundException, маскируется в GlobalExceptionHandler).
      */
     @PutMapping("/flags/{name}/{value}")
-    public ResponseEntity<Void> setFlag(@PathVariable String name, @PathVariable boolean value,
+    public ResponseEntity<FeatureFlagUpdateResponse> setFlag(@PathVariable String name, @PathVariable boolean value,
                                         Authentication authentication) {
         FeatureFlag flag = FeatureFlag.findByName(name)
                 .orElseThrow(() -> new FeatureFlagNotFoundException(name));
-        flagStore.set(flag, value);
-        log.info("[admin] {} set feature flag {}={}", authentication.getName(), name, value);
-        return ResponseEntity.noContent().build();
+        boolean persisted = flagStore.set(flag, value, authentication.getName());
+        log.info("[admin] {} set feature flag {}={} (persisted={})",
+                authentication.getName(), name, value, persisted);
+        // Отвечаем телом, а не 204: админу критично знать, переживёт ли переключение рестарт.
+        // Для процессных флагов (защита) persisted=false штатно; для флагов фич false означает,
+        // что запись в БД не удалась и выключение слетит на ближайшем деплое.
+        return ResponseEntity.ok(FeatureFlagUpdateResponse.builder()
+                .name(name)
+                .enabled(value)
+                .overrideLifetime(flag.getOverrideLifetime().name())
+                .persisted(persisted)
+                .build());
     }
 
     /**
@@ -88,12 +100,24 @@ public class AdminController {
      * значение из env или enum-default.
      */
     @DeleteMapping("/flags/{name}")
-    public ResponseEntity<Void> resetFlag(@PathVariable String name, Authentication authentication) {
+    public ResponseEntity<FeatureFlagUpdateResponse> resetFlag(@PathVariable String name,
+                                                              Authentication authentication) {
         FeatureFlag flag = FeatureFlag.findByName(name)
                 .orElseThrow(() -> new FeatureFlagNotFoundException(name));
-        flagStore.reset(flag);
-        log.info("[admin] {} reset feature flag {}", authentication.getName(), name);
-        return ResponseEntity.noContent().build();
+        boolean cleared = flagStore.reset(flag);
+        log.info("[admin] {} reset feature flag {} (cleared={})",
+                authentication.getName(), name, cleared);
+        // Тело, а не 204, по той же причине, что и у PUT: если строку не удалили, флаг вернётся
+        // к сохранённому значению на ближайшем рестарте — админ обязан узнать об этом сразу,
+        // а не обнаружить выключенную фичу после деплоя.
+        // Отдельное поле cleared, а не общий persisted: одно слово для «сохранено» и «удалено»
+        // читается противоположным образом — на этом уже обожглись в прошлой версии ответа.
+        return ResponseEntity.ok(FeatureFlagUpdateResponse.builder()
+                .name(name)
+                .enabled(flagStore.isEnabled(flag))
+                .overrideLifetime(flag.getOverrideLifetime().name())
+                .cleared(cleared)
+                .build());
     }
 
     /**

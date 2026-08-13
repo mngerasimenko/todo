@@ -42,7 +42,29 @@ jobs:
       - name: Run tests with JaCoCo coverage
         run: mvn clean test
 
+      # Долговечность feature-флагов проверяется ТОЛЬКО здесь: обычный прогон исключает группу
+      # integration (см. excludedGroups в pom.xml), а долговечность нельзя проверить на моках —
+      # правка, из-за которой падала каждая запись в БД, проходила весь unit-набор зелёной.
+      # Testcontainers поднимает Postgres; на linux-раннере сокет, а не TCP-хост из-под Windows.
+      - name: Run feature-flag durability tests (Testcontainers)
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: |
+          # Удаляем прошлый отчёт: проверка ниже не должна засчитать файл от предыдущего прогона.
+          rm -f target/surefire-reports/TEST-ru.mngerasimenko.todolist.featureflags.FeatureFlagOverrideDurabilityTest.xml
+          mvn test -Pintegration -Dtest='FeatureFlagOverrideDurabilityTest' -Djacoco.skip=true
+
+      # Проверка на «зелёный ноль»: с -Dtest шаблон удовлетворяет surefire по имени класса, а
+      # групповой фильтр может оставить 0 тестов — и шаг, созданный ловить регрессию, сам молча
+      # не выполнится. Число тестов не хардкодим: добавление шестого не должно ронять CI.
+      - name: Verify the durability suite really ran
+        run: |
+          REPORT=target/surefire-reports/TEST-ru.mngerasimenko.todolist.featureflags.FeatureFlagOverrideDurabilityTest.xml
+          test -f "$REPORT" || { echo "Отчёт не создан — тесты долговечности не запускались"; exit 1; }
+          grep -qE 'tests="[1-9][0-9]*"' "$REPORT" || { echo "В отчёте ноль тестов"; exit 1; }
+
       - name: Upload JaCoCo coverage report
+        if: always()
         continue-on-error: true  # диагностический артефакт — не валим pipeline при storage-квоте
         uses: actions/upload-artifact@v4
         with:
@@ -51,6 +73,7 @@ jobs:
           retention-days: 7
 
       - name: Upload test results
+        if: always()
         continue-on-error: true  # диагностический артефакт — не валим pipeline при storage-квоте
         uses: actions/upload-artifact@v4
         with:
@@ -226,6 +249,8 @@ jobs:
             # Переменная не задана -> пустая строка -> в compose сработает \${VAR:-true}.
             CLIENT_SUGGESTIONS_HISTORY_ENABLED=${{ vars.CLIENT_SUGGESTIONS_HISTORY_ENABLED }}
             CLIENT_SUGGESTIONS_DEDUP_ENABLED=${{ vars.CLIENT_SUGGESTIONS_DEDUP_ENABLED }}
+            RESPONSE_CACHE_ENABLED=${{ vars.RESPONSE_CACHE_ENABLED }}
+            RATE_LIMIT_ENABLED=${{ vars.RATE_LIMIT_ENABLED }}
             ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}
             REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
             GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}

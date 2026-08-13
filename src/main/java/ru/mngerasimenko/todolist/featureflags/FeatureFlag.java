@@ -13,9 +13,11 @@ import java.util.Optional;
  */
 public enum FeatureFlag {
 
-    RATE_LIMIT("rate-limit.enabled", true,
+    RATE_LIMIT("rate-limit.enabled", true, Audience.SERVER, OverrideLifetime.PROCESS,
             "Rate-limit через Bucket4j. При false API без ограничений на запросы " +
-            "(не снимает защиту на nginx-уровне). Рестарт контейнера сбрасывает runtime-override."),
+            "(не снимает защиту на nginx-уровне). Переключение живёт лишь до рестарта (как у " +
+            "response-cache): снятая защита обязана восстановиться сама, даже если про неё " +
+            "забыли. Нужно надолго — задавайте через env."),
 
     INACTIVE_REMINDER("app.inactive-reminder.enabled", true,
             "Scheduler ежедневной рассылки напоминаний неактивным пользователям (7+ дней). " +
@@ -31,9 +33,12 @@ public enum FeatureFlag {
             "Отправка push-уведомлений через Firebase при действиях в совместных списках " +
             "и inactive-reminder. Полезно выключить при нестабильной работе Firebase."),
 
-    RESPONSE_CACHE("response-cache.enabled", true,
+    RESPONSE_CACHE("response-cache.enabled", true, Audience.SERVER, OverrideLifetime.PROCESS,
             "Кэширование ответов GET /api/users/me и GET /api/lists в Redis (TTL 60 сек). " +
-            "При false — запросы идут напрямую в Postgres. Аварийное выключение при подозрении на stale-данные."),
+            "При false — запросы идут напрямую в Postgres. Аварийное выключение при подозрении на " +
+            "stale-данные. Переключение живёт до рестарта, как у rate-limit: кэш прикрывает в том " +
+            "числе путь аутентификации, и забытое выключение навсегда оставило бы Postgres под " +
+            "нагрузкой. Нужно надолго — через env."),
 
     SUGGESTIONS("app.suggestions.enabled", true,
             "Глобальный словарь подсказок при вводе задачи (Server R-6). " +
@@ -60,16 +65,23 @@ public enum FeatureFlag {
     private final String name;
     private final boolean defaultValue;
     private final Audience audience;
+    private final OverrideLifetime overrideLifetime;
     private final String description;
 
     FeatureFlag(String name, boolean defaultValue, String description) {
-        this(name, defaultValue, Audience.SERVER, description);
+        this(name, defaultValue, Audience.SERVER, OverrideLifetime.PERSISTENT, description);
     }
 
     FeatureFlag(String name, boolean defaultValue, Audience audience, String description) {
+        this(name, defaultValue, audience, OverrideLifetime.PERSISTENT, description);
+    }
+
+    FeatureFlag(String name, boolean defaultValue, Audience audience,
+                OverrideLifetime overrideLifetime, String description) {
         this.name = name;
         this.defaultValue = defaultValue;
         this.audience = audience;
+        this.overrideLifetime = overrideLifetime;
         this.description = description;
     }
 
@@ -83,6 +95,15 @@ public enum FeatureFlag {
 
     public Audience getAudience() {
         return audience;
+    }
+
+    public OverrideLifetime getOverrideLifetime() {
+        return overrideLifetime;
+    }
+
+    /** Переживает ли ручное переключение рестарт (то есть хранится ли оно в БД). */
+    public boolean isOverridePersistent() {
+        return overrideLifetime == OverrideLifetime.PERSISTENT;
     }
 
     /** Отдаётся ли флаг клиентскому приложению в {@code GET /api/status}. */

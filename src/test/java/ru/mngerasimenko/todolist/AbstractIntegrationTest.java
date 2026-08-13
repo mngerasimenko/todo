@@ -21,9 +21,20 @@ public abstract class AbstractIntegrationTest {
         // Docker Desktop на Windows требует API версии 1.44+ (в версии 29.x — 1.53).
         // docker-java в TestContainers по умолчанию использует 1.32, что вызывает HTTP 400.
         // Устанавливаем совместимую версию API и TCP-хост через системные свойства docker-java.
-        System.setProperty("api.version", "1.53");
-        if (System.getenv("DOCKER_HOST") == null || System.getenv("DOCKER_HOST").isBlank()) {
-            System.setProperty("DOCKER_HOST", "tcp://localhost:2375");
+        // Оба свойства — обход для Docker Desktop на Windows, и ставить их можно ТОЛЬКО там.
+        // api.version=1.53 требует Docker Engine 29.x; на CI-раннере (Linux, Docker 28.x) демон
+        // отвергает слишком новую версию клиента, и Testcontainers падает с «Could not find a
+        // valid Docker environment» — сообщение, которое указывает куда угодно, только не сюда.
+        // Проверяем ОС явно: «DOCKER_HOST не задан» — плохой признак Windows, на Linux и macOS
+        // он тоже обычно пуст, и такой разработчик получил бы и tcp://localhost:2375, и слишком
+        // новую api.version.
+        // Два НЕЗАВИСИМЫХ решения, связывать их нельзя: разработчик на Windows, задавший
+        // DOCKER_HOST вручную, остался бы без api.version и получил бы HTTP 400 от демона.
+        if (System.getProperty("os.name", "").startsWith("Windows")) {
+            System.setProperty("api.version", "1.53");
+            if (System.getenv("DOCKER_HOST") == null || System.getenv("DOCKER_HOST").isBlank()) {
+                System.setProperty("DOCKER_HOST", "tcp://localhost:2375");
+            }
         }
 
         // Singleton-паттерн: контейнер стартует один раз и живёт до конца JVM.
