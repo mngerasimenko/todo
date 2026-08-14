@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ru.mngerasimenko.todolist.dto.AppTodoResponse;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.service.EmailService;
 import ru.mngerasimenko.todolist.service.PushNotificationService;
 import ru.mngerasimenko.todolist.service.RedisHealthService;
@@ -25,8 +26,16 @@ public class AppRestController {
     private final EmailService emailService;
     private final PushNotificationService pushNotificationService;
     private final RedisHealthService redisHealthService;
+    private final FeatureFlagStore featureFlagStore;
 
-    /** Статус приложения: версия сервера, минимальная версия Android-клиента, здоровье SMTP/Firebase/Redis */
+    /**
+     * Статус приложения: версия сервера, минимальная версия Android-клиента,
+     * здоровье SMTP/Firebase/Redis и значения клиентских feature-флагов.
+     *
+     * <p>Клиентские флаги едут здесь, потому что этот эндпоинт и так вызывается на каждом
+     * старте приложения, публичен и уже возит управляющие данные (min_android_version).
+     * Переключаются они прежним пультом: {@code PUT /api/admin/flags/{name}/{value}}.
+     */
     @GetMapping("/status")
     public ResponseEntity<AppTodoResponse> getStatus() {
         AppTodoResponse response = AppTodoResponse.builder()
@@ -37,6 +46,7 @@ public class AppRestController {
                 .smtpHealthy(emailService.isSmtpHealthy())
                 .firebaseHealthy(pushNotificationService.isFirebaseHealthy())
                 .redisHealthy(redisHealthService.isRedisHealthy())
+                .clientFlags(featureFlagStore.clientFlags())
                 .build();
         return ResponseEntity.ok(response);
     }

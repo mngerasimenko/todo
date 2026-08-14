@@ -9,12 +9,15 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import ru.mngerasimenko.todolist.config.TestSecurityConfig;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.security.ApiSecurityConfig;
 import ru.mngerasimenko.todolist.service.EmailService;
 import ru.mngerasimenko.todolist.service.PushNotificationService;
 import ru.mngerasimenko.todolist.service.RedisHealthService;
 import ru.mngerasimenko.todolist.settings.AppProperties;
 import ru.mngerasimenko.todolist.settings.Constants;
+
+import java.util.Map;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -38,6 +41,9 @@ class AppRestControllerTest {
     @MockitoBean
     private RedisHealthService redisHealthService;
 
+    @MockitoBean
+    private FeatureFlagStore featureFlagStore;
+
     @Test
     void getStatus_ReturnsOkWithStatusAndVersion() throws Exception {
         mockMvc.perform(get("/api/status")
@@ -48,6 +54,30 @@ class AppRestControllerTest {
                 .andExpect(jsonPath("$.version").value("0.0.1"))
                 .andExpect(jsonPath("$.min_android_version").value(1))
                 .andExpect(jsonPath("$.appName").doesNotExist());
+    }
+
+    @Test
+    void getStatus_ReturnsClientFlags() throws Exception {
+        when(featureFlagStore.clientFlags()).thenReturn(
+                Map.of("client.suggestions.dedup.enabled", false));
+
+        mockMvc.perform(get("/api/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.client_flags['client.suggestions.dedup.enabled']").value(false));
+    }
+
+    @Test
+    void getStatus_NoClientFlags_StillSendsAnEmptyObject() throws Exception {
+        // Пустая карта обязана уехать как "client_flags": {}, а не исчезнуть. Клиент различает
+        // «поля нет» (сервер старее — значения не трогаем) и «пришёл пустой снимок» (клиентских
+        // флагов не осталось — сбрасываем к дефолтам). Схлопни мы это, выключенный когда-то флаг
+        // завис бы на устройствах навсегда после снятия последнего клиентского флага.
+        when(featureFlagStore.clientFlags()).thenReturn(Map.of());
+
+        mockMvc.perform(get("/api/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.client_flags").exists())
+                .andExpect(jsonPath("$.client_flags").isEmpty());
     }
 
     @Test
