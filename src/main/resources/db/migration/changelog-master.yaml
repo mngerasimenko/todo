@@ -53,3 +53,5 @@ databaseChangeLog:
       file: db/migration/027-lowercase-task-suggestion-display.yaml
   - include:
       file: db/migration/028-task-suggestion-user.yaml
+  - include:
+      file: db/migration/029-feature-flag-override.yaml

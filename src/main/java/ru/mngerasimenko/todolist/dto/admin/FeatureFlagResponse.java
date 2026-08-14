@@ -21,8 +21,19 @@ public class FeatureFlagResponse {
     @JsonProperty("default_value")
     private boolean defaultValue;
 
-    /** RUNTIME | ENV | DEFAULT — откуда пришло текущее значение. */
+    /** PERSISTED | RUNTIME | ENV | DEFAULT — откуда пришло текущее значение. */
     private String source;
+
+    /**
+     * Долговечность ручного переключения: {@code PERSISTENT} — переживёт рестарт и деплой,
+     * {@code PROCESS} — слетит на ближайшем (так ведут себя флаги защиты). Без этого поля
+     * оператор не мог ответить на главный вопрос инцидента: вернётся ли фича сама.
+     */
+    @JsonProperty("override_lifetime")
+    private String overrideLifetime;
+
+    /** Кому флаг адресован: SERVER исполняет сервер, CLIENT — приложение (со следующего запуска). */
+    private String audience;
 
     private String description;
 }

@@ -43,10 +43,13 @@ class TokenBlacklistServiceRedisIntegrationTest {
     @BeforeAll
     static void startContainer() {
         // Тот же обходной путь, что и в AbstractIntegrationTest —
-        // Docker Desktop на Windows требует api.version 1.44+.
-        System.setProperty("api.version", "1.53");
-        if (System.getenv("DOCKER_HOST") == null || System.getenv("DOCKER_HOST").isBlank()) {
-            System.setProperty("DOCKER_HOST", "tcp://localhost:2375");
+        // Только на Windows: api.version=1.53 требует Docker Engine 29.x, а на Linux-раннере
+        // демон отвергает слишком новую версию клиента (см. AbstractIntegrationTest).
+        if (System.getProperty("os.name", "").startsWith("Windows")) {
+            System.setProperty("api.version", "1.53");
+            if (System.getenv("DOCKER_HOST") == null || System.getenv("DOCKER_HOST").isBlank()) {
+                System.setProperty("DOCKER_HOST", "tcp://localhost:2375");
+            }
         }
         redis.start();
     }
