@@ -127,9 +127,11 @@ services:
       - SUPER_ADMIN_EMAILS=${SUPER_ADMIN_EMAILS:-}
       # Break-glass: при сломанном кэше/auth поставить в .env RESPONSE_CACHE_ENABLED=false и пересоздать контейнер.
       - RESPONSE_CACHE_ENABLED=${RESPONSE_CACHE_ENABLED:-true}
-      # Break-glass для клиентских флагов (исполняет Android-приложение, едут в GET /api/status).
-      # Runtime-PUT через /api/admin/flags слетает на рестарте контейнера, а staging
-      # передеплоивается на каждый merge в master — для долгого выключения нужен env.
+      - RATE_LIMIT_ENABLED=${RATE_LIMIT_ENABLED:-true}
+      # Стартовые значения клиентских флагов (исполняет Android-приложение, едут в GET /api/status).
+      # ВНИМАНИЕ: переключение через PUT /api/admin/flags теперь сохраняется в БД и имеет
+      # ПРИОРИТЕТ над этими переменными — приоритет остался runtime -> env -> дефолт. Пока в
+      # feature_flag_override есть строка, менять env бесполезно; сначала DELETE /api/admin/flags/{name}.
       - CLIENT_SUGGESTIONS_HISTORY_ENABLED=${CLIENT_SUGGESTIONS_HISTORY_ENABLED:-true}
       - CLIENT_SUGGESTIONS_DEDUP_ENABLED=${CLIENT_SUGGESTIONS_DEDUP_ENABLED:-true}
 

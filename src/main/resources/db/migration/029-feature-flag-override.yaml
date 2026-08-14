@@ -1,0 +1,35 @@
+databaseChangeLog:
+  - changeSet:
+      id: 029-create-feature-flag-override
+      author: mngerasimenko
+      comment: "Долговечные runtime-override'ы feature-флагов. До этого PUT /api/admin/flags жил только в памяти процесса и слетал при любом рестарте: деплой, краш, ребут хоста. Для флагов ЗАЩИТЫ так и задумано (случайно выключенный rate-limit не должен жить дольше рестарта), но для флагов ФИЧ это значило, что аварийно выключенная функция сама возвращалась пользователям — staging передеплоивается на каждый merge в master. Redis для этого не подошёл: allkeys-lru может вытеснить ключ, а RDB-снапшот при одном изменении пишется раз в час. Таблица крошечная и читается один раз при старте — на горячий путь БД не попадает. Без backfill: пустая таблица означает «оверрайдов нет», значения берутся из env/дефолтов."
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: feature_flag_override
+      changes:
+        - createTable:
+            tableName: feature_flag_override
+            columns:
+              - column:
+                  name: name
+                  type: varchar(100)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: enabled
+                  type: boolean
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(255)
+                  constraints:
+                    nullable: true

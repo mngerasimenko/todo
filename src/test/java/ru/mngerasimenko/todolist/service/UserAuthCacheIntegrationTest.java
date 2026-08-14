@@ -320,7 +320,7 @@ class UserAuthCacheIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void featureFlagOff_BypassesCache() {
-        featureFlagStore.set(FeatureFlag.RESPONSE_CACHE, false);
+        featureFlagStore.set(FeatureFlag.RESPONSE_CACHE, false, "integration-test");
 
         AuthUserDto result = userService.getUserByEmailForAuth(email);
 
@@ -334,12 +334,12 @@ class UserAuthCacheIntegrationTest extends AbstractIntegrationTest {
     @Test
     void featureFlagToggle_CacheBehaviorSwitchesAtRuntime() {
         // OFF — записи в Redis быть не должно
-        featureFlagStore.set(FeatureFlag.RESPONSE_CACHE, false);
+        featureFlagStore.set(FeatureFlag.RESPONSE_CACHE, false, "integration-test");
         userService.getUserByEmailForAuth(email);
         assertThat(redisTemplate.hasKey(redisKey(email))).isFalse();
 
         // Включаем обратно — следующий вызов обязан положить в Redis
-        featureFlagStore.set(FeatureFlag.RESPONSE_CACHE, true);
+        featureFlagStore.set(FeatureFlag.RESPONSE_CACHE, true, "integration-test");
         userService.getUserByEmailForAuth(email);
         assertThat(redisTemplate.hasKey(redisKey(email))).isTrue();
     }

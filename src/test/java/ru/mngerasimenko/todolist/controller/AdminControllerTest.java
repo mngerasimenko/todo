@@ -26,6 +26,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -35,6 +36,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -183,12 +185,36 @@ class AdminControllerTest {
 
     @Test
     @WithMockUser(username = ADMIN_EMAIL)
-    void setFlag_knownName_Returns204AndCallsStore() throws Exception {
+    void setFlag_knownName_ReportsWhetherItWillSurviveARestart() throws Exception {
+        // Процессный флаг: переключение действует, но рестарт его снимет — и это видно в ответе.
+        when(flagStore.set(eq(FeatureFlag.RATE_LIMIT), eq(false), anyString())).thenReturn(false);
+
         mockMvc.perform(put("/api/admin/flags/{name}/{value}",
                         FeatureFlag.RATE_LIMIT.getName(), "false"))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value(FeatureFlag.RATE_LIMIT.getName()))
+                .andExpect(jsonPath("$.enabled").value(false))
+                .andExpect(jsonPath("$.persisted").value(false))
+                // Без класса долговечности false нельзя истолковать: процессный флаг или
+                // упавшая запись — во время инцидента это разные ситуации.
+                .andExpect(jsonPath("$.override_lifetime").value("PROCESS"));
 
-        verify(flagStore).set(FeatureFlag.RATE_LIMIT, false);
+        // Автор переключения уходит в БД вместе со значением — проверяем КОНКРЕТНЫЙ email,
+        // а не anyString(): подстановка "anonymous" проходила мимо проверки и обесценивала аудит.
+        verify(flagStore).set(FeatureFlag.RATE_LIMIT, false, ADMIN_EMAIL);
+    }
+
+    @Test
+    @WithMockUser(username = ADMIN_EMAIL)
+    void setFlag_featureFlag_reportsPersistedTrue() throws Exception {
+        // Флаг фичи: переключение сохранено, деплой его не отменит.
+        when(flagStore.set(eq(FeatureFlag.SUGGESTIONS), eq(false), anyString())).thenReturn(true);
+
+        mockMvc.perform(put("/api/admin/flags/{name}/{value}",
+                        FeatureFlag.SUGGESTIONS.getName(), "false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.persisted").value(true))
+                .andExpect(jsonPath("$.override_lifetime").value("PERSISTENT"));
     }
 
     @Test
@@ -197,7 +223,7 @@ class AdminControllerTest {
         mockMvc.perform(put("/api/admin/flags/{name}/{value}", "unknown.flag", "true"))
                 .andExpect(status().isNotFound());
 
-        verify(flagStore, never()).set(eq(FeatureFlag.RATE_LIMIT), org.mockito.ArgumentMatchers.anyBoolean());
+        verify(flagStore, never()).set(any(), org.mockito.ArgumentMatchers.anyBoolean(), anyString());
     }
 
     @Test
@@ -210,11 +236,58 @@ class AdminControllerTest {
 
     @Test
     @WithMockUser(username = ADMIN_EMAIL)
-    void resetFlag_knownName_Returns204AndCallsStore() throws Exception {
+    void listFlags_showWhetherAnOverrideSurvivesARestart() throws Exception {
+        // Главный вопрос инцидента — «вернётся ли фича сама». Без этих полей оператор не может
+        // ответить на него по пульту, и их удаление раньше не ломало ни одного теста.
+        Map<FeatureFlag, FeatureFlagStore.Resolution> snapshot = new EnumMap<>(FeatureFlag.class);
+        snapshot.put(FeatureFlag.RATE_LIMIT, new FeatureFlagStore.Resolution(false, FlagSource.RUNTIME));
+        snapshot.put(FeatureFlag.CLIENT_SUGGESTIONS_DEDUP,
+                new FeatureFlagStore.Resolution(false, FlagSource.PERSISTED));
+        when(flagStore.snapshot()).thenReturn(snapshot);
+
+        mockMvc.perform(get("/api/admin/flags"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.name=='rate-limit.enabled')].override_lifetime").value("PROCESS"))
+                .andExpect(jsonPath("$[?(@.name=='rate-limit.enabled')].source").value("RUNTIME"))
+                .andExpect(jsonPath("$[?(@.name=='client.suggestions.dedup.enabled')].override_lifetime")
+                        .value("PERSISTENT"))
+                .andExpect(jsonPath("$[?(@.name=='client.suggestions.dedup.enabled')].source")
+                        .value("PERSISTED"))
+                .andExpect(jsonPath("$[?(@.name=='client.suggestions.dedup.enabled')].audience")
+                        .value("CLIENT"));
+    }
+
+    @Test
+    @WithMockUser(username = ADMIN_EMAIL)
+    void resetFlag_knownName_ReportsThatTheOverrideWasCleared() throws Exception {
+        when(flagStore.reset(FeatureFlag.PUSH_NOTIFICATIONS)).thenReturn(true);
+        when(flagStore.isEnabled(FeatureFlag.PUSH_NOTIFICATIONS)).thenReturn(true);
+
         mockMvc.perform(delete("/api/admin/flags/{name}", FeatureFlag.PUSH_NOTIFICATIONS.getName()))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cleared").value(true))
+                .andExpect(jsonPath("$.override_lifetime").value("PERSISTENT"))
+                // doesNotHaveJsonPath, а не doesNotExist: второй проходит и для "persisted": null,
+                // то есть снятие @JsonInclude(NON_NULL) осталось бы незамеченным, а в ответе
+                // появилось бы пустое поле-обманка. Строгое сравнение всего тела тоже не годится —
+                // оно ломалось бы от любого нового поля (changed_at уже в планах).
+                .andExpect(jsonPath("$.persisted").doesNotHaveJsonPath());
 
         verify(flagStore).reset(FeatureFlag.PUSH_NOTIFICATIONS);
+    }
+
+    @Test
+    @WithMockUser(username = ADMIN_EMAIL)
+    void resetFlag_failedDeleteIsVisibleToTheAdmin() throws Exception {
+        // Строку не удалили → на ближайшем рестарте флаг вернётся к сохранённому значению.
+        // Молчаливое 204 здесь означало бы, что админ уходит, считая фичу включённой обратно.
+        when(flagStore.reset(FeatureFlag.PUSH_NOTIFICATIONS)).thenReturn(false);
+        when(flagStore.isEnabled(FeatureFlag.PUSH_NOTIFICATIONS)).thenReturn(true);
+
+        mockMvc.perform(delete("/api/admin/flags/{name}", FeatureFlag.PUSH_NOTIFICATIONS.getName()))
+                // Строка осталась в БД → прежнее значение вернётся после рестарта.
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cleared").value(false));
     }
 
     @Test
