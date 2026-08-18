@@ -53,6 +53,18 @@ public interface PushNotificationService {
     void sendOnboardingReminderPush(Long userId, String userName);
 
     /**
+     * Отправить push-напоминание о наступившем сроке задачи (due date reminder).
+     * Payload помечается {@code push_type=todo_due} и несёт {@code todo_id}/{@code push_list_id}
+     * для deep link на задачу/список на Android.
+     *
+     * @param userId ID пользователя — получателя напоминания
+     * @param todoId ID задачи, у которой наступил срок
+     * @param listId ID списка, которому принадлежит задача (для deep link)
+     * @param todoName название задачи для текста push
+     */
+    void sendTodoDuePush(Long userId, Long todoId, Long listId, String todoName);
+
+    /**
      * Проверить доступность Firebase (кешированный результат).
      * @return true если Firebase SDK инициализирован и работает
      */

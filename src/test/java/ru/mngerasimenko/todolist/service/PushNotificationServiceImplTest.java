@@ -1,11 +1,14 @@
 package ru.mngerasimenko.todolist.service;
 
+import com.google.firebase.messaging.FirebaseMessaging;
+import com.google.firebase.messaging.Message;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
@@ -16,6 +19,8 @@ import ru.mngerasimenko.todolist.repository.TaskListRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 
 import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,6 +51,9 @@ class PushNotificationServiceImplTest {
     @Mock
     private MessageService messageService;
 
+    @Mock
+    private FirebaseMessaging firebaseMessaging;
+
     @InjectMocks
     private PushNotificationServiceImpl pushNotificationService;
 
@@ -67,6 +75,49 @@ class PushNotificationServiceImplTest {
         verify(pushTokenRepository).findByUserId(1L);
         // Firebase не вызывается, исключений нет
         verifyNoMoreInteractions(pushTokenRepository);
+    }
+
+    // === sendTodoDuePush ===
+
+    @Test
+    void sendTodoDuePush_CarriesTypeAndDeepLinkIds() throws Exception {
+        when(pushTokenRepository.findByUserId(53L)).thenReturn(List.of(tokenFor(53L, "ru")));
+
+        try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+
+            pushNotificationService.sendTodoDuePush(53L, 777L, 86L, "Полить теплицу");
+
+            ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
+            verify(firebaseMessaging).send(captor.capture());
+            Map<String, String> data = extractData(captor.getValue());
+            assertThat(data).containsEntry("push_type", "todo_due")
+                            .containsEntry("todo_id", "777")
+                            .containsEntry("push_list_id", "86");
+        }
+    }
+
+    /** Строит push-токен для userId с заданной локалью — минимальная фикстура для FCM-тестов. */
+    private PushToken tokenFor(Long userId, String locale) {
+        User user = new User();
+        user.setId(userId);
+        return new PushToken(user, "fcm-token-" + userId, "device-" + userId, locale);
+    }
+
+    /**
+     * Достаёт data-payload из собранного FCM Message для проверки в тестах.
+     * {@code Message.getData()} package-private в firebase-admin SDK — приходится через reflection.
+     */
+    private Map<String, String> extractData(Message message) {
+        try {
+            java.lang.reflect.Field field = Message.class.getDeclaredField("data");
+            field.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            Map<String, String> data = (Map<String, String>) field.get(message);
+            return data;
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     // === registerToken — locale handling ===
