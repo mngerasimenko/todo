@@ -54,8 +54,9 @@ public interface PushNotificationService {
 
     /**
      * Отправить push-напоминание о наступившем сроке задачи (due date reminder).
-     * Payload помечается {@code push_type=todo_due} и несёт {@code todo_id}/{@code push_list_id}
-     * для deep link на задачу/список на Android.
+     * Payload помечается {@code push_type=todo_due} и несёт {@code todo_id} (для будущего экрана
+     * задачи) плюс {@code list_id}/{@code list_name} — те же ключи, что у остальных пяти push-типов,
+     * которые Android уже читает для deep link в список ({@code TodoFirebaseMessagingService.kt}).
      *
      * @param userId ID пользователя — получателя напоминания
      * @param todoId ID задачи, у которой наступил срок

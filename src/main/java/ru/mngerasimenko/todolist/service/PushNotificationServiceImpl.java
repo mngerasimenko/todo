@@ -293,12 +293,15 @@ public class PushNotificationServiceImpl implements PushNotificationService {
         }
 
         // Текст не зависит от токена (без per-token fallback-имени) — рассылаем одним вызовом,
-        // sendLocalized сам резолвит locale для каждого токена.
+        // sendLocalized сам резолвит locale для каждого токена. listId передаётся как обычный
+        // параметр (не extraData) — так переиспользуется существующий механизм list_id/list_name,
+        // общий с остальными 5 push-типами (сетевой контракт: push_list_id — внутренний
+        // Intent-ключ Android между двумя классами, на проводе его нет).
         sendLocalized(tokens, PUSH_TYPE_TODO_DUE,
                 "push.todo.due.title", new Object[]{},
                 "push.todo.due.body", new Object[]{todoName},
-                null,
-                Map.of("todo_id", String.valueOf(todoId), "push_list_id", String.valueOf(listId)));
+                listId,
+                Map.of("todo_id", String.valueOf(todoId)));
 
         log.info("Push-напоминание о сроке отправлено userId={}, todoId={} на {} устройств(а)", userId, todoId, tokens.size());
     }

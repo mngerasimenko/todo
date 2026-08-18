@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.model.PushToken;
+import ru.mngerasimenko.todolist.model.TaskList;
 import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.repository.PushTokenRepository;
 import ru.mngerasimenko.todolist.repository.TaskListRepository;
@@ -82,6 +83,10 @@ class PushNotificationServiceImplTest {
     @Test
     void sendTodoDuePush_CarriesTypeAndDeepLinkIds() throws Exception {
         when(pushTokenRepository.findByUserId(53L)).thenReturn(List.of(tokenFor(53L, "ru")));
+        TaskList list = new TaskList();
+        list.setId(86L);
+        list.setName("Теплица");
+        when(taskListRepository.findById(86L)).thenReturn(Optional.of(list));
 
         try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
             mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
@@ -91,9 +96,12 @@ class PushNotificationServiceImplTest {
             ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
             verify(firebaseMessaging).send(captor.capture());
             Map<String, String> data = extractData(captor.getValue());
+            // list_id/list_name — те же wire-ключи, что у остальных пяти push-типов;
+            // Android-клиент читает именно их для deep link (push_list_id — не wire-ключ).
             assertThat(data).containsEntry("push_type", "todo_due")
                             .containsEntry("todo_id", "777")
-                            .containsEntry("push_list_id", "86");
+                            .containsEntry("list_id", "86")
+                            .containsEntry("list_name", "Теплица");
         }
     }
 
