@@ -1,5 +1,6 @@
 package ru.mngerasimenko.todolist.service;
 
+import ru.mngerasimenko.todolist.dto.DueTodosResponse;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 
 import java.util.List;
@@ -51,4 +52,10 @@ public interface TodoService {
      * Живёт в сервисе, а не в планировщике, чтобы поддаваться unit-тестам и ручному вызову.
      */
     int dispatchDueReminders();
+
+    /**
+     * Возвращает задачи со сроком, видимые пользователю, сгруппированные для экрана
+     * «Сегодня»: просроченные, сегодняшние, ближайшие (по поясу каждой задачи).
+     */
+    DueTodosResponse getDueTodos(Long requestingUserId);
 }

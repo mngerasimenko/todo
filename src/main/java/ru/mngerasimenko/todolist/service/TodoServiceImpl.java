@@ -6,7 +6,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import ru.mngerasimenko.todolist.dto.DueTodosResponse;
 import ru.mngerasimenko.todolist.dto.TodoDto;
+import ru.mngerasimenko.todolist.dto.TodoResponse;
 import ru.mngerasimenko.todolist.exception.ListNotFoundException;
 import ru.mngerasimenko.todolist.exception.TodoNotFoundException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
@@ -31,6 +33,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,6 +59,9 @@ public class TodoServiceImpl implements TodoService {
 
     /** Нижняя граница «протухания» напоминания — см. TodoRepository.findDueForReminder. */
     private static final Duration STALE_AFTER = Duration.ofDays(1);
+
+    /** Горизонт группы «Дальше». Без границы экран превращается во второй список всех задач. */
+    private static final int UPCOMING_DAYS = 7;
 
     @Override
     @Transactional
@@ -201,6 +207,33 @@ public class TodoServiceImpl implements TodoService {
         return todoRepository.findByListIdsVisibleToUser(listIds, requestingUserId).stream()
                 .map(todoMapper::toDto)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DueTodosResponse getDueTodos(Long requestingUserId) {
+        LocalDate until = LocalDate.now().plusDays(UPCOMING_DAYS);
+        List<Todo> todos = todoRepository.findWithDueVisibleToUser(requestingUserId, until);
+
+        List<TodoResponse> overdue = new ArrayList<>();
+        List<TodoResponse> today = new ArrayList<>();
+        List<TodoResponse> upcoming = new ArrayList<>();
+
+        for (Todo todo : todos) {
+            ZoneId zone = todo.getDueTimezone() != null
+                    ? ZoneId.of(todo.getDueTimezone()) : FALLBACK_ZONE;
+            LocalDate todayInTaskZone = LocalDate.now(zone);
+            TodoResponse response = todoMapper.toResponse(todoMapper.toDto(todo));
+
+            if (todo.getDueDate().isBefore(todayInTaskZone)) {
+                overdue.add(response);
+            } else if (todo.getDueDate().isEqual(todayInTaskZone)) {
+                today.add(response);
+            } else {
+                upcoming.add(response);
+            }
+        }
+        return DueTodosResponse.builder().overdue(overdue).today(today).upcoming(upcoming).build();
     }
 
     @Override

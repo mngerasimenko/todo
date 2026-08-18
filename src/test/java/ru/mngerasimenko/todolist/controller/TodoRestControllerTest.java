@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+import ru.mngerasimenko.todolist.dto.DueTodosResponse;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.dto.TodoRequest;
 import ru.mngerasimenko.todolist.dto.TodoResponse;
@@ -521,5 +522,35 @@ class TodoRestControllerTest {
         mockMvc.perform(patch("/api/todos/999/undone"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("Todo not found with id: 999"));
+    }
+
+    @Test
+    @WithMockUser(username = "due@test.ru")
+    void getDue_ReturnsThreeGroups() throws Exception {
+        when(userService.getUserByEmail("due@test.ru"))
+                .thenReturn(UserDto.builder().id(42L).email("due@test.ru").build());
+        when(todoService.getDueTodos(42L)).thenReturn(DueTodosResponse.builder()
+                .overdue(List.of(todoResponse("Полить теплицу")))
+                .today(List.of(todoResponse("Позвонить в клинику")))
+                .upcoming(List.of(todoResponse("Корм заказать")))
+                .build());
+
+        mockMvc.perform(get("/api/todos/due"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.overdue[0].name").value("Полить теплицу"))
+                .andExpect(jsonPath("$.today[0].name").value("Позвонить в клинику"))
+                .andExpect(jsonPath("$.upcoming[0].name").value("Корм заказать"));
+    }
+
+    @Test
+    void getDue_Unauthorized_Returns401() throws Exception {
+        mockMvc.perform(get("/api/todos/due")).andExpect(status().isUnauthorized());
+    }
+
+    /** Вспомогательный билдер TodoResponse с заданным именем для тестов «Сегодня». */
+    private TodoResponse todoResponse(String name) {
+        TodoResponse response = new TodoResponse();
+        response.setName(name);
+        return response;
     }
 }

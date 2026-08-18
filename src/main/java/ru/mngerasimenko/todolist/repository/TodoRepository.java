@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.mngerasimenko.todolist.model.Todo;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -154,6 +155,27 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
             ORDER BY t.due_date, t.due_time
             """, nativeQuery = true)
     List<Todo> findDueForReminder(@Param("now") Instant now, @Param("staleBefore") Instant staleBefore);
+
+    /**
+     * Задачи со сроком, видимые пользователю (экран «Сегодня»): невыполненные, срок не
+     * позже верхней границы (сегодня + горизонт «Дальше»), из списков пользователя,
+     * приватные — только его собственные. Видимость строится так же, как в
+     * {@link #findByListIdVisibleToUser}.
+     */
+    @Query("""
+            SELECT t FROM Todo t
+            JOIN FETCH t.user
+            LEFT JOIN FETCH t.completorUser
+            WHERE t.done = false
+              AND t.dueDate IS NOT NULL
+              AND t.dueDate <= :until
+              AND t.taskList.id IN (
+                  SELECT tlu.id.listId FROM TaskListUser tlu WHERE tlu.id.userId = :userId
+              )
+              AND (t.isPrivate = false OR t.user.id = :userId)
+            ORDER BY t.dueDate, t.dueTime
+            """)
+    List<Todo> findWithDueVisibleToUser(@Param("userId") Long userId, @Param("until") LocalDate until);
 
     /**
      * Отметка об отправке ставится точечным UPDATE мимо сущности: у Todo есть @Version,
