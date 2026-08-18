@@ -124,7 +124,8 @@ class FeatureFlagStoreTest {
         // любому анонимному клиенту.
         assertEquals(
                 Map.of("client.suggestions.history.enabled", true,
-                        "client.suggestions.dedup.enabled", true),
+                        "client.suggestions.dedup.enabled", true,
+                        "client.todo.due-dates.enabled", true),
                 flags,
                 "контракт клиентских флагов на проводе изменился");
         // Значения тоже литералами, не через getDefaultValue(): дефолт — это то, с чем живут ВСЕ
