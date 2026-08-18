@@ -63,6 +63,8 @@ public class TodoMapper {
         todo.setDone(todoDto.isDone());
         todo.setIsPrivate(todoDto.isPrivate());
         todo.setUserId(todoDto.getUserId());
+        // Нулевые значения от старых клиентов схлопываются в дефолты прямо здесь —
+        // так due_time никогда не окажется null при NOT NULL в схеме.
         todo.setDueDate(todoDto.getDueDate());
         todo.setDueTime(todoDto.getDueTime() != null ? todoDto.getDueTime() : LocalTime.of(9, 0));
         todo.setDueTimezone(todoDto.getDueTimezone());
