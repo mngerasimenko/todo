@@ -11,6 +11,7 @@ import ru.mngerasimenko.todolist.exception.ListNotFoundException;
 import ru.mngerasimenko.todolist.exception.TodoNotFoundException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
+import ru.mngerasimenko.todolist.model.ReminderScope;
 import ru.mngerasimenko.todolist.model.TaskList;
 import ru.mngerasimenko.todolist.model.TaskListRole;
 import ru.mngerasimenko.todolist.model.TaskListUser;
@@ -23,8 +24,12 @@ import ru.mngerasimenko.todolist.repository.UserRepository;
 
 import org.springframework.security.access.AccessDeniedException;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
+import java.util.Objects;
 
 @Slf4j
 @Service
@@ -39,6 +44,8 @@ public class TodoServiceImpl implements TodoService {
     private final TodoMapper todoMapper;
     private final SubscriptionService subscriptionService;
     private final SuggestionService suggestionService;
+
+    private static final ZoneId FALLBACK_ZONE = ZoneId.of("Europe/Moscow");
 
     @Override
     @Transactional
@@ -66,8 +73,9 @@ public class TodoServiceImpl implements TodoService {
         Todo todo = todoMapper.toEntity(todoDto);
         todo.setUser(user);
         todo.setTaskList(taskList);
+        applyDueRules(todoDto, todo);
 
-        Todo savedTodo = todoRepository.save(todo);
+        Todo savedTodo = todoRepository.saveAndFlush(todo);
         log.info("Создана задача: id={}, name='{}', userId={}, listId={}, private={}",
                 savedTodo.getId(), savedTodo.getName(), user.getId(), taskList.getId(), savedTodo.getIsPrivate());
 
@@ -127,7 +135,21 @@ public class TodoServiceImpl implements TodoService {
         boolean nowDone = todoDto.isDone();
 
         log.debug("updateTodo: входной done={}, существующий done={}", nowDone, wasDone);
+
+        // Снимок полей срока ДО маппинга: updateEntityFromDto безусловно копирует их
+        // из dto, и после него entity уже совпадает с dto — applyDueRules не увидел бы
+        // разницы. Восстанавливаем "было" сразу после маппинга, чтобы правило "смена
+        // срока обнуляет reminderSentAt" реально ловило перенос, а не сравнивало dto само с собой.
+        LocalDate dueDateBeforeMapping = existingTodo.getDueDate();
+        LocalTime dueTimeBeforeMapping = existingTodo.getDueTime();
+        Integer remindBeforeMinutesBeforeMapping = existingTodo.getRemindBeforeMinutes();
+
         todoMapper.updateEntityFromDto(todoDto, existingTodo);
+
+        existingTodo.setDueDate(dueDateBeforeMapping);
+        existingTodo.setDueTime(dueTimeBeforeMapping);
+        existingTodo.setRemindBeforeMinutes(remindBeforeMinutesBeforeMapping);
+        applyDueRules(todoDto, existingTodo);
 
         // Логика completedAt и completorUser
         if (!wasDone && nowDone) {
@@ -144,7 +166,7 @@ public class TodoServiceImpl implements TodoService {
             existingTodo.setCompletorUser(null);
         }
 
-        Todo updatedTodo = todoRepository.save(existingTodo);
+        Todo updatedTodo = todoRepository.saveAndFlush(existingTodo);
         log.info("Обновлена задача: id={}, name='{}', done={}, completedAt={}",
                 updatedTodo.getId(), updatedTodo.getName(), updatedTodo.isDone(), updatedTodo.getCompletedAt());
         return todoMapper.toDto(updatedTodo);
@@ -263,6 +285,49 @@ public class TodoServiceImpl implements TodoService {
         todo.setCompletorUser(null);
         Todo updatedTodo = todoRepository.save(todo);
         return todoMapper.toDto(updatedTodo);
+    }
+
+    /**
+     * Единая точка правил срока. Вызывается и при создании, и при обновлении:
+     * иначе правило, добавленное в одну ветку, тихо не сработает в другой.
+     */
+    private void applyDueRules(TodoDto dto, Todo entity) {
+        if (dto.getDueDate() == null) {
+            // Снятие срока: чистим всё сопутствующее, иначе повторная установка
+            // унаследует настройки, которых пользователь уже не видит на экране.
+            entity.setDueDate(null);
+            entity.setDueTimezone(null);
+            entity.setDueTime(LocalTime.of(9, 0));
+            entity.setRemindBeforeMinutes(0);
+            entity.setReminderScope(ReminderScope.SELF);
+            entity.setReminderSentAt(null);
+            return;
+        }
+
+        boolean momentChanged = !Objects.equals(entity.getDueDate(), dto.getDueDate())
+                || !Objects.equals(entity.getDueTime(), dto.getDueTime())
+                || !Objects.equals(entity.getRemindBeforeMinutes(), dto.getRemindBeforeMinutes());
+
+        entity.setDueDate(dto.getDueDate());
+        entity.setDueTime(dto.getDueTime() != null ? dto.getDueTime() : LocalTime.of(9, 0));
+        entity.setRemindBeforeMinutes(dto.getRemindBeforeMinutes() != null ? dto.getRemindBeforeMinutes() : 0);
+
+        if (dto.getDueTimezone() == null || dto.getDueTimezone().isBlank()) {
+            log.warn("Задача id={} получила срок без часового пояса — клиент старой версии, подставлен {}",
+                    entity.getId(), FALLBACK_ZONE);
+            entity.setDueTimezone(FALLBACK_ZONE.getId());
+        } else {
+            entity.setDueTimezone(dto.getDueTimezone());
+        }
+
+        // Приватную задачу видит только автор — рассылать её участникам списка нельзя
+        // ни при каком значении, пришедшем от клиента. API публичный, доверять ему нельзя.
+        ReminderScope requested = dto.getReminderScope() != null ? dto.getReminderScope() : ReminderScope.SELF;
+        entity.setReminderScope(entity.getIsPrivate() ? ReminderScope.SELF : requested);
+
+        if (momentChanged) {
+            entity.setReminderSentAt(null);
+        }
     }
 
     /**

@@ -3,6 +3,7 @@ package ru.mngerasimenko.todolist.service;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -11,6 +12,7 @@ import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.exception.TodoNotFoundException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
+import ru.mngerasimenko.todolist.model.ReminderScope;
 import ru.mngerasimenko.todolist.model.TaskList;
 import ru.mngerasimenko.todolist.model.TaskListRole;
 import ru.mngerasimenko.todolist.model.TaskListUser;
@@ -21,7 +23,9 @@ import ru.mngerasimenko.todolist.repository.TaskListUserRepository;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -127,7 +131,7 @@ public class TodoServiceImplTest {
         when(taskListRepository.findById(1L)).thenReturn(Optional.of(testTaskList));
         when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
         when(todoMapper.toEntity(newTodoDto)).thenReturn(newTodo);
-        when(todoRepository.save(any(Todo.class))).thenReturn(savedTodo);
+        when(todoRepository.saveAndFlush(any(Todo.class))).thenReturn(savedTodo);
         when(todoMapper.toDto(savedTodo)).thenReturn(savedTodoDto);
 
         TodoDto result = todoService.createTodo(newTodoDto);
@@ -140,7 +144,7 @@ public class TodoServiceImplTest {
         assertThat(result.getCreatedAt()).isNotNull();
         verify(userRepository, times(1)).findById(1L);
         verify(taskListRepository, times(1)).findById(1L);
-        verify(todoRepository, times(1)).save(any(Todo.class));
+        verify(todoRepository, times(1)).saveAndFlush(any(Todo.class));
         verify(todoMapper, times(1)).toDto(savedTodo);
         // R-6 хук: публичная задача попадает в словарь подсказок с private=false и id автора.
         verify(suggestionService, times(1)).track("New Todo", false, 1L);
@@ -168,7 +172,7 @@ public class TodoServiceImplTest {
         when(taskListRepository.findById(1L)).thenReturn(Optional.of(testTaskList));
         when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
         when(todoMapper.toEntity(newTodoDto)).thenReturn(newTodo);
-        when(todoRepository.save(any(Todo.class))).thenReturn(savedTodo);
+        when(todoRepository.saveAndFlush(any(Todo.class))).thenReturn(savedTodo);
         when(todoMapper.toDto(savedTodo)).thenReturn(new TodoDto());
 
         todoService.createTodo(newTodoDto);
@@ -201,7 +205,7 @@ public class TodoServiceImplTest {
         when(taskListRepository.findById(1L)).thenReturn(Optional.of(testTaskList));
         when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
         when(todoMapper.toEntity(newTodoDto)).thenReturn(newTodo);
-        when(todoRepository.save(any(Todo.class))).thenReturn(savedTodo);
+        when(todoRepository.saveAndFlush(any(Todo.class))).thenReturn(savedTodo);
         when(todoMapper.toDto(savedTodo)).thenReturn(savedTodoDto);
         doThrow(new RuntimeException("dictionary down"))
                 .when(suggestionService).track(anyString(), anyBoolean(), anyLong());
@@ -226,7 +230,7 @@ public class TodoServiceImplTest {
                 .isInstanceOf(UserNotFoundException.class)
                 .hasMessage("User not found with id: 999");
 
-        verify(todoRepository, never()).save(any(Todo.class));
+        verify(todoRepository, never()).saveAndFlush(any(Todo.class));
         verify(todoMapper, never()).toEntity(any());
     }
 
@@ -245,7 +249,7 @@ public class TodoServiceImplTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Пользователь не является участником данного списка");
 
-        verify(todoRepository, never()).save(any(Todo.class));
+        verify(todoRepository, never()).saveAndFlush(any(Todo.class));
         verify(todoMapper, never()).toEntity(any());
     }
 
@@ -279,13 +283,13 @@ public class TodoServiceImplTest {
         when(taskListRepository.findById(1L)).thenReturn(Optional.of(testTaskList));
         when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
         when(todoMapper.toEntity(newTodoDto)).thenReturn(newTodo);
-        when(todoRepository.save(any(Todo.class))).thenReturn(savedTodo);
+        when(todoRepository.saveAndFlush(any(Todo.class))).thenReturn(savedTodo);
         when(todoMapper.toDto(savedTodo)).thenReturn(savedTodoDto);
 
         TodoDto result = todoService.createTodo(newTodoDto);
 
         assertThat(result.getDone()).isFalse();
-        verify(todoRepository, times(1)).save(any(Todo.class));
+        verify(todoRepository, times(1)).saveAndFlush(any(Todo.class));
     }
 
     @Test
@@ -321,7 +325,7 @@ public class TodoServiceImplTest {
         when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
                 .thenReturn(Optional.of(new TaskListUser(testTaskList, testUser, TaskListRole.USER)));
         doNothing().when(todoMapper).updateEntityFromDto(updateDto, existingTodo);
-        when(todoRepository.save(any(Todo.class))).thenReturn(updatedTodo);
+        when(todoRepository.saveAndFlush(any(Todo.class))).thenReturn(updatedTodo);
         when(todoMapper.toDto(updatedTodo)).thenReturn(updatedTodoDto);
 
         TodoDto result = todoService.updateTodo(1L, updateDto, 1L);
@@ -331,7 +335,7 @@ public class TodoServiceImplTest {
         assertThat(result.getDone()).isTrue();
         verify(userRepository, never()).findById(any());
         verify(todoMapper, times(1)).updateEntityFromDto(updateDto, existingTodo);
-        verify(todoRepository, times(1)).save(existingTodo);
+        verify(todoRepository, times(1)).saveAndFlush(existingTodo);
     }
 
     @Test
@@ -345,7 +349,7 @@ public class TodoServiceImplTest {
                 .isInstanceOf(TodoNotFoundException.class)
                 .hasMessage("Todo not found with id: 999");
 
-        verify(todoRepository, never()).save(any(Todo.class));
+        verify(todoRepository, never()).saveAndFlush(any(Todo.class));
     }
 
     @Test
@@ -369,7 +373,7 @@ public class TodoServiceImplTest {
                 .isInstanceOf(UserNotFoundException.class)
                 .hasMessage("User not found with id: 999");
 
-        verify(todoRepository, never()).save(any(Todo.class));
+        verify(todoRepository, never()).saveAndFlush(any(Todo.class));
     }
 
     @Test
@@ -400,7 +404,7 @@ public class TodoServiceImplTest {
                 .thenReturn(Optional.of(new TaskListUser(testTaskList, testUser, TaskListRole.USER)));
         when(userRepository.findById(2L)).thenReturn(Optional.of(newUser));
         doNothing().when(todoMapper).updateEntityFromDto(updateDto, existingTodo);
-        when(todoRepository.save(any(Todo.class))).thenReturn(updatedTodo);
+        when(todoRepository.saveAndFlush(any(Todo.class))).thenReturn(updatedTodo);
         when(todoMapper.toDto(updatedTodo)).thenReturn(updatedTodoDto);
 
         TodoDto result = todoService.updateTodo(1L, updateDto, 1L);
@@ -408,6 +412,122 @@ public class TodoServiceImplTest {
         assertThat(result.getUserId()).isEqualTo(2L);
         verify(userRepository, times(1)).findById(2L);
         verify(todoMapper, times(1)).updateEntityFromDto(updateDto, existingTodo);
+    }
+
+    // --- Тесты правил срока (applyDueRules) ---
+
+    @Test
+    void createTodo_PrivateTodo_ForcesScopeSelf() {
+        TodoDto dto = dueDto(LocalDate.of(2026, 7, 31));
+        dto.setIsPrivate(true);
+        dto.setReminderScope(ReminderScope.ALL);
+        when(todoRepository.saveAndFlush(any(Todo.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        todoService.createTodo(dto);
+
+        ArgumentCaptor<Todo> captor = ArgumentCaptor.forClass(Todo.class);
+        verify(todoRepository).saveAndFlush(captor.capture());
+        assertThat(captor.getValue().getReminderScope()).isEqualTo(ReminderScope.SELF);
+    }
+
+    @Test
+    void updateTodo_DueMomentChanged_ClearsReminderSentAt() {
+        Todo existing = todoWithDue(LocalDate.of(2026, 7, 31));
+        existing.setReminderSentAt(LocalDateTime.now().minusHours(1));
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(todoRepository.saveAndFlush(any(Todo.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TodoDto dto = dueDto(LocalDate.of(2026, 8, 5));
+        todoService.updateTodo(1L, dto, existing.getUserId());
+
+        assertThat(existing.getReminderSentAt()).isNull();
+    }
+
+    @Test
+    void updateTodo_DueCleared_ResetsRelatedFields() {
+        Todo existing = todoWithDue(LocalDate.of(2026, 7, 31));
+        existing.setRemindBeforeMinutes(1440);
+        existing.setReminderScope(ReminderScope.ALL);
+        existing.setReminderSentAt(LocalDateTime.now());
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(todoRepository.saveAndFlush(any(Todo.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TodoDto dto = dueDto(null);
+        todoService.updateTodo(1L, dto, existing.getUserId());
+
+        assertThat(existing.getDueDate()).isNull();
+        assertThat(existing.getDueTimezone()).isNull();
+        assertThat(existing.getReminderSentAt()).isNull();
+        assertThat(existing.getRemindBeforeMinutes()).isZero();
+        assertThat(existing.getReminderScope()).isEqualTo(ReminderScope.SELF);
+    }
+
+    @Test
+    void createTodo_NoTimezone_FallsBackToMoscow() {
+        TodoDto dto = dueDto(LocalDate.of(2026, 7, 31));
+        dto.setDueTimezone(null);
+        when(todoRepository.saveAndFlush(any(Todo.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        todoService.createTodo(dto);
+
+        ArgumentCaptor<Todo> captor = ArgumentCaptor.forClass(Todo.class);
+        verify(todoRepository).saveAndFlush(captor.capture());
+        assertThat(captor.getValue().getDueTimezone()).isEqualTo("Europe/Moscow");
+    }
+
+    /**
+     * DTO со сроком для тестов applyDueRules. Заодно лениво мокирует зависимости
+     * пути создания (владелец/список/членство/маппер), чтобы не дублировать их
+     * в каждом тесте — часть тестов их не использует, поэтому стабы lenient.
+     */
+    private TodoDto dueDto(LocalDate dueDate) {
+        TodoDto dto = new TodoDto();
+        dto.setName("Due Todo");
+        dto.setUserId(testUser.getId());
+        dto.setListId(testTaskList.getId());
+        dto.setDone(false);
+        dto.setDueDate(dueDate);
+        dto.setDueTime(LocalTime.of(9, 0));
+        dto.setDueTimezone("Europe/Moscow");
+        dto.setRemindBeforeMinutes(0);
+        dto.setReminderScope(ReminderScope.SELF);
+
+        lenient().when(userRepository.findById(testUser.getId())).thenReturn(Optional.of(testUser));
+        lenient().when(taskListRepository.findById(testTaskList.getId())).thenReturn(Optional.of(testTaskList));
+        lenient().when(taskListUserRepository.existsByIdListIdAndIdUserId(testTaskList.getId(), testUser.getId()))
+                .thenReturn(true);
+        lenient().when(todoMapper.toEntity(any(TodoDto.class))).thenAnswer(inv -> {
+            TodoDto d = inv.getArgument(0);
+            Todo entity = new Todo();
+            entity.setName(d.getName());
+            entity.setDone(d.isDone());
+            entity.setIsPrivate(d.isPrivate());
+            return entity;
+        });
+        return dto;
+    }
+
+    /**
+     * Существующая задача со сроком, владельцем и списком — плюс мок членства
+     * в списке, нужный assertCanModifyTodo внутри updateTodo.
+     */
+    private Todo todoWithDue(LocalDate dueDate) {
+        Todo entity = new Todo();
+        entity.setId(1L);
+        entity.setName("Due Todo");
+        entity.setDone(false);
+        entity.setCreatedAt(LocalDateTime.now());
+        entity.setUser(testUser);
+        entity.setTaskList(testTaskList);
+        entity.setDueDate(dueDate);
+        entity.setDueTime(LocalTime.of(9, 0));
+        entity.setDueTimezone("Europe/Moscow");
+        entity.setRemindBeforeMinutes(0);
+        entity.setReminderScope(ReminderScope.SELF);
+
+        lenient().when(taskListUserRepository.findByIdListIdAndIdUserId(testTaskList.getId(), testUser.getId()))
+                .thenReturn(Optional.of(new TaskListUser(testTaskList, testUser, TaskListRole.USER)));
+        return entity;
     }
 
     @Test
@@ -799,7 +919,7 @@ public class TodoServiceImplTest {
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("не является участником");
 
-        verify(todoRepository, never()).save(any(Todo.class));
+        verify(todoRepository, never()).saveAndFlush(any(Todo.class));
     }
 
     @Test
@@ -946,7 +1066,7 @@ public class TodoServiceImplTest {
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("Только создатель задачи или администратор списка могут изменить эту задачу");
 
-        verify(todoRepository, never()).save(any(Todo.class));
+        verify(todoRepository, never()).saveAndFlush(any(Todo.class));
     }
 
     @Test
@@ -967,13 +1087,13 @@ public class TodoServiceImplTest {
         when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
                 .thenReturn(Optional.of(adminMembership));
         doNothing().when(todoMapper).updateEntityFromDto(updateDto, testTodo);
-        when(todoRepository.save(any(Todo.class))).thenReturn(testTodo);
+        when(todoRepository.saveAndFlush(any(Todo.class))).thenReturn(testTodo);
         when(todoMapper.toDto(testTodo)).thenReturn(testTodoDto);
 
         TodoDto result = todoService.updateTodo(1L, updateDto, 1L);
 
         assertThat(result).isNotNull();
-        verify(todoRepository).save(any(Todo.class));
+        verify(todoRepository).saveAndFlush(any(Todo.class));
     }
 
     // ========== Тесты на коллаборацию (отметка выполнения любым участником) ==========
