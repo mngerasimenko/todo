@@ -475,6 +475,32 @@ public class TodoServiceImplTest {
         assertThat(captor.getValue().getDueTimezone()).isEqualTo("Europe/Moscow");
     }
 
+    @Test
+    void createTodo_InvalidTimezone_FallsBackToMoscow() {
+        TodoDto dto = dueDto(LocalDate.of(2026, 7, 31));
+        dto.setDueTimezone("Not/AZone");
+        when(todoRepository.save(any(Todo.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        todoService.createTodo(dto);
+
+        ArgumentCaptor<Todo> captor = ArgumentCaptor.forClass(Todo.class);
+        verify(todoRepository).save(captor.capture());
+        assertThat(captor.getValue().getDueTimezone()).isEqualTo("Europe/Moscow");
+    }
+
+    @Test
+    void createTodo_ValidNonMoscowTimezone_IsPreserved() {
+        TodoDto dto = dueDto(LocalDate.of(2026, 7, 31));
+        dto.setDueTimezone("Asia/Novosibirsk");
+        when(todoRepository.save(any(Todo.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        todoService.createTodo(dto);
+
+        ArgumentCaptor<Todo> captor = ArgumentCaptor.forClass(Todo.class);
+        verify(todoRepository).save(captor.capture());
+        assertThat(captor.getValue().getDueTimezone()).isEqualTo("Asia/Novosibirsk");
+    }
+
     /**
      * DTO со сроком для тестов applyDueRules. Заодно лениво мокирует зависимости
      * пути создания (владелец/список/членство/маппер), чтобы не дублировать их

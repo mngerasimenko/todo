@@ -24,6 +24,7 @@ import ru.mngerasimenko.todolist.repository.UserRepository;
 
 import org.springframework.security.access.AccessDeniedException;
 
+import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -317,7 +318,17 @@ public class TodoServiceImpl implements TodoService {
                     entity.getId(), FALLBACK_ZONE);
             entity.setDueTimezone(FALLBACK_ZONE.getId());
         } else {
-            entity.setDueTimezone(dto.getDueTimezone());
+            // Невалидный IANA-идентификатор не должен доходить до колонки: findDueForReminder —
+            // один native-запрос по всем задачам, и AT TIME ZONE упадёт на первой же "плохой"
+            // строке, оборвав рассылку напоминаний сразу для всех пользователей.
+            try {
+                ZoneId.of(dto.getDueTimezone());
+                entity.setDueTimezone(dto.getDueTimezone());
+            } catch (DateTimeException e) {
+                log.warn("Задача id={} получила невалидный часовой пояс '{}', подставлен {}",
+                        entity.getId(), dto.getDueTimezone(), FALLBACK_ZONE);
+                entity.setDueTimezone(FALLBACK_ZONE.getId());
+            }
         }
 
         // Приватную задачу видит только автор — рассылать её участникам списка нельзя
