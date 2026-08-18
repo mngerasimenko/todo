@@ -419,11 +419,17 @@ public class TodoServiceImpl implements TodoService {
         // только ссылка из последнего — предыдущая отвечала бы "неверный токен" (panel-review
         // Task 8, Important).
         Map<Long, String> unsubscribeTokens = new HashMap<>();
+        // Имя списка на письмо — по listId через репозиторий, а не через todo.getTaskList():
+        // без внешней @Transactional Todo из findDueForReminder detached, а связь LAZY —
+        // обращение к ней роняет LazyInitializationException внутри try/catch письма, письмо
+        // молча не уходит НИКОГДА (panel-review Task 8, повторный проход, Critical). Кэш —
+        // чтобы не бить репозиторий на каждого получателя одного и того же списка.
+        Map<Long, String> listNames = new HashMap<>();
 
         for (Todo todo : due) {
             try {
                 for (User recipient : resolveRecipients(todo)) {
-                    notifyOne(todo, recipient, unsubscribeTokens);
+                    notifyOne(todo, recipient, unsubscribeTokens, listNames);
                 }
             } catch (Exception e) {
                 // Падение одной задачи не должно рвать весь проход.
@@ -452,7 +458,8 @@ public class TodoServiceImpl implements TodoService {
                 .toList();
     }
 
-    private void notifyOne(Todo todo, User recipient, Map<Long, String> unsubscribeTokens) {
+    private void notifyOne(Todo todo, User recipient, Map<Long, String> unsubscribeTokens,
+                            Map<Long, String> listNames) {
         try {
             pushNotificationService.sendTodoDuePush(
                     recipient.getId(), todo.getId(), todo.getListId(), todo.getName());
@@ -467,10 +474,22 @@ public class TodoServiceImpl implements TodoService {
             // Токен выпускаем только сейчас, непосредственно перед отправкой: колонка
             // User.unsubscribeToken общая с маркетинговой рассылкой, лишний выпуск инвалидирует
             // непрочитанные ссылки в уже доставленных письмах (owner-решение отложено).
-            // computeIfAbsent — переиспользование в рамках свипа (см. dispatchDueReminders).
-            String token = unsubscribeTokens.computeIfAbsent(recipient.getId(), userService::issueUnsubscribeToken);
+            // Без computeIfAbsent: issueUnsubscribeToken теоретически может вернуть null,
+            // а computeIfAbsent null не кэширует — на второй задаче того же пользователя
+            // токен выпустился бы заново, снова перетирая колонку (panel-review Task 8, Minor).
+            String token;
+            if (unsubscribeTokens.containsKey(recipient.getId())) {
+                token = unsubscribeTokens.get(recipient.getId());
+            } else {
+                token = userService.issueUnsubscribeToken(recipient.getId());
+                unsubscribeTokens.put(recipient.getId(), token);
+            }
+            // Имя списка — по listId через репозиторий, не через todo.getTaskList() (LAZY,
+            // Todo здесь detached — см. комментарий у listNames в dispatchDueReminders).
+            String listName = listNames.computeIfAbsent(todo.getListId(),
+                    id -> taskListRepository.findById(id).map(TaskList::getName).orElse(""));
             emailService.sendTodoDueEmail(recipient.getEmail(), recipient.getName(), todo.getName(),
-                    todo.getTaskList().getName(), recipient.getId(),
+                    listName, recipient.getId(),
                     recipient.getPreferredEmailLocale(), token);
         } catch (Exception e) {
             log.warn("[todo-reminder] Письмо не отправлено userId={}: {}", recipient.getId(), e.getMessage());

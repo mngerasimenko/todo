@@ -1,5 +1,6 @@
 package ru.mngerasimenko.todolist.scheduler;
 
+import org.hibernate.LazyInitializationException;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,6 +35,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -204,11 +206,48 @@ class TodoReminderSchedulerTest {
             Todo todo = todoWithScope(ReminderScope.SELF, 10L, 86L);
             when(todoRepository.findDueForReminder(any(), any())).thenReturn(List.of(todo));
             when(userService.issueUnsubscribeToken(10L)).thenReturn("unsub-token");
+            // Имя списка идёт через taskListRepository.findById, не через todo.getTaskList()
+            // (LAZY, Todo из findDueForReminder detached) — стаб делает проверку реальной.
+            when(taskListRepository.findById(86L)).thenReturn(Optional.of(listNamed(86L, "Дом")));
 
             todoService.dispatchDueReminders();
 
             verify(emailService).sendTodoDueEmail(eq("author10@test.ru"), eq("Пользователь 10"),
                     eq(todo.getName()), eq("Дом"), eq(10L), any(), eq("unsub-token"));
+        }
+
+        /**
+         * Критическая находка ре-ревью: без внешней @Transactional Todo из findDueForReminder
+         * detached, а Todo.taskList — LAZY. todo.getTaskList().getName() внутри письма ронял
+         * LazyInitializationException, которую тут же глотал try/catch письма — письмо не
+         * уходило НИКОГДА ни одному получателю, и это молча терялось в логе "не отправлено".
+         * Мок Todo здесь не даёт коду ни единого шанса позвать getTaskList(): стаб этого
+         * геттера кидает LazyInitializationException — если регрессия вернёт вызов, письмо
+         * не отправится и verify(emailService)... ниже провалится тем же способом, что и в
+         * проде.
+         */
+        @Test
+        void dispatchDueReminders_TaskListAssociationDetached_StillSendsEmail() {
+            Todo todo = mock(Todo.class);
+            when(todo.getId()).thenReturn(1L);
+            when(todo.getName()).thenReturn("Полить цветы");
+            when(todo.getUserId()).thenReturn(10L);
+            when(todo.getListId()).thenReturn(86L);
+            when(todo.getIsPrivate()).thenReturn(false);
+            when(todo.getReminderScope()).thenReturn(ReminderScope.SELF);
+            lenient().when(todo.getTaskList()).thenThrow(
+                    new LazyInitializationException("could not initialize proxy - no Session"));
+
+            when(todoRepository.findDueForReminder(any(), any())).thenReturn(List.of(todo));
+            when(userRepository.findById(10L)).thenReturn(Optional.of(userWithEmail(10L, "author10@test.ru")));
+            when(taskListRepository.findById(86L)).thenReturn(Optional.of(listNamed(86L, "Дом")));
+            when(userService.issueUnsubscribeToken(10L)).thenReturn("unsub-token");
+
+            todoService.dispatchDueReminders();
+
+            verify(emailService).sendTodoDueEmail(eq("author10@test.ru"), eq("Пользователь 10"),
+                    eq("Полить цветы"), eq("Дом"), eq(10L), any(), eq("unsub-token"));
+            verify(todo, never()).getTaskList();
         }
 
         /**
@@ -317,6 +356,14 @@ class TodoReminderSchedulerTest {
                 result.add(member);
             }
             return result;
+        }
+
+        /** Список с заданным именем — для стаба taskListRepository.findById в письме. */
+        private TaskList listNamed(Long id, String name) {
+            TaskList list = new TaskList();
+            list.setId(id);
+            list.setName(name);
+            return list;
         }
     }
 }
