@@ -10,8 +10,11 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import ru.mngerasimenko.todolist.model.ReminderScope;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 /**
  * DTO входящего запроса на создание/обновление задачи.
@@ -46,4 +49,21 @@ public class TodoRequest {
 
     @JsonProperty("is_private")
     private boolean isPrivate;
+
+    @JsonProperty("due_date")
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    private LocalDate dueDate;
+
+    @JsonProperty("due_time")
+    @JsonFormat(pattern = "HH:mm")
+    private LocalTime dueTime;
+
+    @JsonProperty("due_timezone")
+    private String dueTimezone;
+
+    @JsonProperty("remind_before_minutes")
+    private Integer remindBeforeMinutes;
+
+    @JsonProperty("reminder_scope")
+    private ReminderScope reminderScope;
 }

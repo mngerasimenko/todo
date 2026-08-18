@@ -4,7 +4,10 @@ import org.springframework.stereotype.Component;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.dto.TodoRequest;
 import ru.mngerasimenko.todolist.dto.TodoResponse;
+import ru.mngerasimenko.todolist.model.ReminderScope;
 import ru.mngerasimenko.todolist.model.Todo;
+
+import java.time.LocalTime;
 
 /**
  * Маппер для конвертации между Todo, TodoDto, TodoRequest и TodoResponse.
@@ -36,6 +39,11 @@ public class TodoMapper {
                 .completorColor(todo.getCompletorUser() != null ? todo.getCompletorUser().getCompletedTaskColor() : null)
                 .listId(todo.getTaskList() != null ? todo.getTaskList().getId() : null)
                 .position(todo.getPosition())
+                .dueDate(todo.getDueDate())
+                .dueTime(todo.getDueTime())
+                .dueTimezone(todo.getDueTimezone())
+                .remindBeforeMinutes(todo.getRemindBeforeMinutes())
+                .reminderScope(todo.getReminderScope())
                 .build();
     }
 
@@ -55,6 +63,11 @@ public class TodoMapper {
         todo.setDone(todoDto.isDone());
         todo.setIsPrivate(todoDto.isPrivate());
         todo.setUserId(todoDto.getUserId());
+        todo.setDueDate(todoDto.getDueDate());
+        todo.setDueTime(todoDto.getDueTime() != null ? todoDto.getDueTime() : LocalTime.of(9, 0));
+        todo.setDueTimezone(todoDto.getDueTimezone());
+        todo.setRemindBeforeMinutes(todoDto.getRemindBeforeMinutes() != null ? todoDto.getRemindBeforeMinutes() : 0);
+        todo.setReminderScope(todoDto.getReminderScope() != null ? todoDto.getReminderScope() : ReminderScope.SELF);
         return todo;
     }
 
@@ -71,6 +84,13 @@ public class TodoMapper {
         if (todoDto.isPrivate() != todo.getIsPrivate()) {
             todo.setIsPrivate(todoDto.isPrivate());
         }
+        // Нулевые значения от старых клиентов схлопываются в дефолты прямо здесь —
+        // так due_time никогда не окажется null при NOT NULL в схеме.
+        todo.setDueDate(todoDto.getDueDate());
+        todo.setDueTime(todoDto.getDueTime() != null ? todoDto.getDueTime() : LocalTime.of(9, 0));
+        todo.setDueTimezone(todoDto.getDueTimezone());
+        todo.setRemindBeforeMinutes(todoDto.getRemindBeforeMinutes() != null ? todoDto.getRemindBeforeMinutes() : 0);
+        todo.setReminderScope(todoDto.getReminderScope() != null ? todoDto.getReminderScope() : ReminderScope.SELF);
     }
 
     /**
@@ -84,6 +104,11 @@ public class TodoMapper {
                 .done(request.getDone())
                 .isPrivate(request.isPrivate())
                 .listId(request.getListId())
+                .dueDate(request.getDueDate())
+                .dueTime(request.getDueTime())
+                .dueTimezone(request.getDueTimezone())
+                .remindBeforeMinutes(request.getRemindBeforeMinutes())
+                .reminderScope(request.getReminderScope())
                 .build();
     }
 
@@ -110,6 +135,11 @@ public class TodoMapper {
                 .creatorColor(todoDto.getCreatorColor())
                 .completorColor(todoDto.getCompletorColor())
                 .position(todoDto.getPosition())
+                .dueDate(todoDto.getDueDate())
+                .dueTime(todoDto.getDueTime())
+                .dueTimezone(todoDto.getDueTimezone())
+                .remindBeforeMinutes(todoDto.getRemindBeforeMinutes())
+                .reminderScope(todoDto.getReminderScope())
                 .build();
     }
 }
