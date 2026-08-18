@@ -8,6 +8,7 @@ class FeatureFlagTest {
 
     @Test
     void todoReminders_IsDisabledByDefault() {
+        assertThat(FeatureFlag.TODO_REMINDERS.getName()).isEqualTo("app.todo-reminders.enabled");
         assertThat(FeatureFlag.TODO_REMINDERS.getDefaultValue()).isFalse();
         assertThat(FeatureFlag.TODO_REMINDERS.getOverrideLifetime()).isEqualTo(OverrideLifetime.PERSISTENT);
         assertThat(FeatureFlag.TODO_REMINDERS.getAudience()).isEqualTo(Audience.SERVER);
