@@ -4,7 +4,6 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.transaction.annotation.Transactional;
 import ru.mngerasimenko.todolist.AbstractIntegrationTest;
 import ru.mngerasimenko.todolist.model.ReminderScope;
 import ru.mngerasimenko.todolist.model.TaskList;
@@ -141,13 +140,15 @@ class TodoDueQueryIntegrationTest extends AbstractIntegrationTest {
      * UPDATE против настоящей findDueForReminder, второй проход тем же окном (now/staleBefore)
      * должен перестать видеть задачу — иначе планировщик слал бы её на каждом цикле.
      * <p>
-     * {@code @Transactional} здесь обязателен: @Modifying-запрос без транзакции падает с
-     * TransactionRequiredException (в проде её открывает @Transactional на dispatchDueReminders).
-     * Заодно откатывает вставленную задачу после теста — контейнер singleton, соседние тесты
-     * не должны видеть чужие данные.
+     * Без {@code @Transactional} на тесте: markReminderSent теперь сам несёт
+     * {@code @Transactional(propagation = REQUIRES_NEW)} (panel-review Task 8, Critical) и
+     * коммитится на отдельном соединении. Обёрни тест в свою транзакцию — вставленная задача
+     * осталась бы некоммиченной и невидимой той отдельной REQUIRES_NEW-транзакции: UPDATE
+     * молча задел бы 0 строк, и тест зафейлился бы не там, где думаешь. Задача остаётся в БД
+     * после теста — как и у соседних тестов файла, изоляция через уникальный UUID в фикстуре,
+     * а не через rollback.
      */
     @Test
-    @Transactional
     void markReminderSent_ThenFindDueForReminder_ExcludesTask() {
         Todo todo = saveTodoWithDue(LocalDate.of(2026, 7, 31), LocalTime.of(9, 0), "Europe/Moscow", 0);
         Instant now = LocalDateTime.of(2026, 7, 31, 10, 0).toInstant(ZoneOffset.UTC);

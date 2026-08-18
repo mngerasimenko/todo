@@ -31,7 +31,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 @Slf4j
@@ -400,24 +402,41 @@ public class TodoServiceImpl implements TodoService {
                 "Только создатель задачи или администратор списка могут изменить эту задачу");
     }
 
+    /**
+     * Без @Transactional на весь метод: раньше один свип шёл в одной транзакции, и упавший
+     * (или не закоммитившийся) markReminderSent откатывал отметки уже обработанных задач того
+     * же прохода — следующий проход рассылал бы их заново (panel-review Task 8, Critical).
+     * Каждая отметка коммитится сама по себе — REQUIRES_NEW на TodoRepository.markReminderSent.
+     */
     @Override
-    @Transactional
     public int dispatchDueReminders() {
         Instant now = Instant.now();
         List<Todo> due = todoRepository.findDueForReminder(now, now.minus(STALE_AFTER));
 
+        // Один токен отписки на пользователя за весь свип: колонка User.unsubscribeToken общая
+        // на пользователя, и issueUnsubscribeToken её перезаписывает. Без переиспользования
+        // пользователь с двумя задачами в одном окне получил бы два письма, но рабочей была бы
+        // только ссылка из последнего — предыдущая отвечала бы "неверный токен" (panel-review
+        // Task 8, Important).
+        Map<Long, String> unsubscribeTokens = new HashMap<>();
+
         for (Todo todo : due) {
             try {
                 for (User recipient : resolveRecipients(todo)) {
-                    notifyOne(todo, recipient);
+                    notifyOne(todo, recipient, unsubscribeTokens);
                 }
             } catch (Exception e) {
                 // Падение одной задачи не должно рвать весь проход.
                 log.warn("[todo-reminder] Ошибка обработки задачи id={}: {}", todo.getId(), e.getMessage());
-            } finally {
-                // Отметка по факту ПОПЫТКИ, а не успеха: иначе упавший канал
-                // заставит планировщик слать одно и то же каждые 5 минут.
+            }
+            // Отметка по факту ПОПЫТКИ, а не успеха: иначе упавший канал заставит планировщик
+            // слать одно и то же каждые 5 минут. Собственный try/catch — сбой самой отметки
+            // (таймаут, deadlock) теряет только эту задачу, а не прерывает проход остальных.
+            try {
                 todoRepository.markReminderSent(todo.getId(), LocalDateTime.now());
+            } catch (Exception e) {
+                log.warn("[todo-reminder] Не удалось отметить задачу id={} как обработанную: {}",
+                        todo.getId(), e.getMessage());
             }
         }
         return due.size();
@@ -433,7 +452,7 @@ public class TodoServiceImpl implements TodoService {
                 .toList();
     }
 
-    private void notifyOne(Todo todo, User recipient) {
+    private void notifyOne(Todo todo, User recipient, Map<Long, String> unsubscribeTokens) {
         try {
             pushNotificationService.sendTodoDuePush(
                     recipient.getId(), todo.getId(), todo.getListId(), todo.getName());
@@ -448,7 +467,8 @@ public class TodoServiceImpl implements TodoService {
             // Токен выпускаем только сейчас, непосредственно перед отправкой: колонка
             // User.unsubscribeToken общая с маркетинговой рассылкой, лишний выпуск инвалидирует
             // непрочитанные ссылки в уже доставленных письмах (owner-решение отложено).
-            String token = userService.issueUnsubscribeToken(recipient.getId());
+            // computeIfAbsent — переиспользование в рамках свипа (см. dispatchDueReminders).
+            String token = unsubscribeTokens.computeIfAbsent(recipient.getId(), userService::issueUnsubscribeToken);
             emailService.sendTodoDueEmail(recipient.getEmail(), recipient.getName(), todo.getName(),
                     todo.getTaskList().getName(), recipient.getId(),
                     recipient.getPreferredEmailLocale(), token);

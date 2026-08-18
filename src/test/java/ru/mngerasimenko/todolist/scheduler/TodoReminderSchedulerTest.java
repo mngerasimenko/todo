@@ -34,6 +34,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -125,6 +127,8 @@ class TodoReminderSchedulerTest {
             verify(pushNotificationService).sendTodoDuePush(eq(10L), any(), any(), any());
             verify(pushNotificationService).sendTodoDuePush(eq(11L), any(), any(), any());
             verify(pushNotificationService).sendTodoDuePush(eq(12L), any(), any(), any());
+            // Ровно 3 push, ни одного лишнего/дублированного на участника.
+            verifyNoMoreInteractions(pushNotificationService);
         }
 
         @Test
@@ -132,15 +136,30 @@ class TodoReminderSchedulerTest {
             Todo todo = todoWithScope(ReminderScope.ALL, 10L, 86L);
             todo.setIsPrivate(true);
             when(todoRepository.findDueForReminder(any(), any())).thenReturn(List.of(todo));
+            // Ловушка: у списка реально есть 3 участника. Если бы приватность не резалась
+            // раньше scope, resolveRecipients ушёл бы за ними и push долетел бы всем троим.
+            lenient().when(taskListUserRepository.findByIdListId(86L)).thenReturn(members(10L, 11L, 12L));
 
             todoService.dispatchDueReminders();
 
             verify(pushNotificationService).sendTodoDuePush(eq(10L), any(), any(), any());
             verifyNoMoreInteractions(pushNotificationService);
+            // Доказываем не только "push ушёл одному", а что путь к участникам вообще не тронут.
+            verify(taskListUserRepository, never()).findByIdListId(any());
         }
 
+        /**
+         * Падение push гасится ЛОКАЛЬНЫМ try/catch внутри notifyOne и никогда не долетает до
+         * внешнего try в dispatchDueReminders — то есть это НЕ тест на "падение одной задачи не
+         * рвёт проход" (это проверяют ResolveRecipientsThrows... и MarkReminderSentThrows...
+         * ниже). Здесь тест уже, чем предполагало исходное имя: он лишь показывает, что сбой
+         * конкретно push-канала не мешает дойти до отметки на обычном (без исключения наружу)
+         * пути возврата — этот путь одинаков что для finally, что для обычного оператора после
+         * try/catch, поэтому регресс "markReminderSent вообще перестал вызываться на failure
+         * push" он бы не поймал (panel-review Task 8, Important — переименовано и пояснено).
+         */
         @Test
-        void dispatchDueReminders_SendFails_StillMarksSent() {
+        void dispatchDueReminders_PushChannelThrows_MarkStillCalledOnNormalReturn() {
             Todo todo = todoWithScope(ReminderScope.SELF, 10L, 86L);
             when(todoRepository.findDueForReminder(any(), any())).thenReturn(List.of(todo));
             doThrow(new RuntimeException("FCM недоступен"))
@@ -162,13 +181,61 @@ class TodoReminderSchedulerTest {
             todoService.dispatchDueReminders();
 
             verifyNoInteractions(emailService);
+            // Токен не должен выпускаться, если письмо всё равно не уйдёт.
+            verifyNoInteractions(userService);
+        }
+
+        @Test
+        void dispatchDueReminders_EmailNotVerified_SkipsEmail() {
+            Todo todo = todoWithScope(ReminderScope.SELF, 10L, 86L);
+            User author = userWithEmail(10L, "a@test.ru");
+            author.setEmailVerified(false);
+            when(todoRepository.findDueForReminder(any(), any())).thenReturn(List.of(todo));
+            when(userRepository.findById(10L)).thenReturn(Optional.of(author));
+
+            todoService.dispatchDueReminders();
+
+            verifyNoInteractions(emailService);
+            verifyNoInteractions(userService);
+        }
+
+        @Test
+        void dispatchDueReminders_EligibleUser_SendsEmail() {
+            Todo todo = todoWithScope(ReminderScope.SELF, 10L, 86L);
+            when(todoRepository.findDueForReminder(any(), any())).thenReturn(List.of(todo));
+            when(userService.issueUnsubscribeToken(10L)).thenReturn("unsub-token");
+
+            todoService.dispatchDueReminders();
+
+            verify(emailService).sendTodoDueEmail(eq("author10@test.ru"), eq("Пользователь 10"),
+                    eq(todo.getName()), eq("Дом"), eq(10L), any(), eq("unsub-token"));
         }
 
         /**
-         * Отдельно от «Send fails» (там падает канал ВНУТРИ notifyOne, он гасится локально):
-         * здесь падает сам resolveRecipients (поиск участников списка) — исключение, долетающее
-         * до внешнего try/catch в dispatchDueReminders. Ни один из шести тестов брифа этот путь
-         * не проверяет, а правило "падение одной задачи не должно рвать весь проход" — из чек-листа.
+         * Колонка User.unsubscribeToken общая на пользователя — issueUnsubscribeToken её
+         * перезаписывает при каждом вызове. Без переиспользования в рамках свипа пользователь
+         * с двумя задачами в одном окне получил бы два письма, но рабочей осталась бы только
+         * ссылка из последнего (panel-review Task 8, Important).
+         */
+        @Test
+        void dispatchDueReminders_SameUserTwoTasks_IssuesUnsubscribeTokenOnce() {
+            Todo first = todoWithScope(ReminderScope.SELF, 10L, 86L);
+            Todo second = todoWithScope(ReminderScope.SELF, 10L, 86L);
+            second.setId(2L);
+            when(todoRepository.findDueForReminder(any(), any())).thenReturn(List.of(first, second));
+            when(userService.issueUnsubscribeToken(10L)).thenReturn("unsub-token");
+
+            todoService.dispatchDueReminders();
+
+            verify(userService, times(1)).issueUnsubscribeToken(10L);
+            verify(emailService, times(2)).sendTodoDueEmail(
+                    any(), any(), any(), any(), eq(10L), any(), eq("unsub-token"));
+        }
+
+        /**
+         * Ни один из тестов брифа этот путь не проверяет, а правило "падение одной задачи не
+         * должно рвать весь проход" — из чек-листа. Исключение из resolveRecipients долетает
+         * до внешнего try/catch в dispatchDueReminders.
          */
         @Test
         void dispatchDueReminders_ResolveRecipientsThrows_ContinuesWithNextTask() {
@@ -182,6 +249,28 @@ class TodoReminderSchedulerTest {
 
             verify(pushNotificationService).sendTodoDuePush(eq(20L), eq(healthy.getId()), eq(87L), any());
             verify(todoRepository).markReminderSent(eq(failing.getId()), any());
+            verify(todoRepository).markReminderSent(eq(healthy.getId()), any());
+        }
+
+        /**
+         * Критическая находка ревью: раньше весь свип шёл в одной @Transactional — упавшая
+         * отметка ОДНОЙ задачи (таймаут, deadlock) прервала бы метод и откатила бы уже
+         * закоммиченные отметки предыдущих задач того же прохода. Теперь отметка — в
+         * собственном try/catch и в собственной транзакции (REQUIRES_NEW на репозитории):
+         * сбой первой задачи не должен помешать обработке и отметке второй.
+         */
+        @Test
+        void dispatchDueReminders_MarkReminderSentThrows_ContinuesWithNextTask() {
+            Todo failing = todoWithScope(ReminderScope.SELF, 10L, 86L);
+            Todo healthy = todoWithScope(ReminderScope.SELF, 20L, 87L);
+            healthy.setId(2L);
+            when(todoRepository.findDueForReminder(any(), any())).thenReturn(List.of(failing, healthy));
+            doThrow(new RuntimeException("Deadlock"))
+                    .when(todoRepository).markReminderSent(eq(failing.getId()), any());
+
+            todoService.dispatchDueReminders();
+
+            verify(pushNotificationService).sendTodoDuePush(eq(20L), eq(healthy.getId()), eq(87L), any());
             verify(todoRepository).markReminderSent(eq(healthy.getId()), any());
         }
 

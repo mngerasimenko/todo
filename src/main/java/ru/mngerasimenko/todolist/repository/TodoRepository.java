@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import ru.mngerasimenko.todolist.model.Todo;
 
 import java.time.Instant;
@@ -157,7 +159,13 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
      * Отметка об отправке ставится точечным UPDATE мимо сущности: у Todo есть @Version,
      * и запись через entity ловила бы конфликт всякий раз, когда пользователь
      * редактирует задачу в момент прохода планировщика.
+     * <p>
+     * REQUIRES_NEW — намеренно: вызывающий (TodoServiceImpl.dispatchDueReminders) не держит
+     * одну транзакцию на весь свип (panel-review Task 8, Critical: иначе упавший UPDATE или
+     * сбой коммита откатывал бы уже сделанные отметки предыдущих задач того же прохода).
+     * Отметка каждой задачи коммитится независимо, вне зависимости от транзакции вызывающего.
      */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     @Modifying
     @Query(value = "UPDATE todo SET reminder_sent_at = :sentAt WHERE id = :todoId", nativeQuery = true)
     void markReminderSent(@Param("todoId") Long todoId, @Param("sentAt") LocalDateTime sentAt);
