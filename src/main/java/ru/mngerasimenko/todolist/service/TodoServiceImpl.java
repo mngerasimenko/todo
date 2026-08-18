@@ -75,7 +75,7 @@ public class TodoServiceImpl implements TodoService {
         todo.setTaskList(taskList);
         applyDueRules(todoDto, todo);
 
-        Todo savedTodo = todoRepository.saveAndFlush(todo);
+        Todo savedTodo = todoRepository.save(todo);
         log.info("Создана задача: id={}, name='{}', userId={}, listId={}, private={}",
                 savedTodo.getId(), savedTodo.getName(), user.getId(), taskList.getId(), savedTodo.getIsPrivate());
 
@@ -166,7 +166,7 @@ public class TodoServiceImpl implements TodoService {
             existingTodo.setCompletorUser(null);
         }
 
-        Todo updatedTodo = todoRepository.saveAndFlush(existingTodo);
+        Todo updatedTodo = todoRepository.save(existingTodo);
         log.info("Обновлена задача: id={}, name='{}', done={}, completedAt={}",
                 updatedTodo.getId(), updatedTodo.getName(), updatedTodo.isDone(), updatedTodo.getCompletedAt());
         return todoMapper.toDto(updatedTodo);
