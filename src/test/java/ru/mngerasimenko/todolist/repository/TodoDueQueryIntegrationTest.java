@@ -10,9 +10,13 @@ import ru.mngerasimenko.todolist.model.TaskList;
 import ru.mngerasimenko.todolist.model.Todo;
 import ru.mngerasimenko.todolist.model.User;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -77,6 +81,70 @@ class TodoDueQueryIntegrationTest extends AbstractIntegrationTest {
         assertThat(loaded.getReminderScope()).isEqualTo(ReminderScope.SELF);
     }
 
+    @Test
+    void findDueForReminder_ReturnsRipe_SkipsFuture() {
+        // 18:00 в Новосибирске = 11:00 UTC
+        Todo ripe = saveTodoWithDue(LocalDate.of(2026, 7, 31), LocalTime.of(18, 0), "Asia/Novosibirsk", 0);
+        Todo future = saveTodoWithDue(LocalDate.of(2026, 12, 31), LocalTime.of(18, 0), "Asia/Novosibirsk", 0);
+        Instant now = LocalDateTime.of(2026, 7, 31, 11, 30).toInstant(ZoneOffset.UTC);
+
+        List<Todo> due = todoRepository.findDueForReminder(now, now.minus(1, ChronoUnit.DAYS));
+
+        assertThat(due).extracting(Todo::getId).containsExactly(ripe.getId());
+    }
+
+    @Test
+    void findDueForReminder_AppliesLeadTime() {
+        // срок 31 июля 09:00 МСК, запас сутки -> момент 30 июля 09:00 МСК = 06:00 UTC
+        Todo todo = saveTodoWithDue(LocalDate.of(2026, 7, 31), LocalTime.of(9, 0), "Europe/Moscow", 1440);
+        Instant now = LocalDateTime.of(2026, 7, 30, 6, 1).toInstant(ZoneOffset.UTC);
+
+        assertThat(todoRepository.findDueForReminder(now, now.minus(1, ChronoUnit.DAYS)))
+                .extracting(Todo::getId).containsExactly(todo.getId());
+    }
+
+    @Test
+    void findDueForReminder_SkipsDoneSentAndStale() {
+        Todo done = saveTodoWithDue(LocalDate.of(2026, 7, 31), LocalTime.of(9, 0), "Europe/Moscow", 0);
+        done.setDone(true);
+        todoRepository.saveAndFlush(done);
+
+        Todo alreadySent = saveTodoWithDue(LocalDate.of(2026, 7, 31), LocalTime.of(9, 0), "Europe/Moscow", 0);
+        alreadySent.setReminderSentAt(LocalDateTime.now());
+        todoRepository.saveAndFlush(alreadySent);
+
+        Todo stale = saveTodoWithDue(LocalDate.of(2026, 7, 1), LocalTime.of(9, 0), "Europe/Moscow", 0);
+
+        Instant now = LocalDateTime.of(2026, 7, 31, 10, 0).toInstant(ZoneOffset.UTC);
+        List<Todo> due = todoRepository.findDueForReminder(now, now.minus(1, ChronoUnit.DAYS));
+
+        assertThat(due).extracting(Todo::getId)
+                .doesNotContain(done.getId(), alreadySent.getId(), stale.getId());
+    }
+
+    @Test
+    void findDueForReminder_MidnightBoundary_DoesNotShiftByDay() {
+        // 00:00 1 августа в Москве = 21:00 31 июля UTC
+        Todo todo = saveTodoWithDue(LocalDate.of(2026, 8, 1), LocalTime.of(0, 0), "Europe/Moscow", 0);
+        Instant beforeMidnight = LocalDateTime.of(2026, 7, 31, 20, 59).toInstant(ZoneOffset.UTC);
+        Instant afterMidnight = LocalDateTime.of(2026, 7, 31, 21, 1).toInstant(ZoneOffset.UTC);
+
+        assertThat(todoRepository.findDueForReminder(beforeMidnight, beforeMidnight.minus(1, ChronoUnit.DAYS)))
+                .isEmpty();
+        assertThat(todoRepository.findDueForReminder(afterMidnight, afterMidnight.minus(1, ChronoUnit.DAYS)))
+                .extracting(Todo::getId).containsExactly(todo.getId());
+    }
+
+    @Test
+    void findDueForReminder_LeadTimeCrossesMonthBoundary() {
+        // срок 1 августа 09:00 МСК, запас неделя -> момент 25 июля 09:00 МСК = 06:00 UTC
+        Todo todo = saveTodoWithDue(LocalDate.of(2026, 8, 1), LocalTime.of(9, 0), "Europe/Moscow", 10080);
+        Instant now = LocalDateTime.of(2026, 7, 25, 6, 1).toInstant(ZoneOffset.UTC);
+
+        assertThat(todoRepository.findDueForReminder(now, now.minus(1, ChronoUnit.DAYS)))
+                .extracting(Todo::getId).containsExactly(todo.getId());
+    }
+
     // === Хелперы фикстур ===
 
     /**
@@ -109,5 +177,22 @@ class TodoDueQueryIntegrationTest extends AbstractIntegrationTest {
         todo.setUser(user);
         todo.setTaskList(list);
         return todo;
+    }
+
+    /** Задача со сроком для проверки выборки в findDueForReminder. */
+    private Todo saveTodoWithDue(LocalDate dueDate, LocalTime dueTime, String timezone, int remindBeforeMinutes) {
+        User user = createUser("due-query-" + UUID.randomUUID() + "@test.ru");
+        TaskList list = createList(user, "Со сроком");
+        Todo todo = new Todo();
+        todo.setName("Задача со сроком");
+        todo.setDone(false);
+        todo.setCreatedAt(LocalDateTime.now());
+        todo.setUser(user);
+        todo.setTaskList(list);
+        todo.setDueDate(dueDate);
+        todo.setDueTime(dueTime);
+        todo.setDueTimezone(timezone);
+        todo.setRemindBeforeMinutes(remindBeforeMinutes);
+        return todoRepository.saveAndFlush(todo);
     }
 }

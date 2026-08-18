@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import ru.mngerasimenko.todolist.model.Todo;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -132,4 +133,32 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
      */
     @Query("SELECT t FROM Todo t WHERE t.isPrivate = false AND t.id > :afterId ORDER BY t.id ASC")
     List<Todo> findNonPrivateForReseed(@Param("afterId") long afterId, Pageable pageable);
+
+    /**
+     * Созревшие для рассылки задачи. Момент отправки считается прямо в SQL:
+     * дата и время срока истолковываются в поясе задачи, из результата вычитается запас.
+     * Нижняя граница (staleBefore) отсекает протухшие: без неё создание задачи
+     * с прошлой датой или переезд старых данных вызвали бы веерную рассылку.
+     */
+    @Query(value = """
+            SELECT * FROM todo t
+            WHERE t.done = false
+              AND t.due_date IS NOT NULL
+              AND t.reminder_sent_at IS NULL
+              AND ((t.due_date + t.due_time) AT TIME ZONE COALESCE(t.due_timezone, 'Europe/Moscow'))
+                  - make_interval(mins => t.remind_before_minutes) <= :now
+              AND ((t.due_date + t.due_time) AT TIME ZONE COALESCE(t.due_timezone, 'Europe/Moscow'))
+                  - make_interval(mins => t.remind_before_minutes) > :staleBefore
+            ORDER BY t.due_date, t.due_time
+            """, nativeQuery = true)
+    List<Todo> findDueForReminder(@Param("now") Instant now, @Param("staleBefore") Instant staleBefore);
+
+    /**
+     * Отметка об отправке ставится точечным UPDATE мимо сущности: у Todo есть @Version,
+     * и запись через entity ловила бы конфликт всякий раз, когда пользователь
+     * редактирует задачу в момент прохода планировщика.
+     */
+    @Modifying
+    @Query(value = "UPDATE todo SET reminder_sent_at = :sentAt WHERE id = :todoId", nativeQuery = true)
+    void markReminderSent(@Param("todoId") Long todoId, @Param("sentAt") LocalDateTime sentAt);
 }
