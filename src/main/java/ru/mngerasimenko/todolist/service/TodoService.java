@@ -45,4 +45,10 @@ public interface TodoService {
 
     /** Возвращает задачи пользователя с фильтрацией по имени */
     List<TodoDto> getFilteredTodosByUserId(Long id, String filter);
+
+    /**
+     * Рассылает напоминания по созревшим срокам. Возвращает число обработанных задач.
+     * Живёт в сервисе, а не в планировщике, чтобы поддаваться unit-тестам и ручному вызову.
+     */
+    int dispatchDueReminders();
 }

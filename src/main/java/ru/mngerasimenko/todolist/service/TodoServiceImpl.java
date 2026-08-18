@@ -25,6 +25,8 @@ import ru.mngerasimenko.todolist.repository.UserRepository;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.time.DateTimeException;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -42,11 +44,16 @@ public class TodoServiceImpl implements TodoService {
     private final TaskListRepository taskListRepository;
     private final TaskListUserRepository taskListUserRepository;
     private final PushNotificationService pushNotificationService;
+    private final EmailService emailService;
+    private final UserService userService;
     private final TodoMapper todoMapper;
     private final SubscriptionService subscriptionService;
     private final SuggestionService suggestionService;
 
     private static final ZoneId FALLBACK_ZONE = ZoneId.of("Europe/Moscow");
+
+    /** Нижняя граница «протухания» напоминания — см. TodoRepository.findDueForReminder. */
+    private static final Duration STALE_AFTER = Duration.ofDays(1);
 
     @Override
     @Transactional
@@ -391,5 +398,62 @@ public class TodoServiceImpl implements TodoService {
         log.warn("Пользователь id={} попытался изменить чужую задачу id={}", userId, todo.getId());
         throw new AccessDeniedException(
                 "Только создатель задачи или администратор списка могут изменить эту задачу");
+    }
+
+    @Override
+    @Transactional
+    public int dispatchDueReminders() {
+        Instant now = Instant.now();
+        List<Todo> due = todoRepository.findDueForReminder(now, now.minus(STALE_AFTER));
+
+        for (Todo todo : due) {
+            try {
+                for (User recipient : resolveRecipients(todo)) {
+                    notifyOne(todo, recipient);
+                }
+            } catch (Exception e) {
+                // Падение одной задачи не должно рвать весь проход.
+                log.warn("[todo-reminder] Ошибка обработки задачи id={}: {}", todo.getId(), e.getMessage());
+            } finally {
+                // Отметка по факту ПОПЫТКИ, а не успеха: иначе упавший канал
+                // заставит планировщик слать одно и то же каждые 5 минут.
+                todoRepository.markReminderSent(todo.getId(), LocalDateTime.now());
+            }
+        }
+        return due.size();
+    }
+
+    /** Приватную задачу видит только автор — она не уходит участникам ни при каком scope. */
+    private List<User> resolveRecipients(Todo todo) {
+        if (todo.getIsPrivate() || todo.getReminderScope() == ReminderScope.SELF) {
+            return userRepository.findById(todo.getUserId()).map(List::of).orElseGet(List::of);
+        }
+        return taskListUserRepository.findByIdListId(todo.getListId()).stream()
+                .map(TaskListUser::getUser)
+                .toList();
+    }
+
+    private void notifyOne(Todo todo, User recipient) {
+        try {
+            pushNotificationService.sendTodoDuePush(
+                    recipient.getId(), todo.getId(), todo.getListId(), todo.getName());
+        } catch (Exception e) {
+            log.warn("[todo-reminder] Push не отправлен userId={}: {}", recipient.getId(), e.getMessage());
+        }
+
+        if (!recipient.isEmailVerified() || !recipient.isTodoReminderEmailEnabled()) {
+            return;
+        }
+        try {
+            // Токен выпускаем только сейчас, непосредственно перед отправкой: колонка
+            // User.unsubscribeToken общая с маркетинговой рассылкой, лишний выпуск инвалидирует
+            // непрочитанные ссылки в уже доставленных письмах (owner-решение отложено).
+            String token = userService.issueUnsubscribeToken(recipient.getId());
+            emailService.sendTodoDueEmail(recipient.getEmail(), recipient.getName(), todo.getName(),
+                    todo.getTaskList().getName(), recipient.getId(),
+                    recipient.getPreferredEmailLocale(), token);
+        } catch (Exception e) {
+            log.warn("[todo-reminder] Письмо не отправлено userId={}: {}", recipient.getId(), e.getMessage());
+        }
     }
 }

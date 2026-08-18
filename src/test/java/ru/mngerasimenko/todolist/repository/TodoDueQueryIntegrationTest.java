@@ -4,6 +4,7 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.annotation.Transactional;
 import ru.mngerasimenko.todolist.AbstractIntegrationTest;
 import ru.mngerasimenko.todolist.model.ReminderScope;
 import ru.mngerasimenko.todolist.model.TaskList;
@@ -133,6 +134,35 @@ class TodoDueQueryIntegrationTest extends AbstractIntegrationTest {
                 .isEmpty();
         assertThat(todoRepository.findDueForReminder(afterMidnight, afterMidnight.minus(1, ChronoUnit.DAYS)))
                 .extracting(Todo::getId).containsExactly(todo.getId());
+    }
+
+    /**
+     * markReminderSent — единственная защита от повторной отправки. Не мок: настоящий native
+     * UPDATE против настоящей findDueForReminder, второй проход тем же окном (now/staleBefore)
+     * должен перестать видеть задачу — иначе планировщик слал бы её на каждом цикле.
+     * <p>
+     * {@code @Transactional} здесь обязателен: @Modifying-запрос без транзакции падает с
+     * TransactionRequiredException (в проде её открывает @Transactional на dispatchDueReminders).
+     * Заодно откатывает вставленную задачу после теста — контейнер singleton, соседние тесты
+     * не должны видеть чужие данные.
+     */
+    @Test
+    @Transactional
+    void markReminderSent_ThenFindDueForReminder_ExcludesTask() {
+        Todo todo = saveTodoWithDue(LocalDate.of(2026, 7, 31), LocalTime.of(9, 0), "Europe/Moscow", 0);
+        Instant now = LocalDateTime.of(2026, 7, 31, 10, 0).toInstant(ZoneOffset.UTC);
+        Instant staleBefore = now.minus(1, ChronoUnit.DAYS);
+
+        // Первый проход планировщика видит созревшую задачу.
+        assertThat(todoRepository.findDueForReminder(now, staleBefore))
+                .extracting(Todo::getId).contains(todo.getId());
+
+        todoRepository.markReminderSent(todo.getId(), LocalDateTime.now());
+        entityManager.clear();
+
+        // Второй проход тем же окном — задача уже отмечена, повторной отправки не будет.
+        assertThat(todoRepository.findDueForReminder(now, staleBefore))
+                .extracting(Todo::getId).doesNotContain(todo.getId());
     }
 
     @Test

@@ -58,6 +58,12 @@ class TodoServiceImplDueRulesRealMapperTest {
     private PushNotificationService pushNotificationService;
 
     @Mock
+    private EmailService emailService;
+
+    @Mock
+    private UserService userService;
+
+    @Mock
     private SubscriptionService subscriptionService;
 
     @Mock
@@ -73,7 +79,7 @@ class TodoServiceImplDueRulesRealMapperTest {
         // Настоящий маппер: у TodoMapper нет зависимостей, конструировать вручную безопасно.
         TodoMapper realMapper = new TodoMapper();
         todoService = new TodoServiceImpl(todoRepository, userRepository, taskListRepository,
-                taskListUserRepository, pushNotificationService, realMapper,
+                taskListUserRepository, pushNotificationService, emailService, userService, realMapper,
                 subscriptionService, suggestionService);
 
         testUser = new User();
