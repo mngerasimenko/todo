@@ -24,6 +24,11 @@ import java.util.Locale;
  * Phase 3.3 + unsubscribe (см. fromIdeas/response_phase33_unsubscribe_risk_2026-05-17.md).
  * Отписывает от обоих типов reminder'ов (3d onboarding + 7d inactive), forward-looking.
  *
+ * С Task 7 один и тот же эндпоинт обслуживает второе, отдельное согласие: параметр
+ * {@code scope=todo_due} отписывает от напоминаний о сроках собственных задач
+ * ({@code todoReminderEmailEnabled}), не трогая {@code reminderOptOut}. Без параметра —
+ * прежнее поведение. Один токен отключает ровно одно согласие.
+ *
  * Локализация: для успешной отписки берётся {@code preferredEmailLocale} пользователя
  * (юзер видит ту же локаль что и в email-письме). Для невалидного/уже использованного
  * токена — резолвится из заголовка {@code Accept-Language}, fallback на ru.
@@ -37,19 +42,28 @@ public class EmailUnsubscribeController {
     private final UserService userService;
     private final MessageService messageService;
 
+    /** Значение {@code scope}, отключающее todo-due согласие вместо reminderOptOut. */
+    private static final String SCOPE_TODO_DUE = "todo_due";
+
     /**
      * Отписка от reminder-напоминаний.
      * Возвращает локализованную HTML-страницу с подтверждением (или нейтральным
      * сообщением для истёкших/уже использованных токенов и concurrent-кейсов).
+     * <p>
+     * {@code scope=todo_due} → отключает напоминания о сроках задач; отсутствие параметра
+     * или любое другое значение → прежнее поведение (маркетинговые reminder-напоминания).
      */
     @GetMapping("/unsubscribe-reminder")
     public ResponseEntity<String> unsubscribeReminder(
             @RequestParam(name = "token", required = false) String token,
+            @RequestParam(name = "scope", required = false) String scope,
             @RequestHeader(name = "Accept-Language", required = false) String acceptLanguage) {
 
         try {
-            String userLocale = userService.unsubscribeFromReminders(token);
-            log.info("[unsubscribe-reminder] Успешная отписка, locale={}", userLocale);
+            String userLocale = SCOPE_TODO_DUE.equals(scope)
+                    ? userService.unsubscribeFromTodoReminders(token)
+                    : userService.unsubscribeFromReminders(token);
+            log.info("[unsubscribe-reminder] Успешная отписка, locale={}, scope={}", userLocale, scope);
             return htmlResponse(successHtml(toLocale(userLocale)));
         } catch (UserNotFoundException e) {
             // Невалидный, пустой или уже использованный токен — нейтральное сообщение

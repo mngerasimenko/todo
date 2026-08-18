@@ -591,6 +591,29 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public String unsubscribeFromReminders(String unsubscribeToken) {
+        User user = findUserByUnsubscribeToken(unsubscribeToken);
+        user.setReminderOptOut(true);
+        user.setUnsubscribeToken(null);
+        log.info("[unsubscribe] Пользователь отписался от reminder-напоминаний: userId={}", user.getId());
+        return user.getPreferredEmailLocale();
+    }
+
+    @Override
+    @Transactional
+    public String unsubscribeFromTodoReminders(String unsubscribeToken) {
+        User user = findUserByUnsubscribeToken(unsubscribeToken);
+        user.setTodoReminderEmailEnabled(false);
+        user.setUnsubscribeToken(null);
+        log.info("[unsubscribe] Пользователь отписался от напоминаний о сроках задач: userId={}", user.getId());
+        return user.getPreferredEmailLocale();
+    }
+
+    /**
+     * Найти пользователя по одноразовому unsubscribe-токену или бросить исключение.
+     * Общая часть {@link #unsubscribeFromReminders} и {@link #unsubscribeFromTodoReminders} —
+     * токен и его валидация у них общие, но какое согласие отключается — разное.
+     */
+    private User findUserByUnsubscribeToken(String unsubscribeToken) {
         if (unsubscribeToken == null || unsubscribeToken.isBlank()) {
             throw new UserNotFoundException("Unsubscribe token is required");
         }
@@ -600,10 +623,7 @@ public class UserServiceImpl implements UserService {
             // чтобы не различать "не существовал" и "уже использован" (anti-enumeration).
             throw new UserNotFoundException("Invalid or expired unsubscribe token");
         }
-        user.setReminderOptOut(true);
-        user.setUnsubscribeToken(null);
-        log.info("[unsubscribe] Пользователь отписался от reminder-напоминаний: userId={}", user.getId());
-        return user.getPreferredEmailLocale();
+        return user;
     }
 
     /**
