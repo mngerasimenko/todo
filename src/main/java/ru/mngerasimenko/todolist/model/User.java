@@ -219,6 +219,9 @@ public class User {
     @Column(name = "todos_sort_direction", length = 4, nullable = false)
     private String todosSortDirection = "DESC";
 
+    @Column(name = "todo_reminder_email_enabled", nullable = false)
+    private boolean todoReminderEmailEnabled = true;
+
     /**
      * Версия записи для оптимистичной блокировки.
      * Hibernate автоматически инкрементирует при каждом UPDATE.
@@ -493,5 +496,13 @@ public class User {
 
     public void setTodosSortDirection(String todosSortDirection) {
         this.todosSortDirection = todosSortDirection;
+    }
+
+    public boolean isTodoReminderEmailEnabled() {
+        return todoReminderEmailEnabled;
+    }
+
+    public void setTodoReminderEmailEnabled(boolean todoReminderEmailEnabled) {
+        this.todoReminderEmailEnabled = todoReminderEmailEnabled;
     }
 }

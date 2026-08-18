@@ -55,3 +55,5 @@ databaseChangeLog:
       file: db/migration/028-task-suggestion-user.yaml
   - include:
       file: db/migration/029-feature-flag-override.yaml
+  - include:
+      file: db/migration/030-todo-due-dates.yaml
