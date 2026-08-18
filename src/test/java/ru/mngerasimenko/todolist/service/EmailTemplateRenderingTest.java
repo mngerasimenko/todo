@@ -236,12 +236,18 @@ class EmailTemplateRenderingTest {
                 "userName", "Мария",
                 "todoName", "Полить теплицу",
                 "listName", "Дача",
+                "dueAt", "31.07.2026 18:00",
                 "listUrl", "https://todo.keepware.ru",
                 "trackOpenLink", "https://track.example/open/1",
                 "unsubscribeUrl", "https://todo.keepware.ru/api/users/unsubscribe-reminder?token=abc&scope=todo_due"
         ));
 
-        assertThat(html).contains("Полить теплицу").contains("Дача").contains("scope=todo_due");
+        assertThat(html)
+                .contains("Напоминание о задаче")
+                .contains("Полить теплицу")
+                .contains("Дача")
+                .contains("31.07.2026 18:00")
+                .contains("scope=todo_due");
     }
 
     @Test
@@ -250,6 +256,7 @@ class EmailTemplateRenderingTest {
                 "userName", "Anna",
                 "todoName", "Water the plants",
                 "listName", "Garden",
+                "dueAt", "31.07.2026 18:00",
                 "listUrl", "https://todo.keepware.ru",
                 "trackOpenLink", "https://track.example/open/1",
                 "unsubscribeUrl", "https://todo.keepware.ru/api/users/unsubscribe-reminder?token=abc&scope=todo_due"
@@ -258,10 +265,11 @@ class EmailTemplateRenderingTest {
         assertThat(html)
                 .contains("lang=\"en\"")
                 .contains("TodoList")
-                .contains("Due today")
+                .contains("Task reminder")
                 .contains("Hi, Anna!")
                 .contains("Water the plants")
                 .contains("Garden")
+                .contains("due 31.07.2026 18:00")
                 .contains("Open the list →")
                 .contains("This is an automated reminder from TodoList")
                 .contains("Turn off task due-date emails")

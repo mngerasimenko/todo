@@ -139,7 +139,7 @@ public class EmailServiceImpl implements EmailService {
 
     @Override
     @Async
-    public void sendTodoDueEmail(String email, String userName, String todoName, String listName,
+    public void sendTodoDueEmail(String email, String userName, String todoName, String listName, String dueAt,
                                  Long userId, String localeTag, String unsubscribeToken) {
         Locale locale = resolveLocale(localeTag);
         // Тот же fallback name, что и у inactive/onboarding — единый messages key.
@@ -152,6 +152,8 @@ public class EmailServiceImpl implements EmailService {
         vars.put("userName", safeName);
         vars.put("todoName", safeTodoName);
         vars.put("listName", safeListName);
+        // dueAt собран в TodoServiceImpl из даты/времени entity, не пользовательский ввод — экранирование не нужно.
+        vars.put("dueAt", dueAt);
         vars.put("listUrl", emailProperties.getBaseUrl());
         vars.put("trackOpenLink", trackOpenLink);
         // scope=todo_due отличает это согласие (todoReminderEmailEnabled) от reminder_opt_out —

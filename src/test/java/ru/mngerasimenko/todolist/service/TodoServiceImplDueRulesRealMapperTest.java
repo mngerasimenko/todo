@@ -120,9 +120,100 @@ class TodoServiceImplDueRulesRealMapperTest {
         dto.setDueTimezone("Europe/Moscow");
         dto.setRemindBeforeMinutes(0);
         dto.setReminderScope(ReminderScope.SELF);
+        dto.setDueFieldsProvided(true);
 
         todoService.updateTodo(1L, dto, 1L);
 
+        assertThat(existing.getReminderSentAt()).isNull();
+    }
+
+    /**
+     * CRITICAL из финального ревью ветки: оба выпущенных клиента (веб-форма и Android
+     * TodoRequest) шлют обновление без единого due-ключа вообще. С реальным маппером
+     * updateEntityFromDto безусловно копирует due-поля из dto (все null) в entity, а
+     * applyDueRules видел бы dueDate==null и стирал бы всё — задача бы молча теряла срок
+     * при простом переименовании. dueFieldsProvided=false (по умолчанию, т.к. в тесте
+     * ни один due-сеттер не вызван) должен оставить существующие due-данные нетронутыми.
+     */
+    @Test
+    void updateTodo_NoDueKeysInPayload_PreservesExistingDueData() {
+        Todo existing = new Todo();
+        existing.setId(1L);
+        existing.setName("Полить теплицу");
+        existing.setDone(false);
+        existing.setCreatedAt(LocalDateTime.now());
+        existing.setUser(testUser);
+        existing.setTaskList(testTaskList);
+        existing.setDueDate(LocalDate.of(2026, 7, 31));
+        existing.setDueTime(LocalTime.of(18, 0));
+        existing.setDueTimezone("Asia/Novosibirsk");
+        existing.setRemindBeforeMinutes(1440);
+        existing.setReminderScope(ReminderScope.ALL);
+        LocalDateTime sentAt = LocalDateTime.now().minusHours(1);
+        existing.setReminderSentAt(sentAt);
+
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(new TaskListUser(testTaskList, testUser, TaskListRole.USER)));
+        when(todoRepository.save(any(Todo.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // Типичный payload веб-формы / текущего Android TodoRequest: только name/userId/done —
+        // ни один due-сеттер не вызывался, dueFieldsProvided остаётся false по умолчанию.
+        TodoDto dto = new TodoDto();
+        dto.setName("Полить теплицу (переименовано)");
+        dto.setUserId(1L);
+        dto.setDone(false);
+
+        todoService.updateTodo(1L, dto, 1L);
+
+        assertThat(existing.getDueDate()).isEqualTo(LocalDate.of(2026, 7, 31));
+        assertThat(existing.getDueTime()).isEqualTo(LocalTime.of(18, 0));
+        assertThat(existing.getDueTimezone()).isEqualTo("Asia/Novosibirsk");
+        assertThat(existing.getRemindBeforeMinutes()).isEqualTo(1440);
+        assertThat(existing.getReminderScope()).isEqualTo(ReminderScope.ALL);
+        assertThat(existing.getReminderSentAt()).isEqualTo(sentAt);
+    }
+
+    /**
+     * Контраст с тестом выше: та же существующая задача, но payload явно несёт
+     * {@code due_date: null} (dueFieldsProvided=true, dueDate=null) — это должно
+     * по-прежнему полностью очищать срок, как и до фикса.
+     */
+    @Test
+    void updateTodo_ExplicitDueDateNullWithRealMapper_ClearsDueData() {
+        Todo existing = new Todo();
+        existing.setId(1L);
+        existing.setName("Полить теплицу");
+        existing.setDone(false);
+        existing.setCreatedAt(LocalDateTime.now());
+        existing.setUser(testUser);
+        existing.setTaskList(testTaskList);
+        existing.setDueDate(LocalDate.of(2026, 7, 31));
+        existing.setDueTime(LocalTime.of(18, 0));
+        existing.setDueTimezone("Asia/Novosibirsk");
+        existing.setRemindBeforeMinutes(1440);
+        existing.setReminderScope(ReminderScope.ALL);
+        existing.setReminderSentAt(LocalDateTime.now().minusHours(1));
+
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(new TaskListUser(testTaskList, testUser, TaskListRole.USER)));
+        when(todoRepository.save(any(Todo.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TodoDto dto = new TodoDto();
+        dto.setName("Полить теплицу");
+        dto.setUserId(1L);
+        dto.setDone(false);
+        dto.setDueDate(null);
+        dto.setDueFieldsProvided(true);
+
+        todoService.updateTodo(1L, dto, 1L);
+
+        assertThat(existing.getDueDate()).isNull();
+        assertThat(existing.getDueTimezone()).isNull();
+        assertThat(existing.getDueTime()).isEqualTo(LocalTime.of(9, 0));
+        assertThat(existing.getRemindBeforeMinutes()).isZero();
+        assertThat(existing.getReminderScope()).isEqualTo(ReminderScope.SELF);
         assertThat(existing.getReminderSentAt()).isNull();
     }
 }

@@ -42,7 +42,7 @@ databaseChangeLog:
                   type: timestamp
         - createIndex:
             tableName: todo
-            indexName: idx_todo_due_pending
+            indexName: idx_todo_due_date
             columns:
               - column:
                   name: due_date

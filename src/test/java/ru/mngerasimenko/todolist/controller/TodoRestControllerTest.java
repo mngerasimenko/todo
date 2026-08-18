@@ -3,6 +3,7 @@ package ru.mngerasimenko.todolist.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -27,6 +28,7 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -200,6 +202,56 @@ class TodoRestControllerTest {
                         .content(objectMapper.writeValueAsString(testTodoRequest)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("Todo not found with id: 999"));
+    }
+
+    /**
+     * CRITICAL из финального ревью ветки: JSON-тело без единого due-ключа (ровно то, что
+     * сегодня шлёт веб-форма и Android TodoRequest) должно связаться в TodoRequest с
+     * dueFieldsProvided=false — реальный Jackson-биндинг, не прямой вызов сеттера в Java.
+     */
+    @Test
+    @WithMockUser(username = "user@mail.ru", roles = {"USER"})
+    void update_PayloadWithoutDueKeys_DueFieldsProvidedIsFalse() throws Exception {
+        UserDto currentUser = new UserDto();
+        currentUser.setId(1L);
+        currentUser.setName("user");
+
+        when(userService.getUserByEmail("user@mail.ru")).thenReturn(currentUser);
+        when(todoMapper.toDto(any(TodoRequest.class))).thenReturn(testTodoDto);
+        when(todoService.updateTodo(eq(1L), any(TodoDto.class), eq(1L))).thenReturn(testTodoDto);
+        when(todoMapper.toResponse(any(TodoDto.class))).thenReturn(testTodoResponse);
+
+        mockMvc.perform(put("/api/todos/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Renamed\",\"user_id\":1,\"list_id\":1,\"is_private\":false,\"done\":false}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<TodoRequest> captor = ArgumentCaptor.forClass(TodoRequest.class);
+        verify(todoMapper).toDto(captor.capture());
+        assertThat(captor.getValue().isDueFieldsProvided()).isFalse();
+    }
+
+    /** Контраст: явный due_date:null в JSON-теле должен связаться с dueFieldsProvided=true. */
+    @Test
+    @WithMockUser(username = "user@mail.ru", roles = {"USER"})
+    void update_PayloadWithExplicitNullDueDate_DueFieldsProvidedIsTrue() throws Exception {
+        UserDto currentUser = new UserDto();
+        currentUser.setId(1L);
+        currentUser.setName("user");
+
+        when(userService.getUserByEmail("user@mail.ru")).thenReturn(currentUser);
+        when(todoMapper.toDto(any(TodoRequest.class))).thenReturn(testTodoDto);
+        when(todoService.updateTodo(eq(1L), any(TodoDto.class), eq(1L))).thenReturn(testTodoDto);
+        when(todoMapper.toResponse(any(TodoDto.class))).thenReturn(testTodoResponse);
+
+        mockMvc.perform(put("/api/todos/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Renamed\",\"user_id\":1,\"list_id\":1,\"is_private\":false,\"done\":false,\"due_date\":null}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<TodoRequest> captor = ArgumentCaptor.forClass(TodoRequest.class);
+        verify(todoMapper).toDto(captor.capture());
+        assertThat(captor.getValue().isDueFieldsProvided()).isTrue();
     }
 
     @Test

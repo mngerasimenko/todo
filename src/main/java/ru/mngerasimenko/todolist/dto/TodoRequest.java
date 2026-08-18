@@ -1,6 +1,7 @@
 package ru.mngerasimenko.todolist.dto;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -66,4 +67,40 @@ public class TodoRequest {
 
     @JsonProperty("reminder_scope")
     private ReminderScope reminderScope;
+
+    /**
+     * true, если тело запроса несло хотя бы один due-ключ (due_date/due_time/due_timezone/
+     * remind_before_minutes/reminder_scope) — не важно, с каким значением, включая null.
+     * Отсутствие ключа в JSON не вызывает сеттер вообще, поэтому флаг остаётся false —
+     * этим отличается "клиент про срок не знает" (веб-форма, текущий Android TodoRequest)
+     * от "клиент явно снимает срок" (due_date: null). См. TodoServiceImpl.updateTodo.
+     * Не часть JSON-контракта.
+     */
+    @JsonIgnore
+    private boolean dueFieldsProvided;
+
+    public void setDueDate(LocalDate dueDate) {
+        this.dueDate = dueDate;
+        this.dueFieldsProvided = true;
+    }
+
+    public void setDueTime(LocalTime dueTime) {
+        this.dueTime = dueTime;
+        this.dueFieldsProvided = true;
+    }
+
+    public void setDueTimezone(String dueTimezone) {
+        this.dueTimezone = dueTimezone;
+        this.dueFieldsProvided = true;
+    }
+
+    public void setRemindBeforeMinutes(Integer remindBeforeMinutes) {
+        this.remindBeforeMinutes = remindBeforeMinutes;
+        this.dueFieldsProvided = true;
+    }
+
+    public void setReminderScope(ReminderScope reminderScope) {
+        this.reminderScope = reminderScope;
+        this.dueFieldsProvided = true;
+    }
 }

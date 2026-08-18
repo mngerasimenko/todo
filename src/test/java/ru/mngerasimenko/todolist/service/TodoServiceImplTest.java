@@ -520,6 +520,7 @@ public class TodoServiceImplTest {
         dto.setDueTimezone("Europe/Moscow");
         dto.setRemindBeforeMinutes(0);
         dto.setReminderScope(ReminderScope.SELF);
+        dto.setDueFieldsProvided(true);
 
         lenient().when(userRepository.findById(testUser.getId())).thenReturn(Optional.of(testUser));
         lenient().when(taskListRepository.findById(testTaskList.getId())).thenReturn(Optional.of(testTaskList));

@@ -27,6 +27,8 @@ import ru.mngerasimenko.todolist.service.TodoService;
 import ru.mngerasimenko.todolist.service.TodoServiceImpl;
 import ru.mngerasimenko.todolist.service.UserService;
 
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -114,7 +116,7 @@ class TodoReminderSchedulerTest {
 
             todoService.dispatchDueReminders();
 
-            verify(pushNotificationService).sendTodoDuePush(eq(10L), eq(todo.getId()), eq(86L), any());
+            verify(pushNotificationService).sendTodoDuePush(eq(10L), eq(todo.getId()), eq(86L), any(), any());
             verifyNoMoreInteractions(pushNotificationService);
         }
 
@@ -126,9 +128,9 @@ class TodoReminderSchedulerTest {
 
             todoService.dispatchDueReminders();
 
-            verify(pushNotificationService).sendTodoDuePush(eq(10L), any(), any(), any());
-            verify(pushNotificationService).sendTodoDuePush(eq(11L), any(), any(), any());
-            verify(pushNotificationService).sendTodoDuePush(eq(12L), any(), any(), any());
+            verify(pushNotificationService).sendTodoDuePush(eq(10L), any(), any(), any(), any());
+            verify(pushNotificationService).sendTodoDuePush(eq(11L), any(), any(), any(), any());
+            verify(pushNotificationService).sendTodoDuePush(eq(12L), any(), any(), any(), any());
             // Ровно 3 push, ни одного лишнего/дублированного на участника.
             verifyNoMoreInteractions(pushNotificationService);
         }
@@ -144,7 +146,7 @@ class TodoReminderSchedulerTest {
 
             todoService.dispatchDueReminders();
 
-            verify(pushNotificationService).sendTodoDuePush(eq(10L), any(), any(), any());
+            verify(pushNotificationService).sendTodoDuePush(eq(10L), any(), any(), any(), any());
             verifyNoMoreInteractions(pushNotificationService);
             // Доказываем не только "push ушёл одному", а что путь к участникам вообще не тронут.
             verify(taskListUserRepository, never()).findByIdListId(any());
@@ -165,7 +167,7 @@ class TodoReminderSchedulerTest {
             Todo todo = todoWithScope(ReminderScope.SELF, 10L, 86L);
             when(todoRepository.findDueForReminder(any(), any())).thenReturn(List.of(todo));
             doThrow(new RuntimeException("FCM недоступен"))
-                    .when(pushNotificationService).sendTodoDuePush(any(), any(), any(), any());
+                    .when(pushNotificationService).sendTodoDuePush(any(), any(), any(), any(), any());
 
             todoService.dispatchDueReminders();
 
@@ -213,7 +215,7 @@ class TodoReminderSchedulerTest {
             todoService.dispatchDueReminders();
 
             verify(emailService).sendTodoDueEmail(eq("author10@test.ru"), eq("Пользователь 10"),
-                    eq(todo.getName()), eq("Дом"), eq(10L), any(), eq("unsub-token"));
+                    eq(todo.getName()), eq("Дом"), any(), eq(10L), any(), eq("unsub-token"));
         }
 
         /**
@@ -235,6 +237,8 @@ class TodoReminderSchedulerTest {
             when(todo.getListId()).thenReturn(86L);
             when(todo.getIsPrivate()).thenReturn(false);
             when(todo.getReminderScope()).thenReturn(ReminderScope.SELF);
+            when(todo.getDueDate()).thenReturn(LocalDate.of(2026, 8, 25));
+            when(todo.getDueTime()).thenReturn(LocalTime.of(9, 0));
             lenient().when(todo.getTaskList()).thenThrow(
                     new LazyInitializationException("could not initialize proxy - no Session"));
 
@@ -246,7 +250,7 @@ class TodoReminderSchedulerTest {
             todoService.dispatchDueReminders();
 
             verify(emailService).sendTodoDueEmail(eq("author10@test.ru"), eq("Пользователь 10"),
-                    eq("Полить цветы"), eq("Дом"), eq(10L), any(), eq("unsub-token"));
+                    eq("Полить цветы"), eq("Дом"), any(), eq(10L), any(), eq("unsub-token"));
             verify(todo, never()).getTaskList();
         }
 
@@ -268,7 +272,7 @@ class TodoReminderSchedulerTest {
 
             verify(userService, times(1)).issueUnsubscribeToken(10L);
             verify(emailService, times(2)).sendTodoDueEmail(
-                    any(), any(), any(), any(), eq(10L), any(), eq("unsub-token"));
+                    any(), any(), any(), any(), any(), eq(10L), any(), eq("unsub-token"));
         }
 
         /**
@@ -286,7 +290,7 @@ class TodoReminderSchedulerTest {
 
             todoService.dispatchDueReminders();
 
-            verify(pushNotificationService).sendTodoDuePush(eq(20L), eq(healthy.getId()), eq(87L), any());
+            verify(pushNotificationService).sendTodoDuePush(eq(20L), eq(healthy.getId()), eq(87L), any(), any());
             verify(todoRepository).markReminderSent(eq(failing.getId()), any());
             verify(todoRepository).markReminderSent(eq(healthy.getId()), any());
         }
@@ -309,7 +313,7 @@ class TodoReminderSchedulerTest {
 
             todoService.dispatchDueReminders();
 
-            verify(pushNotificationService).sendTodoDuePush(eq(20L), eq(healthy.getId()), eq(87L), any());
+            verify(pushNotificationService).sendTodoDuePush(eq(20L), eq(healthy.getId()), eq(87L), any(), any());
             verify(todoRepository).markReminderSent(eq(healthy.getId()), any());
         }
 
@@ -328,6 +332,8 @@ class TodoReminderSchedulerTest {
             todo.setId(1L);
             todo.setName("Полить цветы");
             todo.setUserId(authorId);
+            todo.setDueDate(LocalDate.of(2026, 8, 25));
+            todo.setDueTime(LocalTime.of(9, 0));
             TaskList taskList = new TaskList();
             taskList.setId(listId);
             taskList.setName("Дом");

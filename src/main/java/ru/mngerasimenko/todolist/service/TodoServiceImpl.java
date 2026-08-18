@@ -33,6 +33,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -152,20 +153,35 @@ public class TodoServiceImpl implements TodoService {
 
         log.debug("updateTodo: входной done={}, существующий done={}", nowDone, wasDone);
 
-        // Снимок полей срока ДО маппинга: updateEntityFromDto безусловно копирует их
+        // Снимок ВСЕХ due-полей ДО маппинга: updateEntityFromDto безусловно копирует их
         // из dto, и после него entity уже совпадает с dto — applyDueRules не увидел бы
-        // разницы. Восстанавливаем "было" сразу после маппинга, чтобы правило "смена
-        // срока обнуляет reminderSentAt" реально ловило перенос, а не сравнивало dto само с собой.
+        // разницы. Восстанавливаем "было" сразу после маппинга и только потом решаем,
+        // применять ли due-правила вообще (см. dueFieldsProvided ниже) — CRITICAL из
+        // финального ревью ветки: оба выпущенных клиента (веб-форма, Android TodoRequest)
+        // шлют обновление вообще без due-ключей, и dto.getDueDate()==null в этом случае
+        // неотличим от явного "снять срок", если due-поля entity не восстановлены целиком.
         LocalDate dueDateBeforeMapping = existingTodo.getDueDate();
         LocalTime dueTimeBeforeMapping = existingTodo.getDueTime();
+        String dueTimezoneBeforeMapping = existingTodo.getDueTimezone();
         Integer remindBeforeMinutesBeforeMapping = existingTodo.getRemindBeforeMinutes();
+        ReminderScope reminderScopeBeforeMapping = existingTodo.getReminderScope();
 
         todoMapper.updateEntityFromDto(todoDto, existingTodo);
 
         existingTodo.setDueDate(dueDateBeforeMapping);
         existingTodo.setDueTime(dueTimeBeforeMapping);
+        existingTodo.setDueTimezone(dueTimezoneBeforeMapping);
         existingTodo.setRemindBeforeMinutes(remindBeforeMinutesBeforeMapping);
-        applyDueRules(todoDto, existingTodo);
+        existingTodo.setReminderScope(reminderScopeBeforeMapping);
+
+        // Due-правила (включая "due_date: null — снять срок") применяются только если
+        // запрос реально нёс хотя бы один due-ключ. Иначе — поле отсутствовало в теле
+        // запроса целиком, entity уже восстановлена к состоянию "было" строкой выше,
+        // трогать reminderSentAt не нужно (applyDueRules — единственное место, которое
+        // его меняет).
+        if (todoDto.isDueFieldsProvided()) {
+            applyDueRules(todoDto, existingTodo);
+        }
 
         // Логика completedAt и completorUser
         if (!wasDone && nowDone) {
@@ -491,11 +507,25 @@ public class TodoServiceImpl implements TodoService {
                 .toList();
     }
 
+    /**
+     * Дата и время срока в человекочитаемом виде для текста push/письма — без него
+     * напоминание с недельным запасом молча выглядело бы как "срок сегодня" (panel-review,
+     * финальное ревью ветки). Числовой формат dd.MM.yyyy HH:mm одинаково однозначен
+     * что для RU, что для EN — не зависит от локали получателя, поэтому один и тот же
+     * текст можно передать в оба канала без per-token форматирования.
+     */
+    private static final DateTimeFormatter DUE_AT_FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+
+    private String formatDueAt(Todo todo) {
+        return LocalDateTime.of(todo.getDueDate(), todo.getDueTime()).format(DUE_AT_FORMATTER);
+    }
+
     private void notifyOne(Todo todo, User recipient, Map<Long, String> unsubscribeTokens,
                             Map<Long, String> listNames) {
+        String dueAt = formatDueAt(todo);
         try {
             pushNotificationService.sendTodoDuePush(
-                    recipient.getId(), todo.getId(), todo.getListId(), todo.getName());
+                    recipient.getId(), todo.getId(), todo.getListId(), todo.getName(), dueAt);
         } catch (Exception e) {
             log.warn("[todo-reminder] Push не отправлен userId={}: {}", recipient.getId(), e.getMessage());
         }
@@ -522,7 +552,7 @@ public class TodoServiceImpl implements TodoService {
             String listName = listNames.computeIfAbsent(todo.getListId(),
                     id -> taskListRepository.findById(id).map(TaskList::getName).orElse(""));
             emailService.sendTodoDueEmail(recipient.getEmail(), recipient.getName(), todo.getName(),
-                    listName, recipient.getId(),
+                    listName, dueAt, recipient.getId(),
                     recipient.getPreferredEmailLocale(), token);
         } catch (Exception e) {
             log.warn("[todo-reminder] Письмо не отправлено userId={}: {}", recipient.getId(), e.getMessage());

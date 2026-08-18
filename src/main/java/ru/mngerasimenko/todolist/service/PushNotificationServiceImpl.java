@@ -283,7 +283,7 @@ public class PushNotificationServiceImpl implements PushNotificationService {
 
     @Override
     @Async
-    public void sendTodoDuePush(Long userId, Long todoId, Long listId, String todoName) {
+    public void sendTodoDuePush(Long userId, Long todoId, Long listId, String todoName, String dueAt) {
         if (pushDisabled()) return;
 
         List<PushToken> tokens = pushTokenRepository.findByUserId(userId);
@@ -299,7 +299,7 @@ public class PushNotificationServiceImpl implements PushNotificationService {
         // Intent-ключ Android между двумя классами, на проводе его нет).
         sendLocalized(tokens, PUSH_TYPE_TODO_DUE,
                 "push.todo.due.title", new Object[]{},
-                "push.todo.due.body", new Object[]{todoName},
+                "push.todo.due.body", new Object[]{todoName, dueAt},
                 listId,
                 Map.of("todo_id", String.valueOf(todoId)));
 

@@ -334,6 +334,28 @@ class TodoMapperTest {
         assertThat(dto.getDueTimezone()).isEqualTo("Europe/Moscow");
         assertThat(dto.getRemindBeforeMinutes()).isEqualTo(60);
         assertThat(dto.getReminderScope()).isEqualTo(ReminderScope.ALL);
+        assertThat(dto.isDueFieldsProvided()).isTrue();
+    }
+
+    @Test
+    void toDto_FromRequest_NoDueFieldsTouched_DueFieldsProvidedIsFalse() {
+        TodoRequest request = new TodoRequest();
+        request.setName("Позвонить в клинику");
+
+        TodoDto dto = todoMapper.toDto(request);
+
+        assertThat(dto.isDueFieldsProvided()).isFalse();
+    }
+
+    @Test
+    void toDto_FromRequest_ExplicitNullDueDate_DueFieldsProvidedIsTrue() {
+        TodoRequest request = new TodoRequest();
+        request.setName("Позвонить в клинику");
+        request.setDueDate(null); // явный вызов сеттера — как если бы due_date пришёл в JSON со значением null
+
+        TodoDto dto = todoMapper.toDto(request);
+
+        assertThat(dto.isDueFieldsProvided()).isTrue();
     }
 
     @Test

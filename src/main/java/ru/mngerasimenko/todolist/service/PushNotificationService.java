@@ -62,8 +62,10 @@ public interface PushNotificationService {
      * @param todoId ID задачи, у которой наступил срок
      * @param listId ID списка, которому принадлежит задача (для deep link)
      * @param todoName название задачи для текста push
+     * @param dueAt дата и время срока в формате {@code dd.MM.yyyy HH:mm} — без этого текст push
+     *              не отличить "срок сегодня" от "срок через неделю" при большом remind_before_minutes
      */
-    void sendTodoDuePush(Long userId, Long todoId, Long listId, String todoName);
+    void sendTodoDuePush(Long userId, Long todoId, Long listId, String todoName, String dueAt);
 
     /**
      * Проверить доступность Firebase (кешированный результат).

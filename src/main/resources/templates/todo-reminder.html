@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title th:text="#{email.todo.due.subject}">Наш список — Срок сегодня</title>
+    <title th:text="#{email.todo.due.subject}">Наш список — Напоминание о задаче</title>
 </head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 0;">
@@ -14,7 +14,7 @@
                 <tr>
                     <td style="background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%);padding:28px 32px;text-align:center;">
                         <h1 style="color:#ffffff;font-size:20px;font-weight:800;margin:0;" th:text="#{app.name}">Наш список</h1>
-                        <p style="color:rgba(255,255,255,0.85);font-size:13px;margin:4px 0 0;" th:text="#{email.todo.due.banner}">Срок сегодня</p>
+                        <p style="color:rgba(255,255,255,0.85);font-size:13px;margin:4px 0 0;" th:text="#{email.todo.due.banner}">Напоминание о задаче</p>
                     </td>
                 </tr>
                 <!-- Body -->
@@ -24,9 +24,10 @@
                             Привет, друг!
                         </p>
                         <!-- todoName и listName приходят уже HTML-экранированными из EmailServiceImpl;
+                             dueAt — отформатированная строка dd.MM.yyyy HH:mm, не пользовательский ввод;
                              th:utext нужен для подстановки в форматную строку email.todo.due.body -->
-                        <p style="color:#6b7280;font-size:14px;line-height:1.6;margin:0 0 24px;text-align:left;" th:utext="#{email.todo.due.body(${todoName}, ${listName})}">
-                            Полить теплицу — в списке «Дача».
+                        <p style="color:#6b7280;font-size:14px;line-height:1.6;margin:0 0 24px;text-align:left;" th:utext="#{email.todo.due.body(${todoName}, ${listName}, ${dueAt})}">
+                            Полить теплицу — в списке «Дача», срок: 31.07.2026 18:00.
                         </p>
                         <!-- CTA Button -->
                         <table width="100%" cellpadding="0" cellspacing="0">

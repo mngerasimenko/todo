@@ -91,7 +91,7 @@ class PushNotificationServiceImplTest {
         try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
             mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
 
-            pushNotificationService.sendTodoDuePush(53L, 777L, 86L, "Полить теплицу");
+            pushNotificationService.sendTodoDuePush(53L, 777L, 86L, "Полить теплицу", "25.08.2026 09:00");
 
             ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
             verify(firebaseMessaging).send(captor.capture());

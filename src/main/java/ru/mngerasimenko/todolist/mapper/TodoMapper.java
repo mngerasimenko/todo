@@ -111,6 +111,7 @@ public class TodoMapper {
                 .dueTimezone(request.getDueTimezone())
                 .remindBeforeMinutes(request.getRemindBeforeMinutes())
                 .reminderScope(request.getReminderScope())
+                .dueFieldsProvided(request.isDueFieldsProvided())
                 .build();
     }
 

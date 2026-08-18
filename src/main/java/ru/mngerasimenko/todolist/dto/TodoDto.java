@@ -111,6 +111,15 @@ public class TodoDto {
     private ReminderScope reminderScope;
 
     /**
+     * true, если запрос явно нёс хотя бы один due-ключ (due_date/due_time/due_timezone/
+     * remind_before_minutes/reminder_scope) — в отличие от того, что все они оказались null,
+     * потому что клиент их вообще не прислал. Заполняется маппером из {@link TodoRequest#isDueFieldsProvided()}.
+     * Не часть JSON-контракта.
+     */
+    @JsonIgnore
+    private boolean dueFieldsProvided;
+
+    /**
      * Возвращает значение done с null-safety (false при null).
      */
     @JsonIgnore
