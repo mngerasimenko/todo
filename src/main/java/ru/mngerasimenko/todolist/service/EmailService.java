@@ -59,6 +59,24 @@ public interface EmailService {
     void sendOnboardingReminderEmail(String email, String userName, Long userId, String locale, String unsubscribeToken);
 
     /**
+     * Отправить напоминание о сроке собственной задачи пользователя (Task 7).
+     * Отдельный канал согласия от {@link #sendInactiveReminderEmail}: unsubscribe-ссылка несёт
+     * {@code scope=todo_due} и выключает {@code User.todoReminderEmailEnabled}, а не
+     * {@code reminder_opt_out}.
+     *
+     * @param email email пользователя
+     * @param userName имя пользователя для персонализации (null → fallback из messages)
+     * @param todoName название задачи
+     * @param listName название списка, в котором находится задача
+     * @param userId ID пользователя (не используется для трекинга кликов — только для пикселя open)
+     * @param locale язык письма (BCP-47). Обычно передаётся {@code user.preferredEmailLocale}.
+     *               Если null/blank — fallback "ru".
+     * @param unsubscribeToken одноразовый токен для footer-link (null → footer не показывается)
+     */
+    void sendTodoDueEmail(String email, String userName, String todoName, String listName,
+                           Long userId, String locale, String unsubscribeToken);
+
+    /**
      * Проверить доступность SMTP-сервера (кешированный результат).
      * @return true если последняя проверка была успешной
      */

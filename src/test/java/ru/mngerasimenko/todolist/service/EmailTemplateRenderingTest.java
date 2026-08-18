@@ -227,4 +227,20 @@ class EmailTemplateRenderingTest {
                 .contains("https://track.example/click/1")
                 .contains("https://track.example/open/1");
     }
+
+    // === todo-reminder (Task 7) ===
+
+    @Test
+    void todoReminderTemplate_RendersTaskListAndUnsubscribe() {
+        String html = render("todo-reminder", RU, Map.of(
+                "userName", "Мария",
+                "todoName", "Полить теплицу",
+                "listName", "Дача",
+                "listUrl", "https://todo.keepware.ru",
+                "trackOpenLink", "https://track.example/open/1",
+                "unsubscribeUrl", "https://todo.keepware.ru/api/users/unsubscribe-reminder?token=abc&scope=todo_due"
+        ));
+
+        assertThat(html).contains("Полить теплицу").contains("Дача").contains("scope=todo_due");
+    }
 }
