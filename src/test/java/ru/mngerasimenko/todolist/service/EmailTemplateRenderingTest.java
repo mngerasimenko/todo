@@ -243,4 +243,28 @@ class EmailTemplateRenderingTest {
 
         assertThat(html).contains("Полить теплицу").contains("Дача").contains("scope=todo_due");
     }
+
+    @Test
+    void todoReminderTemplate_RendersEnglishContent() {
+        String html = render("todo-reminder", EN, Map.of(
+                "userName", "Anna",
+                "todoName", "Water the plants",
+                "listName", "Garden",
+                "listUrl", "https://todo.keepware.ru",
+                "trackOpenLink", "https://track.example/open/1",
+                "unsubscribeUrl", "https://todo.keepware.ru/api/users/unsubscribe-reminder?token=abc&scope=todo_due"
+        ));
+
+        assertThat(html)
+                .contains("lang=\"en\"")
+                .contains("TodoList")
+                .contains("Due today")
+                .contains("Hi, Anna!")
+                .contains("Water the plants")
+                .contains("Garden")
+                .contains("Open the list →")
+                .contains("This is an automated reminder from TodoList")
+                .contains("Turn off task due-date emails")
+                .contains("scope=todo_due");
+    }
 }
