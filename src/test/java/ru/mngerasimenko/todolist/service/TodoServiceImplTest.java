@@ -8,7 +8,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
+import ru.mngerasimenko.todolist.dto.DueTodosResponse;
 import ru.mngerasimenko.todolist.dto.TodoDto;
+import ru.mngerasimenko.todolist.dto.TodoResponse;
 import ru.mngerasimenko.todolist.exception.TodoNotFoundException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
@@ -26,6 +28,7 @@ import ru.mngerasimenko.todolist.repository.UserRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -1164,5 +1167,60 @@ public class TodoServiceImplTest {
 
         verify(todoRepository).save(testTodo);
         assertThat(testTodo.isDone()).isFalse();
+    }
+
+    /**
+     * Группировка обязана смотреть на пояс ЗАДАЧИ, а не сервера/JVM. Два фиксированных
+     * пояса на разных концах суток (+14:00 и -12:00) гарантированно показывают разные
+     * календарные даты «сегодня» в любой реальный момент времени — разница между ними 26
+     * часов, а календарные сутки короче (24 часа), так что даты не могут совпасть. Это
+     * позволяет тесту оставаться детерминированным независимо от пояса машины, на которой
+     * он запускается: одна и та же дата due_date попадает в "today" для одной задачи и в
+     * "upcoming" для другой — только из-за разного due_timezone у каждой.
+     */
+    @Test
+    void getDueTodos_GroupsByTaskOwnTimezone_NotServerTimezone() {
+        LocalDate todayFarEast = LocalDate.now(ZoneOffset.ofHours(14));
+
+        Todo farEastTodo = new Todo();
+        farEastTodo.setId(10L);
+        farEastTodo.setUser(testUser);
+        farEastTodo.setTaskList(testTaskList);
+        farEastTodo.setDone(false);
+        farEastTodo.setDueDate(todayFarEast);
+        farEastTodo.setDueTimezone("+14:00");
+
+        Todo farWestTodo = new Todo();
+        farWestTodo.setId(11L);
+        farWestTodo.setUser(testUser);
+        farWestTodo.setTaskList(testTaskList);
+        farWestTodo.setDone(false);
+        // Та же самая календарная дата, но в поясе -12:00 она уже наступила позже
+        // "сегодняшней" там — задача должна уйти в "upcoming", а не в "today".
+        farWestTodo.setDueDate(todayFarEast);
+        farWestTodo.setDueTimezone("-12:00");
+
+        // id различает dto друг от друга: у TodoDto лежит Lombok @Data, и два "пустых"
+        // TodoDto равны друг другу по equals() — Mockito матчил бы оба стаба toResponse
+        // на один и тот же аргумент, и второй тихо перекрыл бы первый.
+        TodoDto farEastDto = TodoDto.builder().id(10L).build();
+        TodoDto farWestDto = TodoDto.builder().id(11L).build();
+        TodoResponse farEastResponse = new TodoResponse();
+        farEastResponse.setName("FarEast+14");
+        TodoResponse farWestResponse = new TodoResponse();
+        farWestResponse.setName("FarWest-12");
+
+        when(todoRepository.findWithDueVisibleToUser(eq(1L), any(LocalDate.class)))
+                .thenReturn(Arrays.asList(farEastTodo, farWestTodo));
+        when(todoMapper.toDto(farEastTodo)).thenReturn(farEastDto);
+        when(todoMapper.toDto(farWestTodo)).thenReturn(farWestDto);
+        when(todoMapper.toResponse(farEastDto)).thenReturn(farEastResponse);
+        when(todoMapper.toResponse(farWestDto)).thenReturn(farWestResponse);
+
+        DueTodosResponse result = todoService.getDueTodos(1L);
+
+        assertThat(result.getToday()).containsExactly(farEastResponse);
+        assertThat(result.getUpcoming()).containsExactly(farWestResponse);
+        assertThat(result.getOverdue()).isEmpty();
     }
 }

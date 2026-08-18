@@ -4,9 +4,12 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.annotation.Transactional;
 import ru.mngerasimenko.todolist.AbstractIntegrationTest;
 import ru.mngerasimenko.todolist.model.ReminderScope;
 import ru.mngerasimenko.todolist.model.TaskList;
+import ru.mngerasimenko.todolist.model.TaskListRole;
+import ru.mngerasimenko.todolist.model.TaskListUser;
 import ru.mngerasimenko.todolist.model.Todo;
 import ru.mngerasimenko.todolist.model.User;
 
@@ -25,6 +28,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Integration-тест для колонок сроков задач (миграция 030): проверяет реальный round-trip
  * через настоящую PostgreSQL (типы date/time/timestamp, enum-mapping), а не H2 —
  * unit-тесты на H2 могли бы молча проглотить несовместимость типов.
+ * <p>
+ * Также покрывает {@link TodoRepository#findWithDueVisibleToUser} (Task 9, экран «Сегодня»):
+ * контроллерные тесты этот запрос не трогают, там TodoService замокан целиком.
  */
 @Tag("integration")
 class TodoDueQueryIntegrationTest extends AbstractIntegrationTest {
@@ -37,6 +43,9 @@ class TodoDueQueryIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private TaskListRepository taskListRepository;
+
+    @Autowired
+    private TaskListUserRepository taskListUserRepository;
 
     @Autowired
     private EntityManager entityManager;
@@ -176,6 +185,86 @@ class TodoDueQueryIntegrationTest extends AbstractIntegrationTest {
                 .extracting(Todo::getId).containsExactly(todo.getId());
     }
 
+    /**
+     * Приватность — единственное, что стоит между общим списком и чужой задачей на экране
+     * «Сегодня»: приватная задача другого участника общего списка не должна попасть в выборку,
+     * а его же публичная задача в том же списке — должна. Ни один тест на TodoService не бьёт
+     * по этому SQL напрямую (там TodoService замокан), поэтому чек живёт здесь, против реальной БД.
+     * <p>
+     * {@code @Transactional} здесь (в отличие от соседних тестов файла) держит list/user/todo
+     * в одном persistence context на весь тест: у каждого репозиторного вызова своя мини-транзакция,
+     * и без общей обёртки {@code addMember} получает уже detached TaskList/User — Hibernate
+     * не может связать {@code @MapsId}-ассоциацию TaskListUser и падает с
+     * "detached entity passed to persist" ещё до раскладки по группам.
+     */
+    @Test
+    @Transactional
+    void findWithDueVisibleToUser_PrivateTaskOfOtherMember_HiddenPublicOfSameMemberVisible() {
+        User requester = createUser("due-vis-req-" + UUID.randomUUID() + "@test.ru");
+        User otherMember = createUser("due-vis-other-" + UUID.randomUUID() + "@test.ru");
+        TaskList sharedList = createList(requester, "Общий список");
+        addMember(sharedList, requester, TaskListRole.ADMIN);
+        addMember(sharedList, otherMember, TaskListRole.USER);
+
+        Todo otherPrivate = saveDueTodo(sharedList, otherMember, LocalDate.now(), true, false);
+        Todo otherPublic = saveDueTodo(sharedList, otherMember, LocalDate.now(), false, false);
+
+        List<Todo> visible = todoRepository.findWithDueVisibleToUser(requester.getId(), LocalDate.now().plusDays(7));
+
+        assertThat(visible).extracting(Todo::getId)
+                .contains(otherPublic.getId())
+                .doesNotContain(otherPrivate.getId());
+    }
+
+    @Test
+    @Transactional
+    void findWithDueVisibleToUser_OwnPrivateTask_Visible() {
+        User requester = createUser("due-vis-own-" + UUID.randomUUID() + "@test.ru");
+        TaskList list = createList(requester, "Личное");
+        addMember(list, requester, TaskListRole.ADMIN);
+
+        Todo ownPrivate = saveDueTodo(list, requester, LocalDate.now(), true, false);
+
+        List<Todo> visible = todoRepository.findWithDueVisibleToUser(requester.getId(), LocalDate.now().plusDays(7));
+
+        assertThat(visible).extracting(Todo::getId).contains(ownPrivate.getId());
+    }
+
+    @Test
+    @Transactional
+    void findWithDueVisibleToUser_ListRequesterNotMemberOf_NotReturned() {
+        User requester = createUser("due-vis-outsider-" + UUID.randomUUID() + "@test.ru");
+        User stranger = createUser("due-vis-stranger-" + UUID.randomUUID() + "@test.ru");
+        // Requester состоит в СВОЁМ списке — проверяем именно scoping по конкретному списку,
+        // а не то, что у него вообще нет ни одного членства.
+        TaskList ownList = createList(requester, "Свой список");
+        addMember(ownList, requester, TaskListRole.ADMIN);
+
+        TaskList foreignList = createList(stranger, "Чужой список");
+        addMember(foreignList, stranger, TaskListRole.ADMIN);
+        Todo foreignTodo = saveDueTodo(foreignList, stranger, LocalDate.now(), false, false);
+
+        List<Todo> visible = todoRepository.findWithDueVisibleToUser(requester.getId(), LocalDate.now().plusDays(7));
+
+        assertThat(visible).extracting(Todo::getId).doesNotContain(foreignTodo.getId());
+    }
+
+    @Test
+    @Transactional
+    void findWithDueVisibleToUser_NoDueDateOrDone_Excluded() {
+        User requester = createUser("due-vis-excl-" + UUID.randomUUID() + "@test.ru");
+        TaskList list = createList(requester, "Список");
+        addMember(list, requester, TaskListRole.ADMIN);
+
+        Todo noDueDate = saveDueTodoWithoutDueDate(list, requester);
+        Todo doneWithDue = saveDueTodo(list, requester, LocalDate.now(), false, true);
+
+        List<Todo> visible = todoRepository.findWithDueVisibleToUser(requester.getId(), LocalDate.now().plusDays(7));
+
+        assertThat(visible).extracting(Todo::getId)
+                .doesNotContain(noDueDate.getId(), doneWithDue.getId());
+    }
+
     // === Хелперы фикстур ===
 
     /**
@@ -195,6 +284,38 @@ class TodoDueQueryIntegrationTest extends AbstractIntegrationTest {
     private TaskList createList(User owner, String name) {
         TaskList list = new TaskList(name, owner);
         return taskListRepository.save(list);
+    }
+
+    /**
+     * Создатель списка НЕ становится его участником автоматически (TaskList не каскадирует
+     * task_list_user) — членство для видимости в findWithDueVisibleToUser нужно добавлять явно.
+     */
+    private void addMember(TaskList list, User user, TaskListRole role) {
+        taskListUserRepository.save(new TaskListUser(list, user, role));
+    }
+
+    /** Задача со сроком для проверки видимости (приватность/принадлежность к списку). */
+    private Todo saveDueTodo(TaskList list, User author, LocalDate dueDate, boolean isPrivate, boolean done) {
+        Todo todo = new Todo();
+        todo.setName("Задача со сроком видимости");
+        todo.setDone(done);
+        todo.setCreatedAt(LocalDateTime.now());
+        todo.setUser(author);
+        todo.setTaskList(list);
+        todo.setDueDate(dueDate);
+        todo.setIsPrivate(isPrivate);
+        return todoRepository.saveAndFlush(todo);
+    }
+
+    /** Задача без срока в видимом списке — изолирует проверку "t.dueDate IS NOT NULL" от membership-фильтра. */
+    private Todo saveDueTodoWithoutDueDate(TaskList list, User author) {
+        Todo todo = new Todo();
+        todo.setName("Без срока в видимом списке");
+        todo.setDone(false);
+        todo.setCreatedAt(LocalDateTime.now());
+        todo.setUser(author);
+        todo.setTaskList(list);
+        return todoRepository.saveAndFlush(todo);
     }
 
     /** Задача без явных due-полей — проверяет, что поля остаются на дефолтах сущности. */
