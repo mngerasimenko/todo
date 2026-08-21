@@ -3854,6 +3854,680 @@
 					"response": []
 				}
 			]
+		},
+		{
+			"name": "Due Dates",
+			"item": [
+				{
+					"name": "Register (Due Dates test user)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Уникальный ID для идемпотентности повторных запусков папки",
+									"var runId = Date.now().toString().slice(-6);",
+									"pm.environment.set('ddRunId', runId);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Response has access_token\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.access_token).to.exist;",
+									"",
+									"    // Изолированные переменные (префикс dd) — не пересекаются с остальной коллекцией",
+									"    pm.environment.set(\"ddAccessToken\", jsonData.access_token);",
+									"    pm.environment.set(\"ddRefreshToken\", jsonData.refresh_token);",
+									"    pm.environment.set(\"ddUserId\", jsonData.user.id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"duetest_{{ddRunId}}@example.com\",\n  \"name\": \"duetest_{{ddRunId}}\",\n  \"password\": \"duetest_{{ddRunId}}\",\n  \"locale\": \"ru\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/register",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"register"
+							]
+						},
+						"description": "Отдельный пользователь для набора due-date тестов. Регистрация сразу возвращает JWT, отдельный логин не нужен."
+					},
+					"response": []
+				},
+				{
+					"name": "Create List (Due Dates test list)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"List created\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.id).to.exist;",
+									"    pm.environment.set(\"ddListId\", jsonData.id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{ddAccessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"DueDatesList_{{ddRunId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/lists",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"lists"
+							]
+						},
+						"description": "Отдельный список для due-date тестов."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Todo With All Due Fields",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Сегодняшняя дата ИМЕННО в Europe/Moscow — совпадает с due_timezone задачи ниже,",
+									"// чтобы группировка в GET /api/todos/due (по таймзоне задачи) не съехала на overdue/upcoming",
+									"// из-за разницы UTC/Moscow около полуночи.",
+									"var todayMoscow = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Moscow' });",
+									"pm.environment.set('ddTodayDate', todayMoscow);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"All five due fields returned unchanged\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.id).to.exist;",
+									"    pm.expect(jsonData.due_date).to.eql(pm.environment.get('ddTodayDate'));",
+									"    pm.expect(jsonData.due_time).to.eql(\"20:00\");",
+									"    pm.expect(jsonData.due_timezone).to.eql(\"Europe/Moscow\");",
+									"    pm.expect(jsonData.remind_before_minutes).to.eql(45);",
+									"    pm.expect(jsonData.reminder_scope).to.eql(\"SELF\");",
+									"",
+									"    pm.environment.set(\"ddTodoId\", jsonData.id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{ddAccessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Задача со сроком\",\n  \"user_id\": {{ddUserId}},\n  \"list_id\": {{ddListId}},\n  \"is_private\": false,\n  \"due_date\": \"{{ddTodayDate}}\",\n  \"due_time\": \"20:00\",\n  \"due_timezone\": \"Europe/Moscow\",\n  \"remind_before_minutes\": 45,\n  \"reminder_scope\": \"SELF\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/create",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"create"
+							]
+						},
+						"description": "Правило 1: создание задачи со всеми пятью due-полями возвращает их без изменений. due_date = сегодня в Europe/Moscow — задача нужна и для проверки GET /api/todos/due (bucket today) следующим запросом."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Due Todos - Today Bucket Contains New Task",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response has overdue/today/upcoming arrays\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.overdue).to.be.an('array');",
+									"    pm.expect(jsonData.today).to.be.an('array');",
+									"    pm.expect(jsonData.upcoming).to.be.an('array');",
+									"});",
+									"",
+									"pm.test(\"Just-created todo (due today) is in the today bucket\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    var ddTodoId = parseInt(pm.environment.get('ddTodoId'), 10);",
+									"    var inToday = jsonData.today.some(function (t) { return t.id === ddTodoId; });",
+									"    var inOverdue = jsonData.overdue.some(function (t) { return t.id === ddTodoId; });",
+									"    var inUpcoming = jsonData.upcoming.some(function (t) { return t.id === ddTodoId; });",
+									"    pm.expect(inToday, \"expected todo in today bucket\").to.be.true;",
+									"    pm.expect(inOverdue, \"todo must not also be in overdue\").to.be.false;",
+									"    pm.expect(inUpcoming, \"todo must not also be in upcoming\").to.be.false;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{ddAccessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/due",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"due"
+							]
+						},
+						"description": "Правило 8: ответ содержит overdue/today/upcoming, и только что созданная задача с сегодняшним due_date попадает именно в today."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Todo - Rename Only (due fields must survive)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Name updated, due fields untouched\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.name).to.eql(\"Задача со сроком (переименовано)\");",
+									"    pm.expect(jsonData.due_date).to.eql(pm.environment.get('ddTodayDate'));",
+									"    pm.expect(jsonData.due_time).to.eql(\"20:00\");",
+									"    pm.expect(jsonData.due_timezone).to.eql(\"Europe/Moscow\");",
+									"    pm.expect(jsonData.remind_before_minutes).to.eql(45);",
+									"    pm.expect(jsonData.reminder_scope).to.eql(\"SELF\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{ddAccessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Задача со сроком (переименовано)\",\n  \"done\": false,\n  \"user_id\": {{ddUserId}},\n  \"list_id\": {{ddListId}}\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/{{ddTodoId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"{{ddTodoId}}"
+							]
+						},
+						"description": "Правило 2 (самое важное): тело без единого due-поля — именно так оба клиента переименовывают задачу. Срок обязан пережить это без изменений."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Todo - Explicit Null Clears Due Date",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Due date cleared, companions reset to defaults\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.due_date).to.not.exist;",
+									"    pm.expect(jsonData.due_time).to.eql(\"09:00\");",
+									"    pm.expect(jsonData.due_timezone).to.not.exist;",
+									"    pm.expect(jsonData.remind_before_minutes).to.eql(0);",
+									"    pm.expect(jsonData.reminder_scope).to.eql(\"SELF\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{ddAccessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Задача со сроком (переименовано)\",\n  \"done\": false,\n  \"user_id\": {{ddUserId}},\n  \"list_id\": {{ddListId}},\n  \"due_date\": null\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/{{ddTodoId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"{{ddTodoId}}"
+							]
+						},
+						"description": "Правило 3: явный due_date: null снимает срок и сбрасывает спутников — due_time на 09:00, due_timezone в null, remind_before_minutes в 0, reminder_scope в SELF."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Private Todo (reminder_scope forced to SELF)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Server overrides requested ALL scope to SELF for a private task\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.is_private).to.eql(true);",
+									"    pm.expect(jsonData.reminder_scope).to.eql(\"SELF\");",
+									"",
+									"    // Остальные due-поля override не затрагивает — сохраняются как отправлены",
+									"    pm.expect(jsonData.due_date).to.eql(pm.environment.get('ddTodayDate'));",
+									"    pm.expect(jsonData.due_time).to.eql(\"11:00\");",
+									"    pm.expect(jsonData.due_timezone).to.eql(\"Europe/Moscow\");",
+									"    pm.expect(jsonData.remind_before_minutes).to.eql(15);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{ddAccessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Приватная задача со сроком\",\n  \"user_id\": {{ddUserId}},\n  \"list_id\": {{ddListId}},\n  \"is_private\": true,\n  \"due_date\": \"{{ddTodayDate}}\",\n  \"due_time\": \"11:00\",\n  \"due_timezone\": \"Europe/Moscow\",\n  \"remind_before_minutes\": 15,\n  \"reminder_scope\": \"ALL\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/create",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"create"
+							]
+						},
+						"description": "Правило 4: приватная задача (is_private: true) с запрошенным reminder_scope: ALL в ответе всегда SELF — сервер не доверяет клиенту рассылку по приватной задаче."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Todo Without Timezone (defaults to Europe/Moscow)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Missing due_timezone defaults to Europe/Moscow\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.due_timezone).to.eql(\"Europe/Moscow\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{ddAccessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Задача без таймзоны\",\n  \"user_id\": {{ddUserId}},\n  \"list_id\": {{ddListId}},\n  \"due_date\": \"{{ddTodayDate}}\",\n  \"due_time\": \"12:00\",\n  \"remind_before_minutes\": 5\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/create",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"create"
+							]
+						},
+						"description": "Правило 5: due_date без due_timezone в ответе получает Europe/Moscow."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Todo With Malformed Timezone (defaults to Europe/Moscow)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201 (not a validation error)\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Malformed due_timezone falls back to Europe/Moscow instead of erroring\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.due_timezone).to.eql(\"Europe/Moscow\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{ddAccessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Задача с плохой таймзоной\",\n  \"user_id\": {{ddUserId}},\n  \"list_id\": {{ddListId}},\n  \"due_date\": \"{{ddTodayDate}}\",\n  \"due_time\": \"13:00\",\n  \"due_timezone\": \"Not/AZone\",\n  \"remind_before_minutes\": 5\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/create",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"create"
+							]
+						},
+						"description": "Правило 6: невалидный IANA due_timezone (например Not/AZone) не приводит к ошибке — сервер молча подставляет Europe/Moscow."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Todo Without Due Time (defaults to 09:00)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Missing due_time defaults to 09:00\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.due_time).to.eql(\"09:00\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{ddAccessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Задача без времени\",\n  \"user_id\": {{ddUserId}},\n  \"list_id\": {{ddListId}},\n  \"due_date\": \"{{ddTodayDate}}\",\n  \"due_timezone\": \"Europe/Moscow\",\n  \"remind_before_minutes\": 10\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/create",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"create"
+							]
+						},
+						"description": "Правило 7: due_date без due_time в ответе получает 09:00."
+					},
+					"response": []
+				},
+				{
+					"name": "Cleanup - Delete Due Dates Test User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});",
+									"",
+									"// Удаление пользователя каскадно удаляет его единоличный список и все задачи в нём",
+									"pm.environment.unset('ddRunId');",
+									"pm.environment.unset('ddAccessToken');",
+									"pm.environment.unset('ddRefreshToken');",
+									"pm.environment.unset('ddUserId');",
+									"pm.environment.unset('ddListId');",
+									"pm.environment.unset('ddTodoId');",
+									"pm.environment.unset('ddTodayDate');"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{ddAccessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/users/{{ddUserId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"users",
+								"{{ddUserId}}"
+							]
+						},
+						"description": "Полная очистка: удаление тестового пользователя каскадно сносит его список и все созданные в нём задачи (единственный участник списка). Делает папку повторяемой — второй запуск стартует с чистого состояния."
+					},
+					"response": []
+				}
+			],
+			"description": "Самодостаточный набор тестов due-date функционала задач (due_date/due_time/due_timezone/remind_before_minutes/reminder_scope). Полностью изолирован от остальной коллекции: регистрирует отдельного пользователя, создаёт отдельный список, использует переменные окружения с префиксом dd*, и удаляет пользователя (каскадно — список и задачи) в конце. Можно запускать многократно подряд."
 		}
 	],
 	"event": [
