@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+import ru.mngerasimenko.todolist.dto.DueTodosResponse;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.dto.TodoRequest;
 import ru.mngerasimenko.todolist.dto.TodoResponse;
@@ -71,6 +72,15 @@ public class TodoRestController {
                 .map(todoMapper::toResponse)
                 .toList();
         return ResponseEntity.ok(responses);
+    }
+
+    /** Задачи со сроком, сгруппированные для экрана «Сегодня»: просроченные, сегодняшние, ближайшие */
+    @GetMapping("/due")
+    public ResponseEntity<DueTodosResponse> getDueTodos(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        UserDto currentUser = userService.getUserByEmail(userDetails.getUsername());
+        DueTodosResponse response = todoService.getDueTodos(currentUser.getId());
+        return ResponseEntity.ok(response);
     }
 
     /** Получение задач пользователя по его ID (с проверкой доступа) */

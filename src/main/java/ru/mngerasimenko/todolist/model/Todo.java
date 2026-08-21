@@ -9,7 +9,9 @@ import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 import ru.mngerasimenko.todolist.crypto.EncryptedStringConverter;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 /**
  * JPA-сущность задачи (таблица todo).
@@ -57,6 +59,28 @@ public class Todo {
      */
     @Column(name = "position", nullable = false)
     private Integer position = 0;
+
+    @Column(name = "due_date")
+    private LocalDate dueDate;
+
+    @Column(name = "due_time", nullable = false)
+    private LocalTime dueTime = LocalTime.of(9, 0);
+
+    /** Снимок часового пояса автора на момент установки срока (IANA, например Asia/Novosibirsk). */
+    @Column(name = "due_timezone", length = 64)
+    private String dueTimezone;
+
+    /** Запас перед сроком в минутах: 0 — в момент, 1440 — за день. */
+    @Column(name = "remind_before_minutes", nullable = false)
+    private Integer remindBeforeMinutes = 0;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "reminder_scope", nullable = false, length = 8)
+    private ReminderScope reminderScope = ReminderScope.SELF;
+
+    /** Служебное: когда напоминание было отправлено. Не участвует в пользовательских правках. */
+    @Column(name = "reminder_sent_at")
+    private LocalDateTime reminderSentAt;
 
     /**
      * Создатель задачи.
@@ -251,5 +275,53 @@ public class Todo {
 
     public void setPosition(Integer position) {
         this.position = position;
+    }
+
+    public LocalDate getDueDate() {
+        return dueDate;
+    }
+
+    public void setDueDate(LocalDate dueDate) {
+        this.dueDate = dueDate;
+    }
+
+    public LocalTime getDueTime() {
+        return dueTime;
+    }
+
+    public void setDueTime(LocalTime dueTime) {
+        this.dueTime = dueTime;
+    }
+
+    public String getDueTimezone() {
+        return dueTimezone;
+    }
+
+    public void setDueTimezone(String dueTimezone) {
+        this.dueTimezone = dueTimezone;
+    }
+
+    public Integer getRemindBeforeMinutes() {
+        return remindBeforeMinutes;
+    }
+
+    public void setRemindBeforeMinutes(Integer remindBeforeMinutes) {
+        this.remindBeforeMinutes = remindBeforeMinutes;
+    }
+
+    public ReminderScope getReminderScope() {
+        return reminderScope;
+    }
+
+    public void setReminderScope(ReminderScope reminderScope) {
+        this.reminderScope = reminderScope;
+    }
+
+    public LocalDateTime getReminderSentAt() {
+        return reminderSentAt;
+    }
+
+    public void setReminderSentAt(LocalDateTime reminderSentAt) {
+        this.reminderSentAt = reminderSentAt;
     }
 }

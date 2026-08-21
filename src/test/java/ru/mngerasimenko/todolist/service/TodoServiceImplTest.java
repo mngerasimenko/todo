@@ -3,14 +3,18 @@ package ru.mngerasimenko.todolist.service;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
+import ru.mngerasimenko.todolist.dto.DueTodosResponse;
 import ru.mngerasimenko.todolist.dto.TodoDto;
+import ru.mngerasimenko.todolist.dto.TodoResponse;
 import ru.mngerasimenko.todolist.exception.TodoNotFoundException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
+import ru.mngerasimenko.todolist.model.ReminderScope;
 import ru.mngerasimenko.todolist.model.TaskList;
 import ru.mngerasimenko.todolist.model.TaskListRole;
 import ru.mngerasimenko.todolist.model.TaskListUser;
@@ -21,7 +25,10 @@ import ru.mngerasimenko.todolist.repository.TaskListUserRepository;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -408,6 +415,149 @@ public class TodoServiceImplTest {
         assertThat(result.getUserId()).isEqualTo(2L);
         verify(userRepository, times(1)).findById(2L);
         verify(todoMapper, times(1)).updateEntityFromDto(updateDto, existingTodo);
+    }
+
+    // --- Тесты правил срока (applyDueRules) ---
+
+    @Test
+    void createTodo_PrivateTodo_ForcesScopeSelf() {
+        TodoDto dto = dueDto(LocalDate.of(2026, 7, 31));
+        dto.setIsPrivate(true);
+        dto.setReminderScope(ReminderScope.ALL);
+        when(todoRepository.save(any(Todo.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        todoService.createTodo(dto);
+
+        ArgumentCaptor<Todo> captor = ArgumentCaptor.forClass(Todo.class);
+        verify(todoRepository).save(captor.capture());
+        assertThat(captor.getValue().getReminderScope()).isEqualTo(ReminderScope.SELF);
+    }
+
+    @Test
+    void updateTodo_DueMomentChanged_ClearsReminderSentAt() {
+        Todo existing = todoWithDue(LocalDate.of(2026, 7, 31));
+        existing.setReminderSentAt(LocalDateTime.now().minusHours(1));
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(todoRepository.save(any(Todo.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TodoDto dto = dueDto(LocalDate.of(2026, 8, 5));
+        todoService.updateTodo(1L, dto, existing.getUserId());
+
+        assertThat(existing.getReminderSentAt()).isNull();
+    }
+
+    @Test
+    void updateTodo_DueCleared_ResetsRelatedFields() {
+        Todo existing = todoWithDue(LocalDate.of(2026, 7, 31));
+        existing.setRemindBeforeMinutes(1440);
+        existing.setReminderScope(ReminderScope.ALL);
+        existing.setReminderSentAt(LocalDateTime.now());
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(todoRepository.save(any(Todo.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TodoDto dto = dueDto(null);
+        todoService.updateTodo(1L, dto, existing.getUserId());
+
+        assertThat(existing.getDueDate()).isNull();
+        assertThat(existing.getDueTimezone()).isNull();
+        assertThat(existing.getReminderSentAt()).isNull();
+        assertThat(existing.getRemindBeforeMinutes()).isZero();
+        assertThat(existing.getReminderScope()).isEqualTo(ReminderScope.SELF);
+    }
+
+    @Test
+    void createTodo_NoTimezone_FallsBackToMoscow() {
+        TodoDto dto = dueDto(LocalDate.of(2026, 7, 31));
+        dto.setDueTimezone(null);
+        when(todoRepository.save(any(Todo.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        todoService.createTodo(dto);
+
+        ArgumentCaptor<Todo> captor = ArgumentCaptor.forClass(Todo.class);
+        verify(todoRepository).save(captor.capture());
+        assertThat(captor.getValue().getDueTimezone()).isEqualTo("Europe/Moscow");
+    }
+
+    @Test
+    void createTodo_InvalidTimezone_FallsBackToMoscow() {
+        TodoDto dto = dueDto(LocalDate.of(2026, 7, 31));
+        dto.setDueTimezone("Not/AZone");
+        when(todoRepository.save(any(Todo.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        todoService.createTodo(dto);
+
+        ArgumentCaptor<Todo> captor = ArgumentCaptor.forClass(Todo.class);
+        verify(todoRepository).save(captor.capture());
+        assertThat(captor.getValue().getDueTimezone()).isEqualTo("Europe/Moscow");
+    }
+
+    @Test
+    void createTodo_ValidNonMoscowTimezone_IsPreserved() {
+        TodoDto dto = dueDto(LocalDate.of(2026, 7, 31));
+        dto.setDueTimezone("Asia/Novosibirsk");
+        when(todoRepository.save(any(Todo.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        todoService.createTodo(dto);
+
+        ArgumentCaptor<Todo> captor = ArgumentCaptor.forClass(Todo.class);
+        verify(todoRepository).save(captor.capture());
+        assertThat(captor.getValue().getDueTimezone()).isEqualTo("Asia/Novosibirsk");
+    }
+
+    /**
+     * DTO со сроком для тестов applyDueRules. Заодно лениво мокирует зависимости
+     * пути создания (владелец/список/членство/маппер), чтобы не дублировать их
+     * в каждом тесте — часть тестов их не использует, поэтому стабы lenient.
+     */
+    private TodoDto dueDto(LocalDate dueDate) {
+        TodoDto dto = new TodoDto();
+        dto.setName("Due Todo");
+        dto.setUserId(testUser.getId());
+        dto.setListId(testTaskList.getId());
+        dto.setDone(false);
+        dto.setDueDate(dueDate);
+        dto.setDueTime(LocalTime.of(9, 0));
+        dto.setDueTimezone("Europe/Moscow");
+        dto.setRemindBeforeMinutes(0);
+        dto.setReminderScope(ReminderScope.SELF);
+        dto.setDueFieldsProvided(true);
+
+        lenient().when(userRepository.findById(testUser.getId())).thenReturn(Optional.of(testUser));
+        lenient().when(taskListRepository.findById(testTaskList.getId())).thenReturn(Optional.of(testTaskList));
+        lenient().when(taskListUserRepository.existsByIdListIdAndIdUserId(testTaskList.getId(), testUser.getId()))
+                .thenReturn(true);
+        lenient().when(todoMapper.toEntity(any(TodoDto.class))).thenAnswer(inv -> {
+            TodoDto d = inv.getArgument(0);
+            Todo entity = new Todo();
+            entity.setName(d.getName());
+            entity.setDone(d.isDone());
+            entity.setIsPrivate(d.isPrivate());
+            return entity;
+        });
+        return dto;
+    }
+
+    /**
+     * Существующая задача со сроком, владельцем и списком — плюс мок членства
+     * в списке, нужный assertCanModifyTodo внутри updateTodo.
+     */
+    private Todo todoWithDue(LocalDate dueDate) {
+        Todo entity = new Todo();
+        entity.setId(1L);
+        entity.setName("Due Todo");
+        entity.setDone(false);
+        entity.setCreatedAt(LocalDateTime.now());
+        entity.setUser(testUser);
+        entity.setTaskList(testTaskList);
+        entity.setDueDate(dueDate);
+        entity.setDueTime(LocalTime.of(9, 0));
+        entity.setDueTimezone("Europe/Moscow");
+        entity.setRemindBeforeMinutes(0);
+        entity.setReminderScope(ReminderScope.SELF);
+
+        lenient().when(taskListUserRepository.findByIdListIdAndIdUserId(testTaskList.getId(), testUser.getId()))
+                .thenReturn(Optional.of(new TaskListUser(testTaskList, testUser, TaskListRole.USER)));
+        return entity;
     }
 
     @Test
@@ -1018,5 +1168,60 @@ public class TodoServiceImplTest {
 
         verify(todoRepository).save(testTodo);
         assertThat(testTodo.isDone()).isFalse();
+    }
+
+    /**
+     * Группировка обязана смотреть на пояс ЗАДАЧИ, а не сервера/JVM. Два фиксированных
+     * пояса на разных концах суток (+14:00 и -12:00) гарантированно показывают разные
+     * календарные даты «сегодня» в любой реальный момент времени — разница между ними 26
+     * часов, а календарные сутки короче (24 часа), так что даты не могут совпасть. Это
+     * позволяет тесту оставаться детерминированным независимо от пояса машины, на которой
+     * он запускается: одна и та же дата due_date попадает в "today" для одной задачи и в
+     * "upcoming" для другой — только из-за разного due_timezone у каждой.
+     */
+    @Test
+    void getDueTodos_GroupsByTaskOwnTimezone_NotServerTimezone() {
+        LocalDate todayFarEast = LocalDate.now(ZoneOffset.ofHours(14));
+
+        Todo farEastTodo = new Todo();
+        farEastTodo.setId(10L);
+        farEastTodo.setUser(testUser);
+        farEastTodo.setTaskList(testTaskList);
+        farEastTodo.setDone(false);
+        farEastTodo.setDueDate(todayFarEast);
+        farEastTodo.setDueTimezone("+14:00");
+
+        Todo farWestTodo = new Todo();
+        farWestTodo.setId(11L);
+        farWestTodo.setUser(testUser);
+        farWestTodo.setTaskList(testTaskList);
+        farWestTodo.setDone(false);
+        // Та же самая календарная дата, но в поясе -12:00 она уже наступила позже
+        // "сегодняшней" там — задача должна уйти в "upcoming", а не в "today".
+        farWestTodo.setDueDate(todayFarEast);
+        farWestTodo.setDueTimezone("-12:00");
+
+        // id различает dto друг от друга: у TodoDto лежит Lombok @Data, и два "пустых"
+        // TodoDto равны друг другу по equals() — Mockito матчил бы оба стаба toResponse
+        // на один и тот же аргумент, и второй тихо перекрыл бы первый.
+        TodoDto farEastDto = TodoDto.builder().id(10L).build();
+        TodoDto farWestDto = TodoDto.builder().id(11L).build();
+        TodoResponse farEastResponse = new TodoResponse();
+        farEastResponse.setName("FarEast+14");
+        TodoResponse farWestResponse = new TodoResponse();
+        farWestResponse.setName("FarWest-12");
+
+        when(todoRepository.findWithDueVisibleToUser(eq(1L), any(LocalDate.class)))
+                .thenReturn(Arrays.asList(farEastTodo, farWestTodo));
+        when(todoMapper.toDto(farEastTodo)).thenReturn(farEastDto);
+        when(todoMapper.toDto(farWestTodo)).thenReturn(farWestDto);
+        when(todoMapper.toResponse(farEastDto)).thenReturn(farEastResponse);
+        when(todoMapper.toResponse(farWestDto)).thenReturn(farWestResponse);
+
+        DueTodosResponse result = todoService.getDueTodos(1L);
+
+        assertThat(result.getToday()).containsExactly(farEastResponse);
+        assertThat(result.getUpcoming()).containsExactly(farWestResponse);
+        assertThat(result.getOverdue()).isEmpty();
     }
 }

@@ -10,8 +10,11 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import ru.mngerasimenko.todolist.model.ReminderScope;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 /**
  * Внутренний DTO задачи для передачи между слоями.
@@ -89,6 +92,32 @@ public class TodoDto {
      * Позиция задачи в списке (общая per-список).
      */
     private Integer position;
+
+    @JsonProperty("due_date")
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    private LocalDate dueDate;
+
+    @JsonProperty("due_time")
+    @JsonFormat(pattern = "HH:mm")
+    private LocalTime dueTime;
+
+    @JsonProperty("due_timezone")
+    private String dueTimezone;
+
+    @JsonProperty("remind_before_minutes")
+    private Integer remindBeforeMinutes;
+
+    @JsonProperty("reminder_scope")
+    private ReminderScope reminderScope;
+
+    /**
+     * true, если запрос явно нёс хотя бы один due-ключ (due_date/due_time/due_timezone/
+     * remind_before_minutes/reminder_scope) — в отличие от того, что все они оказались null,
+     * потому что клиент их вообще не прислал. Заполняется маппером из {@link TodoRequest#isDueFieldsProvided()}.
+     * Не часть JSON-контракта.
+     */
+    @JsonIgnore
+    private boolean dueFieldsProvided;
 
     /**
      * Возвращает значение done с null-safety (false при null).

@@ -6,8 +6,12 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import ru.mngerasimenko.todolist.model.Todo;
 
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -132,4 +136,59 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
      */
     @Query("SELECT t FROM Todo t WHERE t.isPrivate = false AND t.id > :afterId ORDER BY t.id ASC")
     List<Todo> findNonPrivateForReseed(@Param("afterId") long afterId, Pageable pageable);
+
+    /**
+     * Созревшие для рассылки задачи. Момент отправки считается прямо в SQL:
+     * дата и время срока истолковываются в поясе задачи, из результата вычитается запас.
+     * Нижняя граница (staleBefore) отсекает протухшие: без неё создание задачи
+     * с прошлой датой или переезд старых данных вызвали бы веерную рассылку.
+     */
+    @Query(value = """
+            SELECT * FROM todo t
+            WHERE t.done = false
+              AND t.due_date IS NOT NULL
+              AND t.reminder_sent_at IS NULL
+              AND ((t.due_date + t.due_time) AT TIME ZONE COALESCE(t.due_timezone, 'Europe/Moscow'))
+                  - make_interval(mins => t.remind_before_minutes) <= :now
+              AND ((t.due_date + t.due_time) AT TIME ZONE COALESCE(t.due_timezone, 'Europe/Moscow'))
+                  - make_interval(mins => t.remind_before_minutes) > :staleBefore
+            ORDER BY t.due_date, t.due_time
+            """, nativeQuery = true)
+    List<Todo> findDueForReminder(@Param("now") Instant now, @Param("staleBefore") Instant staleBefore);
+
+    /**
+     * Задачи со сроком, видимые пользователю (экран «Сегодня»): невыполненные, срок не
+     * позже верхней границы (сегодня + горизонт «Дальше»), из списков пользователя,
+     * приватные — только его собственные. Видимость строится так же, как в
+     * {@link #findByListIdVisibleToUser}.
+     */
+    @Query("""
+            SELECT t FROM Todo t
+            JOIN FETCH t.user
+            LEFT JOIN FETCH t.completorUser
+            WHERE t.done = false
+              AND t.dueDate IS NOT NULL
+              AND t.dueDate <= :until
+              AND t.taskList.id IN (
+                  SELECT tlu.id.listId FROM TaskListUser tlu WHERE tlu.id.userId = :userId
+              )
+              AND (t.isPrivate = false OR t.user.id = :userId)
+            ORDER BY t.dueDate, t.dueTime
+            """)
+    List<Todo> findWithDueVisibleToUser(@Param("userId") Long userId, @Param("until") LocalDate until);
+
+    /**
+     * Отметка об отправке ставится точечным UPDATE мимо сущности: у Todo есть @Version,
+     * и запись через entity ловила бы конфликт всякий раз, когда пользователь
+     * редактирует задачу в момент прохода планировщика.
+     * <p>
+     * REQUIRES_NEW — намеренно: вызывающий (TodoServiceImpl.dispatchDueReminders) не держит
+     * одну транзакцию на весь свип (panel-review Task 8, Critical: иначе упавший UPDATE или
+     * сбой коммита откатывал бы уже сделанные отметки предыдущих задач того же прохода).
+     * Отметка каждой задачи коммитится независимо, вне зависимости от транзакции вызывающего.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Modifying
+    @Query(value = "UPDATE todo SET reminder_sent_at = :sentAt WHERE id = :todoId", nativeQuery = true)
+    void markReminderSent(@Param("todoId") Long todoId, @Param("sentAt") LocalDateTime sentAt);
 }

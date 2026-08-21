@@ -983,6 +983,8 @@ class UserServiceImplTest {
         assertThat(user.isReminderOptOut()).isTrue();
         assertThat(user.getUnsubscribeToken()).isNull();
         assertThat(locale).isEqualTo("ru");
+        // Другое согласие (Task 7) не должно затрагиваться этим вызовом.
+        assertThat(user.isTodoReminderEmailEnabled()).isTrue();
     }
 
     @Test
@@ -1004,6 +1006,47 @@ class UserServiceImplTest {
         when(repository.findByUnsubscribeToken("not-in-db")).thenReturn(null);
 
         assertThatThrownBy(() -> userService.unsubscribeFromReminders("not-in-db"))
+                .isInstanceOf(UserNotFoundException.class);
+    }
+
+    // ===== unsubscribeFromTodoReminders (Task 7) =====
+
+    @Test
+    void unsubscribeFromTodoReminders_ValidToken_ClearsFlagAndToken() {
+        user.setTodoReminderEmailEnabled(true);
+        user.setReminderOptOut(false);
+        user.setUnsubscribeToken("valid-token");
+        user.setPreferredEmailLocale("ru");
+        when(repository.findByUnsubscribeToken("valid-token")).thenReturn(user);
+
+        String locale = userService.unsubscribeFromTodoReminders("valid-token");
+
+        assertThat(user.isTodoReminderEmailEnabled()).isFalse();
+        assertThat(user.getUnsubscribeToken()).isNull();
+        assertThat(locale).isEqualTo("ru");
+        // Другое согласие (маркетинговые reminder'ы) не должно затрагиваться этим вызовом.
+        assertThat(user.isReminderOptOut()).isFalse();
+    }
+
+    @Test
+    void unsubscribeFromTodoReminders_NullToken_ThrowsUserNotFoundException() {
+        assertThatThrownBy(() -> userService.unsubscribeFromTodoReminders(null))
+                .isInstanceOf(UserNotFoundException.class);
+        verify(repository, never()).findByUnsubscribeToken(any());
+    }
+
+    @Test
+    void unsubscribeFromTodoReminders_BlankToken_ThrowsUserNotFoundException() {
+        assertThatThrownBy(() -> userService.unsubscribeFromTodoReminders("   "))
+                .isInstanceOf(UserNotFoundException.class);
+        verify(repository, never()).findByUnsubscribeToken(any());
+    }
+
+    @Test
+    void unsubscribeFromTodoReminders_UnknownToken_ThrowsUserNotFoundException() {
+        when(repository.findByUnsubscribeToken("not-in-db")).thenReturn(null);
+
+        assertThatThrownBy(() -> userService.unsubscribeFromTodoReminders("not-in-db"))
                 .isInstanceOf(UserNotFoundException.class);
     }
 

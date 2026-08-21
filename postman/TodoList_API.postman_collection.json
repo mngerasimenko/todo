@@ -1708,6 +1708,262 @@
 					"response": []
 				},
 				{
+					"name": "Create Todo With Due Date",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Дата \"через 2 дня\" — чтобы задача попала в группу upcoming ответа GET /api/todos/due (горизонт 7 дней).",
+									"var d = new Date();",
+									"d.setDate(d.getDate() + 2);",
+									"pm.environment.set('dueDateNear', d.toISOString().slice(0, 10));"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Todo created with due fields\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.id).to.exist;",
+									"    pm.expect(jsonData.due_date).to.eql(pm.environment.get('dueDateNear'));",
+									"    pm.expect(jsonData.due_time).to.eql(\"18:00\");",
+									"    pm.expect(jsonData.due_timezone).to.eql(\"Europe/Moscow\");",
+									"    pm.expect(jsonData.remind_before_minutes).to.eql(60);",
+									"    pm.expect(jsonData.reminder_scope).to.eql(\"SELF\");",
+									"",
+									"    // Сохранение id для последующих due-date запросов — отдельно от todoId,",
+									"    // чтобы не сломать цепочку Update Todo / Delete Todo дальше по коллекции.",
+									"    pm.environment.set(\"dueTodoId\", jsonData.id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Оплатить интернет\",\n  \"user_id\": {{userId}},\n  \"list_id\": {{listId}},\n  \"is_private\": false,\n  \"due_date\": \"{{dueDateNear}}\",\n  \"due_time\": \"18:00\",\n  \"due_timezone\": \"Europe/Moscow\",\n  \"remind_before_minutes\": 60,\n  \"reminder_scope\": \"SELF\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/create",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"create"
+							]
+						},
+						"description": "Создание задачи со сроком. Поля `due_date`/`due_time`/`due_timezone`/`remind_before_minutes`/`reminder_scope` опциональны — без них задача остаётся без срока, как в \"Create Todo\".\n\nЕсли `due_timezone` не передан или невалиден, сервер подставит `Europe/Moscow` и напишет WARN в лог.\n\n**dueTodoId сохраняется автоматически** для следующих due-date запросов."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Todo Due Date",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Due time and reminder window updated\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.due_date).to.eql(pm.environment.get('dueDateNear'));",
+									"    pm.expect(jsonData.due_time).to.eql(\"09:30\");",
+									"    pm.expect(jsonData.remind_before_minutes).to.eql(30);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Оплатить интернет\",\n  \"done\": false,\n  \"user_id\": {{userId}},\n  \"list_id\": {{listId}},\n  \"due_date\": \"{{dueDateNear}}\",\n  \"due_time\": \"09:30\",\n  \"due_timezone\": \"Europe/Moscow\",\n  \"remind_before_minutes\": 30,\n  \"reminder_scope\": \"SELF\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/{{dueTodoId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"{{dueTodoId}}"
+							]
+						},
+						"description": "Обновление срока существующей задачи. Момент (дата + время + запас) изменился — сервер сбрасывает внутреннее поле `reminder_sent_at` (в ответе не отображается), чтобы напоминание отправилось заново по новому времени."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Due Todos",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response has three groups\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.overdue).to.be.an('array');",
+									"    pm.expect(jsonData.today).to.be.an('array');",
+									"    pm.expect(jsonData.upcoming).to.be.an('array');",
+									"});",
+									"",
+									"pm.test(\"Created due-date todo is present\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    var dueTodoId = parseInt(pm.environment.get('dueTodoId'), 10);",
+									"    var all = [].concat(jsonData.overdue, jsonData.today, jsonData.upcoming);",
+									"    var found = all.some(function (t) { return t.id === dueTodoId; });",
+									"    pm.expect(found).to.be.true;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/due",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"due"
+							]
+						},
+						"description": "Задачи со сроком для экрана «Сегодня»: `overdue` (просрочено), `today` (сегодня), `upcoming` (следующие 7 дней). Группировка идёт по часовому поясу КАЖДОЙ задачи (`due_timezone`), а не по часовому поясу сервера. Возвращает только невыполненные задачи из списков текущего пользователя; приватные — только свои собственные."
+					},
+					"response": []
+				},
+				{
+					"name": "Clear Todo Due Date",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Due fields cleared\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.due_date).to.not.exist;",
+									"    pm.expect(jsonData.due_time).to.eql(\"09:00\");",
+									"    pm.expect(jsonData.due_timezone).to.not.exist;",
+									"    pm.expect(jsonData.remind_before_minutes).to.eql(0);",
+									"    pm.expect(jsonData.reminder_scope).to.eql(\"SELF\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Оплатить интернет\",\n  \"done\": false,\n  \"user_id\": {{userId}},\n  \"list_id\": {{listId}},\n  \"due_date\": null\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/{{dueTodoId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"{{dueTodoId}}"
+							]
+						},
+						"description": "Снятие срока: `due_date: null` в теле запроса. Сервер обнуляет и сопутствующие поля — `due_time` возвращается к 09:00, `due_timezone` в null, `remind_before_minutes` в 0, `reminder_scope` в SELF."
+					},
+					"response": []
+				},
+				{
 					"name": "Delete Todo",
 					"event": [
 						{

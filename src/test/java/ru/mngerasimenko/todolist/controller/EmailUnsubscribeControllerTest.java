@@ -126,4 +126,48 @@ class EmailUnsubscribeControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("lang=\"en\"")));
     }
+
+    // ===== scope=todo_due (Task 7) =====
+
+    @Test
+    void unsubscribe_ScopeTodoDue_CallsUnsubscribeFromTodoRemindersOnly() throws Exception {
+        when(userService.unsubscribeFromTodoReminders("good-token")).thenReturn("ru");
+
+        mockMvc.perform(get("/api/users/unsubscribe-reminder")
+                        .param("token", "good-token")
+                        .param("scope", "todo_due"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+                .andExpect(content().string(containsString("stub-unsubscribe.success.title")))
+                .andExpect(content().string(containsString("lang=\"ru\"")));
+
+        verify(userService).unsubscribeFromTodoReminders("good-token");
+        verify(userService, never()).unsubscribeFromReminders(anyString());
+    }
+
+    @Test
+    void unsubscribe_NoScope_CallsUnsubscribeFromRemindersOnly() throws Exception {
+        when(userService.unsubscribeFromReminders("good-token")).thenReturn("ru");
+
+        mockMvc.perform(get("/api/users/unsubscribe-reminder").param("token", "good-token"))
+                .andExpect(status().isOk());
+
+        verify(userService).unsubscribeFromReminders("good-token");
+        verify(userService, never()).unsubscribeFromTodoReminders(anyString());
+    }
+
+    @Test
+    void unsubscribe_UnknownScope_FallsBackToUnsubscribeFromReminders() throws Exception {
+        // scope прилетает из URL, который юзер может редактировать руками — незнакомое
+        // значение не должно ни падать, ни расширять то, что выключается (не оба флага сразу).
+        when(userService.unsubscribeFromReminders("good-token")).thenReturn("ru");
+
+        mockMvc.perform(get("/api/users/unsubscribe-reminder")
+                        .param("token", "good-token")
+                        .param("scope", "whatever"))
+                .andExpect(status().isOk());
+
+        verify(userService).unsubscribeFromReminders("good-token");
+        verify(userService, never()).unsubscribeFromTodoReminders(anyString());
+    }
 }

@@ -1,0 +1,57 @@
+databaseChangeLog:
+  - changeSet:
+      id: 030-todo-due-dates
+      author: mngerasimenko
+      comment: "Сроки задач и напоминания. Дата и время раздельно: единое due_at сделало бы «31 июля без времени» неотличимым от «31 июля 00:00», а это разные намерения. due_timezone — снимок пояса автора на момент установки: часовой пояс пользователя нигде не хранится, а считать всё по Москве нельзя (Россия — 11 поясов, пользователь в Новосибирске получил бы напоминание на 4 часа позже задуманного). Аддитивно, без backfill: существующие задачи получают due_date IS NULL, то есть «срока нет»."
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: todo
+                columnName: due_date
+      changes:
+        - addColumn:
+            tableName: todo
+            columns:
+              - column:
+                  name: due_date
+                  type: date
+              - column:
+                  name: due_time
+                  type: time
+                  defaultValue: "09:00:00"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: due_timezone
+                  type: varchar(64)
+              - column:
+                  name: remind_before_minutes
+                  type: int
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: reminder_scope
+                  type: varchar(8)
+                  defaultValue: "SELF"
+                  constraints:
+                    nullable: false
+              - column:
+                  name: reminder_sent_at
+                  type: timestamp
+        - createIndex:
+            tableName: todo
+            indexName: idx_todo_due_date
+            columns:
+              - column:
+                  name: due_date
+        - addColumn:
+            tableName: todo_users
+            columns:
+              - column:
+                  name: todo_reminder_email_enabled
+                  type: boolean
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false

@@ -94,6 +94,20 @@ public interface UserService {
     String unsubscribeFromReminders(String unsubscribeToken);
 
     /**
+     * Отписать пользователя от email-напоминаний о сроках его собственных задач (Task 7)
+     * по тому же одноразовому токену, но с отдельным согласием: ставит
+     * {@code todoReminderEmailEnabled=false} и очищает {@code unsubscribeToken}.
+     * {@code reminderOptOut} (согласие {@link #unsubscribeFromReminders}) не трогает —
+     * это разные согласия и должны отключаться независимо.
+     *
+     * @return BCP-47 локаль пользователя (preferredEmailLocale) — для рендеринга
+     *         success-HTML на нужном языке в контроллере.
+     * @throws ru.mngerasimenko.todolist.exception.UserNotFoundException если токен
+     *         невалиден или уже использован.
+     */
+    String unsubscribeFromTodoReminders(String unsubscribeToken);
+
+    /**
      * Кандидаты на 3-дневное onboarding-напоминание (Phase 3.3).
      * @param days сколько дней должно пройти с регистрации без возврата (обычно 3).
      */

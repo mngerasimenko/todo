@@ -22,6 +22,7 @@ import ru.mngerasimenko.todolist.repository.UserRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Реализация сервиса push-уведомлений через Firebase Cloud Messaging.
@@ -50,6 +51,7 @@ public class PushNotificationServiceImpl implements PushNotificationService {
     public static final String PUSH_TYPE_MEMBER_ADDED = "member_added";
     public static final String PUSH_TYPE_INACTIVE_REMINDER = "inactive_reminder";
     public static final String PUSH_TYPE_ONBOARDING_REMINDER = "onboarding_reminder";
+    public static final String PUSH_TYPE_TODO_DUE = "todo_due";
 
     /** Кешированный результат проверки Firebase */
     private volatile boolean firebaseHealthyCache = false;
@@ -164,6 +166,19 @@ public class PushNotificationServiceImpl implements PushNotificationService {
                                String titleKey, Object[] titleArgs,
                                String bodyKey, Object[] bodyArgs,
                                Long listId) {
+        sendLocalized(tokens, pushType, titleKey, titleArgs, bodyKey, bodyArgs, listId, Map.of());
+    }
+
+    /**
+     * Перегрузка с произвольными дополнительными data-полями (например, {@code todo_id}
+     * у {@link #sendTodoDuePush}), которые не укладываются в общий {@code list_id}/{@code list_name}.
+     */
+    private void sendLocalized(List<PushToken> tokens,
+                               String pushType,
+                               String titleKey, Object[] titleArgs,
+                               String bodyKey, Object[] bodyArgs,
+                               Long listId,
+                               Map<String, String> extraData) {
         String listName = listId != null
                 ? taskListRepository.findById(listId).map(list -> list.getName()).orElse("")
                 : "";
@@ -192,6 +207,8 @@ public class PushNotificationServiceImpl implements PushNotificationService {
                     messageBuilder.putData("list_id", String.valueOf(listId));
                     messageBuilder.putData("list_name", listName);
                 }
+
+                extraData.forEach(messageBuilder::putData);
 
                 Message message = messageBuilder.build();
 
@@ -262,6 +279,31 @@ public class PushNotificationServiceImpl implements PushNotificationService {
                     null);
         }
         log.info("Onboarding push-напоминание отправлено userId={} на {} устройств(а)", userId, tokens.size());
+    }
+
+    @Override
+    @Async
+    public void sendTodoDuePush(Long userId, Long todoId, Long listId, String todoName, String dueAt) {
+        if (pushDisabled()) return;
+
+        List<PushToken> tokens = pushTokenRepository.findByUserId(userId);
+        if (tokens.isEmpty()) {
+            log.debug("Нет push-токенов для userId={}, напоминание о сроке не отправлено", userId);
+            return;
+        }
+
+        // Текст не зависит от токена (без per-token fallback-имени) — рассылаем одним вызовом,
+        // sendLocalized сам резолвит locale для каждого токена. listId передаётся как обычный
+        // параметр (не extraData) — так переиспользуется существующий механизм list_id/list_name,
+        // общий с остальными 5 push-типами (сетевой контракт: push_list_id — внутренний
+        // Intent-ключ Android между двумя классами, на проводе его нет).
+        sendLocalized(tokens, PUSH_TYPE_TODO_DUE,
+                "push.todo.due.title", new Object[]{},
+                "push.todo.due.body", new Object[]{todoName, dueAt},
+                listId,
+                Map.of("todo_id", String.valueOf(todoId)));
+
+        log.info("Push-напоминание о сроке отправлено userId={}, todoId={} на {} устройств(а)", userId, todoId, tokens.size());
     }
 
     /** Короткий helper: true если отправку push нужно пропустить. */

@@ -137,15 +137,50 @@ public class EmailServiceImpl implements EmailService {
         sendHtmlEmail(email, messageService.getMessage("email.onboarding.subject", locale), html);
     }
 
+    @Override
+    @Async
+    public void sendTodoDueEmail(String email, String userName, String todoName, String listName, String dueAt,
+                                 Long userId, String localeTag, String unsubscribeToken) {
+        Locale locale = resolveLocale(localeTag);
+        // Тот же fallback name, что и у inactive/onboarding — единый messages key.
+        String fallback = messageService.getMessage("email.inactive.fallback_name", locale);
+        String safeName = HtmlUtils.htmlEscape(userName != null ? userName : fallback);
+        String safeTodoName = HtmlUtils.htmlEscape(todoName);
+        String safeListName = HtmlUtils.htmlEscape(listName);
+        String trackOpenLink = buildTrackLink("open", userId);
+        java.util.HashMap<String, Object> vars = new java.util.HashMap<>();
+        vars.put("userName", safeName);
+        vars.put("todoName", safeTodoName);
+        vars.put("listName", safeListName);
+        // dueAt собран в TodoServiceImpl из даты/времени entity, не пользовательский ввод — экранирование не нужно.
+        vars.put("dueAt", dueAt);
+        vars.put("listUrl", emailProperties.getBaseUrl());
+        vars.put("trackOpenLink", trackOpenLink);
+        // scope=todo_due отличает это согласие (todoReminderEmailEnabled) от reminder_opt_out —
+        // см. EmailUnsubscribeController.
+        vars.put("unsubscribeUrl", buildUnsubscribeUrl(unsubscribeToken, "todo_due"));
+        String html = renderTemplate("todo-reminder", locale, vars);
+        sendHtmlEmail(email, messageService.getMessage("email.todo.due.subject", locale), html);
+    }
+
     /**
      * Собрать unsubscribe-URL для footer-link шаблона. Возвращает null, если token
      * null/blank — тогда {@code th:if="${unsubscribeUrl}"} в шаблоне не отрендерит footer.
      */
     private String buildUnsubscribeUrl(String unsubscribeToken) {
+        return buildUnsubscribeUrl(unsubscribeToken, null);
+    }
+
+    /**
+     * Вариант с явным scope-параметром отписки (например, {@code todo_due}) — разные
+     * согласия должны отключаться независимо, см. EmailUnsubscribeController.
+     */
+    private String buildUnsubscribeUrl(String unsubscribeToken, String scope) {
         if (unsubscribeToken == null || unsubscribeToken.isBlank()) {
             return null;
         }
-        return emailProperties.getBaseUrl() + "/api/users/unsubscribe-reminder?token=" + unsubscribeToken;
+        String url = emailProperties.getBaseUrl() + "/api/users/unsubscribe-reminder?token=" + unsubscribeToken;
+        return scope != null ? url + "&scope=" + scope : url;
     }
 
     /**

@@ -5,11 +5,14 @@ import org.junit.jupiter.api.Test;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.dto.TodoRequest;
 import ru.mngerasimenko.todolist.dto.TodoResponse;
+import ru.mngerasimenko.todolist.model.ReminderScope;
 import ru.mngerasimenko.todolist.model.TaskList;
 import ru.mngerasimenko.todolist.model.Todo;
 import ru.mngerasimenko.todolist.model.User;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -291,5 +294,108 @@ class TodoMapperTest {
         assertThat(result.getCompletorUserId()).isEqualTo(2L);
         assertThat(result.getCompletorUserName()).isEqualTo("completor");
         assertThat(result.getCompletedAt()).isEqualTo(LocalDateTime.of(2024, 1, 15, 12, 0));
+    }
+
+    @Test
+    void toResponse_MapsDueFields() {
+        TodoDto dto = TodoDto.builder()
+                .id(1L).name("Полить теплицу").done(false)
+                .createdAt(LocalDateTime.now())
+                .dueDate(LocalDate.of(2026, 7, 31))
+                .dueTime(LocalTime.of(18, 0))
+                .dueTimezone("Asia/Novosibirsk")
+                .remindBeforeMinutes(1440)
+                .reminderScope(ReminderScope.ALL)
+                .build();
+
+        TodoResponse response = todoMapper.toResponse(dto);
+
+        assertThat(response.getDueDate()).isEqualTo(LocalDate.of(2026, 7, 31));
+        assertThat(response.getDueTime()).isEqualTo(LocalTime.of(18, 0));
+        assertThat(response.getDueTimezone()).isEqualTo("Asia/Novosibirsk");
+        assertThat(response.getRemindBeforeMinutes()).isEqualTo(1440);
+        assertThat(response.getReminderScope()).isEqualTo(ReminderScope.ALL);
+    }
+
+    @Test
+    void toDto_FromRequest_MapsDueFields() {
+        TodoRequest request = new TodoRequest();
+        request.setName("Позвонить в клинику");
+        request.setDueDate(LocalDate.of(2026, 8, 13));
+        request.setDueTime(LocalTime.of(18, 0));
+        request.setDueTimezone("Europe/Moscow");
+        request.setRemindBeforeMinutes(60);
+        request.setReminderScope(ReminderScope.ALL);
+
+        TodoDto dto = todoMapper.toDto(request);
+
+        assertThat(dto.getDueDate()).isEqualTo(LocalDate.of(2026, 8, 13));
+        assertThat(dto.getDueTime()).isEqualTo(LocalTime.of(18, 0));
+        assertThat(dto.getDueTimezone()).isEqualTo("Europe/Moscow");
+        assertThat(dto.getRemindBeforeMinutes()).isEqualTo(60);
+        assertThat(dto.getReminderScope()).isEqualTo(ReminderScope.ALL);
+        assertThat(dto.isDueFieldsProvided()).isTrue();
+    }
+
+    @Test
+    void toDto_FromRequest_NoDueFieldsTouched_DueFieldsProvidedIsFalse() {
+        TodoRequest request = new TodoRequest();
+        request.setName("Позвонить в клинику");
+
+        TodoDto dto = todoMapper.toDto(request);
+
+        assertThat(dto.isDueFieldsProvided()).isFalse();
+    }
+
+    @Test
+    void toDto_FromRequest_ExplicitNullDueDate_DueFieldsProvidedIsTrue() {
+        TodoRequest request = new TodoRequest();
+        request.setName("Позвонить в клинику");
+        request.setDueDate(null); // явный вызов сеттера — как если бы due_date пришёл в JSON со значением null
+
+        TodoDto dto = todoMapper.toDto(request);
+
+        assertThat(dto.isDueFieldsProvided()).isTrue();
+    }
+
+    @Test
+    void updateEntityFromDto_MapsDueFieldsToEntity() {
+        Todo todo = new Todo();
+        TodoDto dto = TodoDto.builder()
+                .name("Корм заказать").done(false)
+                .dueDate(LocalDate.of(2026, 7, 31))
+                .dueTime(LocalTime.of(9, 0))
+                .dueTimezone("Europe/Moscow")
+                .remindBeforeMinutes(0)
+                .reminderScope(ReminderScope.SELF)
+                .build();
+
+        todoMapper.updateEntityFromDto(dto, todo);
+
+        assertThat(todo.getDueDate()).isEqualTo(LocalDate.of(2026, 7, 31));
+        assertThat(todo.getDueTimezone()).isEqualTo("Europe/Moscow");
+    }
+
+    @Test
+    void toEntity_WithNullDueFields_CoalescesToDefaults() {
+        TodoDto dto = TodoDto.builder().build();
+
+        Todo result = todoMapper.toEntity(dto);
+
+        assertThat(result.getDueTime()).isEqualTo(LocalTime.of(9, 0));
+        assertThat(result.getRemindBeforeMinutes()).isEqualTo(0);
+        assertThat(result.getReminderScope()).isEqualTo(ReminderScope.SELF);
+    }
+
+    @Test
+    void updateEntityFromDto_WithNullDueFields_CoalescesToDefaults() {
+        Todo todo = new Todo();
+        TodoDto dto = TodoDto.builder().build();
+
+        todoMapper.updateEntityFromDto(dto, todo);
+
+        assertThat(todo.getDueTime()).isEqualTo(LocalTime.of(9, 0));
+        assertThat(todo.getRemindBeforeMinutes()).isEqualTo(0);
+        assertThat(todo.getReminderScope()).isEqualTo(ReminderScope.SELF);
     }
 }

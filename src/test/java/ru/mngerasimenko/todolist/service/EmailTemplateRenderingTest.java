@@ -227,4 +227,52 @@ class EmailTemplateRenderingTest {
                 .contains("https://track.example/click/1")
                 .contains("https://track.example/open/1");
     }
+
+    // === todo-reminder (Task 7) ===
+
+    @Test
+    void todoReminderTemplate_RendersTaskListAndUnsubscribe() {
+        String html = render("todo-reminder", RU, Map.of(
+                "userName", "Мария",
+                "todoName", "Полить теплицу",
+                "listName", "Дача",
+                "dueAt", "31.07.2026 18:00",
+                "listUrl", "https://todo.keepware.ru",
+                "trackOpenLink", "https://track.example/open/1",
+                "unsubscribeUrl", "https://todo.keepware.ru/api/users/unsubscribe-reminder?token=abc&scope=todo_due"
+        ));
+
+        assertThat(html)
+                .contains("Напоминание о задаче")
+                .contains("Полить теплицу")
+                .contains("Дача")
+                .contains("31.07.2026 18:00")
+                .contains("scope=todo_due");
+    }
+
+    @Test
+    void todoReminderTemplate_RendersEnglishContent() {
+        String html = render("todo-reminder", EN, Map.of(
+                "userName", "Anna",
+                "todoName", "Water the plants",
+                "listName", "Garden",
+                "dueAt", "31.07.2026 18:00",
+                "listUrl", "https://todo.keepware.ru",
+                "trackOpenLink", "https://track.example/open/1",
+                "unsubscribeUrl", "https://todo.keepware.ru/api/users/unsubscribe-reminder?token=abc&scope=todo_due"
+        ));
+
+        assertThat(html)
+                .contains("lang=\"en\"")
+                .contains("TodoList")
+                .contains("Task reminder")
+                .contains("Hi, Anna!")
+                .contains("Water the plants")
+                .contains("Garden")
+                .contains("due 31.07.2026 18:00")
+                .contains("Open the list →")
+                .contains("This is an automated reminder from TodoList")
+                .contains("Turn off task due-date emails")
+                .contains("scope=todo_due");
+    }
 }

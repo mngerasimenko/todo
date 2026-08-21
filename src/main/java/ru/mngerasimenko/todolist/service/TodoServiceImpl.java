@@ -6,11 +6,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import ru.mngerasimenko.todolist.dto.DueTodosResponse;
 import ru.mngerasimenko.todolist.dto.TodoDto;
+import ru.mngerasimenko.todolist.dto.TodoResponse;
 import ru.mngerasimenko.todolist.exception.ListNotFoundException;
 import ru.mngerasimenko.todolist.exception.TodoNotFoundException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
+import ru.mngerasimenko.todolist.model.ReminderScope;
 import ru.mngerasimenko.todolist.model.TaskList;
 import ru.mngerasimenko.todolist.model.TaskListRole;
 import ru.mngerasimenko.todolist.model.TaskListUser;
@@ -23,8 +26,19 @@ import ru.mngerasimenko.todolist.repository.UserRepository;
 
 import org.springframework.security.access.AccessDeniedException;
 
+import java.time.DateTimeException;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 @Slf4j
 @Service
@@ -36,9 +50,19 @@ public class TodoServiceImpl implements TodoService {
     private final TaskListRepository taskListRepository;
     private final TaskListUserRepository taskListUserRepository;
     private final PushNotificationService pushNotificationService;
+    private final EmailService emailService;
+    private final UserService userService;
     private final TodoMapper todoMapper;
     private final SubscriptionService subscriptionService;
     private final SuggestionService suggestionService;
+
+    private static final ZoneId FALLBACK_ZONE = ZoneId.of("Europe/Moscow");
+
+    /** Нижняя граница «протухания» напоминания — см. TodoRepository.findDueForReminder. */
+    private static final Duration STALE_AFTER = Duration.ofDays(1);
+
+    /** Горизонт группы «Дальше». Без границы экран превращается во второй список всех задач. */
+    private static final int UPCOMING_DAYS = 7;
 
     @Override
     @Transactional
@@ -66,6 +90,7 @@ public class TodoServiceImpl implements TodoService {
         Todo todo = todoMapper.toEntity(todoDto);
         todo.setUser(user);
         todo.setTaskList(taskList);
+        applyDueRules(todoDto, todo);
 
         Todo savedTodo = todoRepository.save(todo);
         log.info("Создана задача: id={}, name='{}', userId={}, listId={}, private={}",
@@ -127,7 +152,36 @@ public class TodoServiceImpl implements TodoService {
         boolean nowDone = todoDto.isDone();
 
         log.debug("updateTodo: входной done={}, существующий done={}", nowDone, wasDone);
+
+        // Снимок ВСЕХ due-полей ДО маппинга: updateEntityFromDto безусловно копирует их
+        // из dto, и после него entity уже совпадает с dto — applyDueRules не увидел бы
+        // разницы. Восстанавливаем "было" сразу после маппинга и только потом решаем,
+        // применять ли due-правила вообще (см. dueFieldsProvided ниже) — CRITICAL из
+        // финального ревью ветки: оба выпущенных клиента (веб-форма, Android TodoRequest)
+        // шлют обновление вообще без due-ключей, и dto.getDueDate()==null в этом случае
+        // неотличим от явного "снять срок", если due-поля entity не восстановлены целиком.
+        LocalDate dueDateBeforeMapping = existingTodo.getDueDate();
+        LocalTime dueTimeBeforeMapping = existingTodo.getDueTime();
+        String dueTimezoneBeforeMapping = existingTodo.getDueTimezone();
+        Integer remindBeforeMinutesBeforeMapping = existingTodo.getRemindBeforeMinutes();
+        ReminderScope reminderScopeBeforeMapping = existingTodo.getReminderScope();
+
         todoMapper.updateEntityFromDto(todoDto, existingTodo);
+
+        existingTodo.setDueDate(dueDateBeforeMapping);
+        existingTodo.setDueTime(dueTimeBeforeMapping);
+        existingTodo.setDueTimezone(dueTimezoneBeforeMapping);
+        existingTodo.setRemindBeforeMinutes(remindBeforeMinutesBeforeMapping);
+        existingTodo.setReminderScope(reminderScopeBeforeMapping);
+
+        // Due-правила (включая "due_date: null — снять срок") применяются только если
+        // запрос реально нёс хотя бы один due-ключ. Иначе — поле отсутствовало в теле
+        // запроса целиком, entity уже восстановлена к состоянию "было" строкой выше,
+        // трогать reminderSentAt не нужно (applyDueRules — единственное место, которое
+        // его меняет).
+        if (todoDto.isDueFieldsProvided()) {
+            applyDueRules(todoDto, existingTodo);
+        }
 
         // Логика completedAt и completorUser
         if (!wasDone && nowDone) {
@@ -169,6 +223,33 @@ public class TodoServiceImpl implements TodoService {
         return todoRepository.findByListIdsVisibleToUser(listIds, requestingUserId).stream()
                 .map(todoMapper::toDto)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DueTodosResponse getDueTodos(Long requestingUserId) {
+        LocalDate until = LocalDate.now().plusDays(UPCOMING_DAYS);
+        List<Todo> todos = todoRepository.findWithDueVisibleToUser(requestingUserId, until);
+
+        List<TodoResponse> overdue = new ArrayList<>();
+        List<TodoResponse> today = new ArrayList<>();
+        List<TodoResponse> upcoming = new ArrayList<>();
+
+        for (Todo todo : todos) {
+            ZoneId zone = todo.getDueTimezone() != null
+                    ? ZoneId.of(todo.getDueTimezone()) : FALLBACK_ZONE;
+            LocalDate todayInTaskZone = LocalDate.now(zone);
+            TodoResponse response = todoMapper.toResponse(todoMapper.toDto(todo));
+
+            if (todo.getDueDate().isBefore(todayInTaskZone)) {
+                overdue.add(response);
+            } else if (todo.getDueDate().isEqual(todayInTaskZone)) {
+                today.add(response);
+            } else {
+                upcoming.add(response);
+            }
+        }
+        return DueTodosResponse.builder().overdue(overdue).today(today).upcoming(upcoming).build();
     }
 
     @Override
@@ -266,6 +347,59 @@ public class TodoServiceImpl implements TodoService {
     }
 
     /**
+     * Единая точка правил срока. Вызывается и при создании, и при обновлении:
+     * иначе правило, добавленное в одну ветку, тихо не сработает в другой.
+     */
+    private void applyDueRules(TodoDto dto, Todo entity) {
+        if (dto.getDueDate() == null) {
+            // Снятие срока: чистим всё сопутствующее, иначе повторная установка
+            // унаследует настройки, которых пользователь уже не видит на экране.
+            entity.setDueDate(null);
+            entity.setDueTimezone(null);
+            entity.setDueTime(LocalTime.of(9, 0));
+            entity.setRemindBeforeMinutes(0);
+            entity.setReminderScope(ReminderScope.SELF);
+            entity.setReminderSentAt(null);
+            return;
+        }
+
+        boolean momentChanged = !Objects.equals(entity.getDueDate(), dto.getDueDate())
+                || !Objects.equals(entity.getDueTime(), dto.getDueTime())
+                || !Objects.equals(entity.getRemindBeforeMinutes(), dto.getRemindBeforeMinutes());
+
+        entity.setDueDate(dto.getDueDate());
+        entity.setDueTime(dto.getDueTime() != null ? dto.getDueTime() : LocalTime.of(9, 0));
+        entity.setRemindBeforeMinutes(dto.getRemindBeforeMinutes() != null ? dto.getRemindBeforeMinutes() : 0);
+
+        if (dto.getDueTimezone() == null || dto.getDueTimezone().isBlank()) {
+            log.warn("Задача id={} получила срок без часового пояса — клиент старой версии, подставлен {}",
+                    entity.getId(), FALLBACK_ZONE);
+            entity.setDueTimezone(FALLBACK_ZONE.getId());
+        } else {
+            // Невалидный IANA-идентификатор не должен доходить до колонки: findDueForReminder —
+            // один native-запрос по всем задачам, и AT TIME ZONE упадёт на первой же "плохой"
+            // строке, оборвав рассылку напоминаний сразу для всех пользователей.
+            try {
+                ZoneId.of(dto.getDueTimezone());
+                entity.setDueTimezone(dto.getDueTimezone());
+            } catch (DateTimeException e) {
+                log.warn("Задача id={} получила невалидный часовой пояс '{}', подставлен {}",
+                        entity.getId(), dto.getDueTimezone(), FALLBACK_ZONE);
+                entity.setDueTimezone(FALLBACK_ZONE.getId());
+            }
+        }
+
+        // Приватную задачу видит только автор — рассылать её участникам списка нельзя
+        // ни при каком значении, пришедшем от клиента. API публичный, доверять ему нельзя.
+        ReminderScope requested = dto.getReminderScope() != null ? dto.getReminderScope() : ReminderScope.SELF;
+        entity.setReminderScope(entity.getIsPrivate() ? ReminderScope.SELF : requested);
+
+        if (momentChanged) {
+            entity.setReminderSentAt(null);
+        }
+    }
+
+    /**
      * Проверяет права доступа к задаче.
      *
      * Правила доступа:
@@ -315,5 +449,113 @@ public class TodoServiceImpl implements TodoService {
         log.warn("Пользователь id={} попытался изменить чужую задачу id={}", userId, todo.getId());
         throw new AccessDeniedException(
                 "Только создатель задачи или администратор списка могут изменить эту задачу");
+    }
+
+    /**
+     * Без @Transactional на весь метод: раньше один свип шёл в одной транзакции, и упавший
+     * (или не закоммитившийся) markReminderSent откатывал отметки уже обработанных задач того
+     * же прохода — следующий проход рассылал бы их заново (panel-review Task 8, Critical).
+     * Каждая отметка коммитится сама по себе — REQUIRES_NEW на TodoRepository.markReminderSent.
+     */
+    @Override
+    public int dispatchDueReminders() {
+        Instant now = Instant.now();
+        List<Todo> due = todoRepository.findDueForReminder(now, now.minus(STALE_AFTER));
+
+        // Один токен отписки на пользователя за весь свип: колонка User.unsubscribeToken общая
+        // на пользователя, и issueUnsubscribeToken её перезаписывает. Без переиспользования
+        // пользователь с двумя задачами в одном окне получил бы два письма, но рабочей была бы
+        // только ссылка из последнего — предыдущая отвечала бы "неверный токен" (panel-review
+        // Task 8, Important).
+        Map<Long, String> unsubscribeTokens = new HashMap<>();
+        // Имя списка на письмо — по listId через репозиторий, а не через todo.getTaskList():
+        // без внешней @Transactional Todo из findDueForReminder detached, а связь LAZY —
+        // обращение к ней роняет LazyInitializationException внутри try/catch письма, письмо
+        // молча не уходит НИКОГДА (panel-review Task 8, повторный проход, Critical). Кэш —
+        // чтобы не бить репозиторий на каждого получателя одного и того же списка.
+        Map<Long, String> listNames = new HashMap<>();
+
+        for (Todo todo : due) {
+            try {
+                for (User recipient : resolveRecipients(todo)) {
+                    notifyOne(todo, recipient, unsubscribeTokens, listNames);
+                }
+            } catch (Exception e) {
+                // Падение одной задачи не должно рвать весь проход.
+                log.warn("[todo-reminder] Ошибка обработки задачи id={}: {}", todo.getId(), e.getMessage());
+            }
+            // Отметка по факту ПОПЫТКИ, а не успеха: иначе упавший канал заставит планировщик
+            // слать одно и то же каждые 5 минут. Собственный try/catch — сбой самой отметки
+            // (таймаут, deadlock) теряет только эту задачу, а не прерывает проход остальных.
+            try {
+                todoRepository.markReminderSent(todo.getId(), LocalDateTime.now());
+            } catch (Exception e) {
+                log.warn("[todo-reminder] Не удалось отметить задачу id={} как обработанную: {}",
+                        todo.getId(), e.getMessage());
+            }
+        }
+        return due.size();
+    }
+
+    /** Приватную задачу видит только автор — она не уходит участникам ни при каком scope. */
+    private List<User> resolveRecipients(Todo todo) {
+        if (todo.getIsPrivate() || todo.getReminderScope() == ReminderScope.SELF) {
+            return userRepository.findById(todo.getUserId()).map(List::of).orElseGet(List::of);
+        }
+        return taskListUserRepository.findByIdListId(todo.getListId()).stream()
+                .map(TaskListUser::getUser)
+                .toList();
+    }
+
+    /**
+     * Дата и время срока в человекочитаемом виде для текста push/письма — без него
+     * напоминание с недельным запасом молча выглядело бы как "срок сегодня" (panel-review,
+     * финальное ревью ветки). Числовой формат dd.MM.yyyy HH:mm одинаково однозначен
+     * что для RU, что для EN — не зависит от локали получателя, поэтому один и тот же
+     * текст можно передать в оба канала без per-token форматирования.
+     */
+    private static final DateTimeFormatter DUE_AT_FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+
+    private String formatDueAt(Todo todo) {
+        return LocalDateTime.of(todo.getDueDate(), todo.getDueTime()).format(DUE_AT_FORMATTER);
+    }
+
+    private void notifyOne(Todo todo, User recipient, Map<Long, String> unsubscribeTokens,
+                            Map<Long, String> listNames) {
+        String dueAt = formatDueAt(todo);
+        try {
+            pushNotificationService.sendTodoDuePush(
+                    recipient.getId(), todo.getId(), todo.getListId(), todo.getName(), dueAt);
+        } catch (Exception e) {
+            log.warn("[todo-reminder] Push не отправлен userId={}: {}", recipient.getId(), e.getMessage());
+        }
+
+        if (!recipient.isEmailVerified() || !recipient.isTodoReminderEmailEnabled()) {
+            return;
+        }
+        try {
+            // Токен выпускаем только сейчас, непосредственно перед отправкой: колонка
+            // User.unsubscribeToken общая с маркетинговой рассылкой, лишний выпуск инвалидирует
+            // непрочитанные ссылки в уже доставленных письмах (owner-решение отложено).
+            // Без computeIfAbsent: issueUnsubscribeToken теоретически может вернуть null,
+            // а computeIfAbsent null не кэширует — на второй задаче того же пользователя
+            // токен выпустился бы заново, снова перетирая колонку (panel-review Task 8, Minor).
+            String token;
+            if (unsubscribeTokens.containsKey(recipient.getId())) {
+                token = unsubscribeTokens.get(recipient.getId());
+            } else {
+                token = userService.issueUnsubscribeToken(recipient.getId());
+                unsubscribeTokens.put(recipient.getId(), token);
+            }
+            // Имя списка — по listId через репозиторий, не через todo.getTaskList() (LAZY,
+            // Todo здесь detached — см. комментарий у listNames в dispatchDueReminders).
+            String listName = listNames.computeIfAbsent(todo.getListId(),
+                    id -> taskListRepository.findById(id).map(TaskList::getName).orElse(""));
+            emailService.sendTodoDueEmail(recipient.getEmail(), recipient.getName(), todo.getName(),
+                    listName, dueAt, recipient.getId(),
+                    recipient.getPreferredEmailLocale(), token);
+        } catch (Exception e) {
+            log.warn("[todo-reminder] Письмо не отправлено userId={}: {}", recipient.getId(), e.getMessage());
+        }
     }
 }
