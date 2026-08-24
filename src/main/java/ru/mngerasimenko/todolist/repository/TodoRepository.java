@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -176,6 +177,18 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
             ORDER BY t.dueDate, t.dueTime
             """)
     List<Todo> findWithDueVisibleToUser(@Param("userId") Long userId, @Param("until") LocalDate until);
+
+    /**
+     * Поиск ранее созданной задачи по ключу идемпотентности (миграция 031).
+     * Область поиска — автор: ключ генерирует клиент, и глобальной уникальности между
+     * пользователями гарантировать нельзя.
+     * <p>
+     * {@code findFirst}, а не обычный {@code findBy}, — сознательная страховка: единственность
+     * держится на частичном индексе uq_todo_user_client_request_id, и если он почему-то не
+     * накатился, обычный запрос дал бы IncorrectResultSizeDataAccessException и HTTP 500 на
+     * каждом ретрае. Так деградация мягкая — вернётся первая строка.
+     */
+    Optional<Todo> findFirstByUserIdAndClientRequestIdOrderByIdAsc(Long userId, String clientRequestId);
 
     /**
      * Отметка об отправке ставится точечным UPDATE мимо сущности: у Todo есть @Version,

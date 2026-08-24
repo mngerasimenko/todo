@@ -6,6 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import ru.mngerasimenko.todolist.dto.TodoDto;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
 import ru.mngerasimenko.todolist.model.ReminderScope;
 import ru.mngerasimenko.todolist.model.TaskList;
@@ -69,6 +70,9 @@ class TodoServiceImplDueRulesRealMapperTest {
     @Mock
     private SuggestionService suggestionService;
 
+    @Mock
+    private FeatureFlagStore flagStore;
+
     private TodoServiceImpl todoService;
 
     private User testUser;
@@ -80,7 +84,7 @@ class TodoServiceImplDueRulesRealMapperTest {
         TodoMapper realMapper = new TodoMapper();
         todoService = new TodoServiceImpl(todoRepository, userRepository, taskListRepository,
                 taskListUserRepository, pushNotificationService, emailService, userService, realMapper,
-                subscriptionService, suggestionService);
+                subscriptionService, suggestionService, flagStore);
 
         testUser = new User();
         testUser.setId(1L);

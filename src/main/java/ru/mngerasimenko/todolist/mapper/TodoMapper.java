@@ -62,6 +62,10 @@ public class TodoMapper {
         todo.setCompletedAt(todoDto.getCompletedAt());
         todo.setDone(todoDto.isDone());
         todo.setIsPrivate(todoDto.isPrivate());
+        // Ключ идемпотентности переносится ТОЛЬКО сюда (создание). В toDto(Todo) его сознательно
+        // нет: наружу он не отдаётся, клиент и так его знает. В updateEntityFromDto его тоже быть
+        // не должно — иначе PUT затирал бы ключ и следующий ретрай создания не был бы распознан.
+        todo.setClientRequestId(todoDto.getClientRequestId());
         todo.setUserId(todoDto.getUserId());
         // Нулевые значения от старых клиентов схлопываются в дефолты прямо здесь —
         // так due_time никогда не окажется null при NOT NULL в схеме.
@@ -105,6 +109,7 @@ public class TodoMapper {
                 .name(request.getName())
                 .done(request.getDone())
                 .isPrivate(request.isPrivate())
+                .clientRequestId(request.getClientRequestId())
                 .listId(request.getListId())
                 .dueDate(request.getDueDate())
                 .dueTime(request.getDueTime())

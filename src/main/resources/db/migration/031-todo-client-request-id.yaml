@@ -1,0 +1,38 @@
+databaseChangeLog:
+  - changeSet:
+      id: 031-todo-client-request-id
+      author: mngerasimenko
+      comment: "Ключ идемпотентности создания задачи. Android-клиент — очередь at-least-once: если ответ сервера до телефона не дошёл, он повторяет POST, и раньше появлялась вторая строка (разбор инцидента 23.08.2026, задача создалась 4 раза). Клиент генерирует UUID один раз на намерение и шлёт его во всех попытках — сервер по нему узнаёт повтор. Аддитивно, без backfill: у существующих задач client_request_id IS NULL, и старые клиенты, которые ключ не шлют, работают ровно как раньше."
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: todo
+                columnName: client_request_id
+      changes:
+        - addColumn:
+            tableName: todo
+            columns:
+              - column:
+                  name: client_request_id
+                  type: varchar(36)
+
+  # Индекс — ОТДЕЛЬНЫМ changeSet'ом (как 025b/025c). Если объединить с addColumn, то состояние
+  # «колонку добавили руками, индекса нет» уводит весь changeSet в MARK_RAN, и индекс не создастся
+  # никогда — а он здесь единственная защита от гонки двух одновременных ретраев.
+  - changeSet:
+      id: 031b-todo-client-request-id-unique-index
+      author: mngerasimenko
+      comment: "Частичный UNIQUE под ключ идемпотентности. Именно индекс, а не проверка в коде, закрывает гонку: при READ COMMITTED второй запрос ещё не видит незакоммиченную строку первого, и SELECT-перед-INSERT его не поймал бы. NULL в частичный индекс не попадает — задачи без ключа (сборки до правки, веб) не конфликтуют. Область уникальности — автор: ключ генерирует клиент, глобальной уникальности между пользователями гарантировать нельзя."
+      preConditions:
+        - onFail: HALT
+        - columnExists:
+            tableName: todo
+            columnName: client_request_id
+      changes:
+        - sql:
+            dbms: postgresql
+            sql: >
+              CREATE UNIQUE INDEX IF NOT EXISTS uq_todo_user_client_request_id
+              ON todo (user_id, client_request_id)
+              WHERE client_request_id IS NOT NULL

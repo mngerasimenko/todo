@@ -398,4 +398,58 @@ class TodoMapperTest {
         assertThat(todo.getRemindBeforeMinutes()).isEqualTo(0);
         assertThat(todo.getReminderScope()).isEqualTo(ReminderScope.SELF);
     }
+
+    // ===== Ключ идемпотентности (миграция 031) =====
+
+    @Test
+    void toEntity_CarriesClientRequestId() {
+        TodoDto dto = TodoDto.builder()
+                .name("лук репчатый")
+                .clientRequestId("3f2b1c40-0000-4000-8000-000000000001")
+                .build();
+
+        Todo result = todoMapper.toEntity(dto);
+
+        assertThat(result.getClientRequestId()).isEqualTo("3f2b1c40-0000-4000-8000-000000000001");
+    }
+
+    @Test
+    void toDtoFromRequest_CarriesClientRequestId() {
+        TodoRequest request = TodoRequest.builder()
+                .name("лук репчатый")
+                .userId(1L)
+                .listId(1L)
+                .clientRequestId("3f2b1c40-0000-4000-8000-000000000001")
+                .build();
+
+        TodoDto result = todoMapper.toDto(request);
+
+        assertThat(result.getClientRequestId()).isEqualTo("3f2b1c40-0000-4000-8000-000000000001");
+    }
+
+    @Test
+    void updateEntityFromDto_DoesNotTouchClientRequestId() {
+        // Инвариант: PUT не имеет права затирать ключ. Затрёт — следующий ретрай создания
+        // не будет распознан, и задвоение вернётся. Ключ ставится только при создании.
+        Todo todo = new Todo();
+        todo.setClientRequestId("3f2b1c40-0000-4000-8000-000000000001");
+        TodoDto dto = TodoDto.builder().name("новое имя").done(true).build();
+
+        todoMapper.updateEntityFromDto(dto, todo);
+
+        assertThat(todo.getClientRequestId()).isEqualTo("3f2b1c40-0000-4000-8000-000000000001");
+    }
+
+    @Test
+    void toDtoFromEntity_DoesNotExposeClientRequestId() {
+        // Наружу ключ не отдаём: клиент его и так знает, а в ответе он был бы лишним каналом.
+        Todo todo = new Todo();
+        todo.setName("лук репчатый");
+        todo.setDone(false);
+        todo.setClientRequestId("3f2b1c40-0000-4000-8000-000000000001");
+
+        TodoDto result = todoMapper.toDto(todo);
+
+        assertThat(result.getClientRequestId()).isNull();
+    }
 }
