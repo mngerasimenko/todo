@@ -58,6 +58,10 @@ public class TodoDto {
         return isPrivate != null && isPrivate;
     }
 
+    /** Ключ идемпотентности создания — см. {@link TodoRequest#getClientRequestId()}. */
+    @JsonProperty("client_request_id")
+    private String clientRequestId;
+
     @JsonProperty("user_id")
     private Long userId;
 

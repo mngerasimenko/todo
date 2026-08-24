@@ -12,6 +12,8 @@ import ru.mngerasimenko.todolist.dto.TodoResponse;
 import ru.mngerasimenko.todolist.exception.ListNotFoundException;
 import ru.mngerasimenko.todolist.exception.TodoNotFoundException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
 import ru.mngerasimenko.todolist.model.ReminderScope;
 import ru.mngerasimenko.todolist.model.TaskList;
@@ -39,6 +41,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -55,6 +58,7 @@ public class TodoServiceImpl implements TodoService {
     private final TodoMapper todoMapper;
     private final SubscriptionService subscriptionService;
     private final SuggestionService suggestionService;
+    private final FeatureFlagStore flagStore;
 
     private static final ZoneId FALLBACK_ZONE = ZoneId.of("Europe/Moscow");
 
@@ -79,6 +83,27 @@ public class TodoServiceImpl implements TodoService {
             throw new IllegalArgumentException("Пользователь не является участником данного списка");
         }
 
+        // Ключ идемпотентности: клиент — очередь at-least-once и при потерянном ответе
+        // повторяет POST. Повтор возвращает уже созданную задачу вместо второй строки.
+        // Проверка идёт ДО лимита подписки: у пользователя на лимите ретрай иначе получил бы
+        // 402, и клиент откатил бы локальную задачу, хотя на сервере она уже есть.
+        // Гонку двух одновременных ретраев ловит не этот SELECT (при READ COMMITTED второй
+        // ещё не видит незакоммиченную строку первого), а частичный уникальный индекс
+        // uq_todo_user_client_request_id из миграции 031: проигравший получает 409, клиент
+        // на 409 повторяет, и повтор уже находится здесь. Дубль не создаётся ни в одном случае.
+        String requestKey = clientRequestKey(todoDto);
+        if (requestKey != null) {
+            Optional<Todo> alreadyCreated = todoRepository
+                    .findFirstByUserIdAndClientRequestIdOrderByIdAsc(todoDto.getUserId(), requestKey);
+            if (alreadyCreated.isPresent()) {
+                Todo existing = alreadyCreated.get();
+                log.info("Повторное создание распознано по ключу: id={}, userId={}, listId={}, key={}",
+                        existing.getId(), todoDto.getUserId(), todoDto.getListId(), requestKey);
+                warnIfRetryPayloadDiverged(existing, todoDto, requestKey);
+                return todoMapper.toDto(existing);
+            }
+        }
+
         subscriptionService.assertCanCreateTodo(todoDto.getListId(), todoDto.getUserId());
         if (todoDto.isPrivate()) {
             subscriptionService.assertCanCreatePrivateTodo(todoDto.getUserId());
@@ -86,6 +111,9 @@ public class TodoServiceImpl implements TodoService {
 
         todoDto.setDone(false);
         todoDto.setUserId(user.getId());
+        // При выключенном флаге ключ не сохраняем: иначе уникальный индекс продолжил бы
+        // отбивать ретраи 409-ми, хотя механизм выключен. Флаг обязан возвращать «как было».
+        todoDto.setClientRequestId(requestKey);
         todoDto.setCreatedAt(LocalDateTime.now());
         Todo todo = todoMapper.toEntity(todoDto);
         todo.setUser(user);
@@ -132,6 +160,43 @@ public class TodoServiceImpl implements TodoService {
         }
 
         return todoMapper.toDto(savedTodo);
+    }
+
+    /**
+     * Ключ идемпотентности запроса — или {@code null}, если механизм не применяется:
+     * клиент ключ не прислал (сборки до этой правки, веб-клиент) либо он выключен флагом.
+     * Пустая строка равносильна отсутствию: пускать её в уникальный индекс нельзя,
+     * иначе два разных намерения с пустым ключом схлопнулись бы в одну задачу.
+     */
+    private String clientRequestKey(TodoDto todoDto) {
+        if (!flagStore.isEnabled(FeatureFlag.TODO_CREATE_DEDUPE)) {
+            return null;
+        }
+        String key = todoDto.getClientRequestId();
+        if (key == null || key.isBlank()) {
+            return null;
+        }
+        // Нормализуем края: иначе " K" и "K" стали бы двумя разными ключами одного намерения.
+        return key.trim();
+    }
+
+    /**
+     * Единственная наблюдаемость за клиентом, который переиспользует ключ не по назначению.
+     * По контракту «один ключ — одно намерение» повтор обязан нести тот же payload; если он
+     * разошёлся (например, клиент правит уже поставленную в очередь операцию создания),
+     * пользователь молча получит назад старое состояние задачи. Само поведение не меняем —
+     * ключ авторитетнее payload'а, — но такое расхождение обязано быть видно в логах.
+     * Имя задачи не логируем: колонка зашифрована at rest, plaintext в логи не выносим.
+     */
+    private void warnIfRetryPayloadDiverged(Todo existing, TodoDto todoDto, String requestKey) {
+        boolean listDiverged = !Objects.equals(existing.getListId(), todoDto.getListId());
+        boolean nameDiverged = !Objects.equals(existing.getName(), todoDto.getName());
+        boolean privacyDiverged = existing.getIsPrivate() != todoDto.isPrivate();
+        if (listDiverged || nameDiverged || privacyDiverged) {
+            log.warn("Повтор по ключу {} разошёлся с созданной задачей id={}: list={}, name={}, private={}"
+                            + " — возвращаем созданную, изменения повтора игнорируются",
+                    requestKey, existing.getId(), listDiverged, nameDiverged, privacyDiverged);
+        }
     }
 
     @Override

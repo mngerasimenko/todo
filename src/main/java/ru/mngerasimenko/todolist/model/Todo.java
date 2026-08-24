@@ -53,6 +53,15 @@ public class Todo {
     private boolean isPrivate = false;
 
     /**
+     * Ключ идемпотентности создания: UUID, сгенерированный клиентом один раз на намерение
+     * пользователя и повторённый во всех попытках отправки. Уникален в паре с user_id
+     * (частичный индекс uq_todo_user_client_request_id, миграция 031). NULL у задач,
+     * созданных клиентами, которые ключ не шлют.
+     */
+    @Column(name = "client_request_id", length = 36)
+    private String clientRequestId;
+
+    /**
      * Позиция задачи внутри списка для bulk-reorder (общая per-список).
      * Все участники списка видят один и тот же порядок.
      * Backfill через Liquibase 023 (ROW_NUMBER ORDER BY id).
@@ -204,6 +213,14 @@ public class Todo {
 
     public void setIsPrivate(boolean isPrivate) {
         this.isPrivate = isPrivate;
+    }
+
+    public String getClientRequestId() {
+        return clientRequestId;
+    }
+
+    public void setClientRequestId(String clientRequestId) {
+        this.clientRequestId = clientRequestId;
     }
 
     @JsonIgnore

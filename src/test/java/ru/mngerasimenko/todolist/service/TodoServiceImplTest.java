@@ -13,6 +13,8 @@ import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.dto.TodoResponse;
 import ru.mngerasimenko.todolist.exception.TodoNotFoundException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
 import ru.mngerasimenko.todolist.model.ReminderScope;
 import ru.mngerasimenko.todolist.model.TaskList;
@@ -67,6 +69,9 @@ public class TodoServiceImplTest {
     @Mock
     private SuggestionService suggestionService;
 
+    @Mock
+    private FeatureFlagStore flagStore;
+
     @InjectMocks
     private TodoServiceImpl todoService;
 
@@ -77,6 +82,10 @@ public class TodoServiceImplTest {
 
     @BeforeEach
     void setUp() {
+        // Прод-дефолт флага — true. Без этого стаба мок отдавал бы false, и весь набор
+        // createTodo-тестов молча гонял бы только ветку «механизм выключен».
+        lenient().when(flagStore.isEnabled(FeatureFlag.TODO_CREATE_DEDUPE)).thenReturn(true);
+
         testUser = new User();
         testUser.setId(1L);
         testUser.setName("testuser");
@@ -502,6 +511,168 @@ public class TodoServiceImplTest {
         ArgumentCaptor<Todo> captor = ArgumentCaptor.forClass(Todo.class);
         verify(todoRepository).save(captor.capture());
         assertThat(captor.getValue().getDueTimezone()).isEqualTo("Asia/Novosibirsk");
+    }
+
+    // ===== Идемпотентность создания по client_request_id (разбор инцидента 23.08.2026) =====
+
+    @Test
+    void createTodo_RetryWithSameClientRequestId_ReturnsExistingTodoWithoutSecondRow() {
+        TodoDto dto = createDto("лук репчатый", KEY);
+        Todo alreadyCreated = new Todo();
+        alreadyCreated.setId(42L);
+        alreadyCreated.setClientRequestId(KEY);
+        TodoDto alreadyCreatedDto = new TodoDto();
+        alreadyCreatedDto.setId(42L);
+        when(todoRepository.findFirstByUserIdAndClientRequestIdOrderByIdAsc(1L, KEY))
+                .thenReturn(Optional.of(alreadyCreated));
+        when(todoMapper.toDto(alreadyCreated)).thenReturn(alreadyCreatedDto);
+
+        TodoDto result = todoService.createTodo(dto);
+
+        assertThat(result.getId()).isEqualTo(42L);
+        // Ретрай не должен ни создавать строку, ни слать второй push, ни пополнять словарь,
+        // ни жечь лимит подписки.
+        verify(todoRepository, never()).save(any(Todo.class));
+        verify(pushNotificationService, never()).notifyNewTodo(anyLong(), anyLong(), anyString(), anyString());
+        verify(suggestionService, never()).track(anyString(), anyBoolean(), anyLong());
+        verify(subscriptionService, never()).assertCanCreateTodo(anyLong(), anyLong());
+    }
+
+    @Test
+    void createTodo_UnknownClientRequestId_CreatesTodoAndPersistsKey() {
+        TodoDto dto = createDto("лук репчатый", KEY);
+        when(todoRepository.findFirstByUserIdAndClientRequestIdOrderByIdAsc(1L, KEY))
+                .thenReturn(Optional.empty());
+        stubCreatePath();
+
+        todoService.createTodo(dto);
+
+        // Ловим DTO на входе настоящего маппера, а не результат собственного стаба: так тест
+        // проверяет решение сервиса, а не то, что стаб копирует поле.
+        ArgumentCaptor<TodoDto> captor = ArgumentCaptor.forClass(TodoDto.class);
+        verify(todoMapper).toEntity(captor.capture());
+        assertThat(captor.getValue().getClientRequestId()).isEqualTo(KEY);
+    }
+
+    @Test
+    void createTodo_KeyWithSurroundingSpaces_IsTrimmedBeforeLookup() {
+        TodoDto dto = createDto("лук репчатый", "  " + KEY + "  ");
+        when(todoRepository.findFirstByUserIdAndClientRequestIdOrderByIdAsc(1L, KEY))
+                .thenReturn(Optional.empty());
+        stubCreatePath();
+
+        todoService.createTodo(dto);
+
+        ArgumentCaptor<TodoDto> captor = ArgumentCaptor.forClass(TodoDto.class);
+        verify(todoMapper).toEntity(captor.capture());
+        assertThat(captor.getValue().getClientRequestId()).isEqualTo(KEY);
+    }
+
+    @Test
+    void createTodo_RetryWithDivergedList_StillReturnsCreatedTask() {
+        // Ключ авторитетнее payload'а: повтор с другим списком не создаёт вторую задачу
+        // и не переносит существующую — возвращается созданная, как есть.
+        TodoDto dto = createDto("лук репчатый", KEY);
+        dto.setListId(1L);
+        Todo alreadyCreated = new Todo();
+        alreadyCreated.setId(42L);
+        alreadyCreated.setName("лук репчатый");
+        alreadyCreated.setListId(999L);
+        alreadyCreated.setClientRequestId(KEY);
+        when(todoRepository.findFirstByUserIdAndClientRequestIdOrderByIdAsc(1L, KEY))
+                .thenReturn(Optional.of(alreadyCreated));
+        when(todoMapper.toDto(alreadyCreated)).thenReturn(new TodoDto());
+
+        todoService.createTodo(dto);
+
+        verify(todoRepository, never()).save(any(Todo.class));
+    }
+
+    @Test
+    void createTodo_TwoDeliberateAddsWithDifferentKeys_CreateTwoRows() {
+        // Осознанное «две одинаковые задачи»: ключи разные, схлопывания быть не должно.
+        TodoDto first = createDto("молоко", KEY);
+        TodoDto second = createDto("молоко", OTHER_KEY);
+        when(todoRepository.findFirstByUserIdAndClientRequestIdOrderByIdAsc(1L, KEY)).thenReturn(Optional.empty());
+        when(todoRepository.findFirstByUserIdAndClientRequestIdOrderByIdAsc(1L, OTHER_KEY)).thenReturn(Optional.empty());
+        stubCreatePath();
+
+        todoService.createTodo(first);
+        todoService.createTodo(second);
+
+        verify(todoRepository, times(2)).save(any(Todo.class));
+    }
+
+    @Test
+    void createTodo_NoClientRequestId_CreatesWithoutLookup() {
+        // Старая сборка и веб ключ не шлют — поведение обязано остаться прежним.
+        TodoDto dto = createDto("лук репчатый", null);
+        stubCreatePath();
+
+        todoService.createTodo(dto);
+
+        verify(todoRepository, never()).findFirstByUserIdAndClientRequestIdOrderByIdAsc(anyLong(), any());
+        verify(todoRepository).save(any(Todo.class));
+    }
+
+    @Test
+    void createTodo_BlankClientRequestId_TreatedAsAbsent() {
+        TodoDto dto = createDto("лук репчатый", "   ");
+        stubCreatePath();
+
+        todoService.createTodo(dto);
+
+        verify(todoRepository, never()).findFirstByUserIdAndClientRequestIdOrderByIdAsc(anyLong(), any());
+        ArgumentCaptor<Todo> captor = ArgumentCaptor.forClass(Todo.class);
+        verify(todoRepository).save(captor.capture());
+        assertThat(captor.getValue().getClientRequestId()).isNull();
+    }
+
+    @Test
+    void createTodo_FlagOff_SkipsLookupAndDoesNotPersistKey() {
+        // Флаг обязан возвращать поведение «как было»: без записи ключа, иначе уникальный
+        // индекс продолжил бы отбивать ретраи 409-ми при выключенном механизме.
+        TodoDto dto = createDto("лук репчатый", KEY);
+        when(flagStore.isEnabled(FeatureFlag.TODO_CREATE_DEDUPE)).thenReturn(false);
+        stubCreatePath();
+
+        todoService.createTodo(dto);
+
+        verify(todoRepository, never()).findFirstByUserIdAndClientRequestIdOrderByIdAsc(anyLong(), any());
+        ArgumentCaptor<Todo> captor = ArgumentCaptor.forClass(Todo.class);
+        verify(todoRepository).save(captor.capture());
+        assertThat(captor.getValue().getClientRequestId()).isNull();
+    }
+
+    private static final String KEY = "3f2b1c40-0000-4000-8000-000000000001";
+    private static final String OTHER_KEY = "3f2b1c40-0000-4000-8000-000000000002";
+
+    /** Минимальный DTO создания задачи с заданным ключом идемпотентности. */
+    private TodoDto createDto(String name, String clientRequestId) {
+        TodoDto dto = new TodoDto();
+        dto.setName(name);
+        dto.setUserId(1L);
+        dto.setListId(1L);
+        dto.setClientRequestId(clientRequestId);
+        lenient().when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+        lenient().when(taskListRepository.findById(1L)).thenReturn(Optional.of(testTaskList));
+        lenient().when(taskListUserRepository.existsByIdListIdAndIdUserId(1L, 1L)).thenReturn(true);
+        return dto;
+    }
+
+    /** Стабы хвоста создания — нужны только там, где ретрай НЕ распознан. */
+    private void stubCreatePath() {
+        lenient().when(todoMapper.toEntity(any(TodoDto.class))).thenAnswer(inv -> {
+            TodoDto d = inv.getArgument(0);
+            Todo entity = new Todo();
+            entity.setName(d.getName());
+            entity.setDone(false);
+            entity.setIsPrivate(d.isPrivate());
+            entity.setClientRequestId(d.getClientRequestId());
+            return entity;
+        });
+        lenient().when(todoRepository.save(any(Todo.class))).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(todoMapper.toDto(any(Todo.class))).thenReturn(new TodoDto());
     }
 
     /**

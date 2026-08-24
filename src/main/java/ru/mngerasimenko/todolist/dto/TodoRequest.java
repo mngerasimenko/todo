@@ -51,6 +51,17 @@ public class TodoRequest {
     @JsonProperty("is_private")
     private boolean isPrivate;
 
+    /**
+     * Ключ идемпотентности создания: UUID, который клиент генерирует ОДИН раз на намерение
+     * пользователя и повторяет во всех попытках отправки. Позволяет серверу отличить ретрай
+     * потерянного запроса от осознанного добавления второй такой же задачи.
+     * Опционален: старые сборки и веб его не шлют и создают задачи как раньше.
+     * Используется только при создании; в PUT игнорируется.
+     */
+    @JsonProperty("client_request_id")
+    @Size(max = 36, message = "client_request_id must not exceed 36 characters")
+    private String clientRequestId;
+
     @JsonProperty("due_date")
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate dueDate;
