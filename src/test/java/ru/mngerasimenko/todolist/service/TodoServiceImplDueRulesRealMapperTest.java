@@ -132,6 +132,41 @@ class TodoServiceImplDueRulesRealMapperTest {
     }
 
     /**
+     * Автор задачи неизменен — с НАСТОЯЩИМ маппером. В {@link TodoServiceImplTest} маппер
+     * замокирован, поэтому там {@code updateEntityFromDto} — пустышка: если бы кто-то
+     * скопировал в него строку {@code todo.setUserId(dto.getUserId())} из {@code toEntity},
+     * ни тест сервиса (маппер мокирован), ни тест контроллера (сервис мокирован) этого бы
+     * не заметили, и переназначение автора вернулось бы через заднюю дверь.
+     */
+    @Test
+    void updateTodo_SpoofedUserIdWithRealMapper_KeepsOriginalAuthor() {
+        Todo existing = new Todo();
+        existing.setId(1L);
+        existing.setName("Полить теплицу");
+        existing.setDone(false);
+        existing.setCreatedAt(LocalDateTime.now());
+        existing.setUser(testUser);
+        existing.setTaskList(testTaskList);
+
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(new TaskListUser(testTaskList, testUser, TaskListRole.USER)));
+        when(todoRepository.save(any(Todo.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TodoDto dto = new TodoDto();
+        dto.setName("Полить теплицу");
+        dto.setUserId(999L);
+        dto.setDone(false);
+
+        TodoDto result = todoService.updateTodo(1L, dto, 1L);
+
+        assertThat(existing.getUser()).isSameAs(testUser);
+        assertThat(existing.getUserId()).isEqualTo(1L);
+        // Ответ клиенту тоже несёт прежнего автора, а не подсунутого
+        assertThat(result.getUserId()).isEqualTo(1L);
+    }
+
+    /**
      * CRITICAL из финального ревью ветки: оба выпущенных клиента (веб-форма и Android
      * TodoRequest) шлют обновление без единого due-ключа вообще. С реальным маппером
      * updateEntityFromDto безусловно копирует due-поля из dto (все null) в entity, а

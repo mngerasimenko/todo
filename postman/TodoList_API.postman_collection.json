@@ -1857,17 +1857,23 @@
 									"",
 									"pm.test(\"Response has three groups\", function () {",
 									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData.overdue).to.be.an('array');",
-									"    pm.expect(jsonData.today).to.be.an('array');",
-									"    pm.expect(jsonData.upcoming).to.be.an('array');",
+									"    pm.expect(jsonData.overdue).to.be.an(\"array\");",
+									"    pm.expect(jsonData.today).to.be.an(\"array\");",
+									"    pm.expect(jsonData.upcoming).to.be.an(\"array\");",
 									"});",
 									"",
-									"pm.test(\"Created due-date todo is present\", function () {",
+									"// Задача создана со сроком «через 2 дня» (см. pre-request у Create Todo With Due Date),",
+									"// поэтому корзина известна заранее: upcoming, и только она. Проверка «есть хоть где-то»",
+									"// прошла бы и при неверной раскладке по корзинам.",
+									"pm.test(\"Created due-date todo is in the upcoming bucket only\", function () {",
 									"    var jsonData = pm.response.json();",
-									"    var dueTodoId = parseInt(pm.environment.get('dueTodoId'), 10);",
-									"    var all = [].concat(jsonData.overdue, jsonData.today, jsonData.upcoming);",
-									"    var found = all.some(function (t) { return t.id === dueTodoId; });",
-									"    pm.expect(found).to.be.true;",
+									"    var dueTodoId = parseInt(pm.environment.get(\"dueTodoId\"), 10);",
+									"    var has = function (arr) {",
+									"        return arr.some(function (t) { return t.id === dueTodoId; });",
+									"    };",
+									"    pm.expect(has(jsonData.upcoming), \"ожидалась в upcoming\").to.be.true;",
+									"    pm.expect(has(jsonData.today), \"не должна быть в today\").to.be.false;",
+									"    pm.expect(has(jsonData.overdue), \"не должна быть в overdue\").to.be.false;",
 									"});"
 								],
 								"type": "text/javascript"
@@ -1964,6 +1970,260 @@
 					"response": []
 				},
 				{
+					"name": "Create Todo (idempotency key)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Уникальные значения на прогон: имя нужно, чтобы отличить строки этого прогона",
+									"// от чужих задач в списке, ключи — чтобы прогоны не конфликтовали по uniq-индексу.",
+									"pm.environment.set(\"idemName\", \"idem-check-\" + pm.variables.replaceIn(\"{{$guid}}\").slice(0, 8));",
+									"pm.environment.set(\"idemKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+									"pm.environment.set(\"idemKey2\", pm.variables.replaceIn(\"{{$guid}}\"));"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Todo created with idempotency key\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.id).to.exist;",
+									"    pm.expect(jsonData.name).to.eql(pm.environment.get(\"idemName\"));",
+									"    pm.environment.set(\"idemTodoId\", jsonData.id);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"{{idemName}}\",\n  \"user_id\": {{userId}},\n  \"list_id\": {{listId}},\n  \"is_private\": false,\n  \"client_request_id\": \"{{idemKey}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/create",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"create"
+							]
+						},
+						"description": "Создание задачи с ключом идемпотентности `client_request_id`.\n\nКлиент генерирует UUID один раз на намерение пользователя и повторяет его во всех попытках отправки. Имя задачи уникально для прогона (`idemName`), чтобы следующий запрос мог посчитать строки именно этого прогона."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Todo Retry (same key returns same task)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Retry with the same key returns the already created task\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    var firstId = parseInt(pm.environment.get(\"idemTodoId\"), 10);",
+									"    pm.expect(jsonData.id).to.eql(firstId);",
+									"    pm.expect(jsonData.name).to.eql(pm.environment.get(\"idemName\"));",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"{{idemName}}\",\n  \"user_id\": {{userId}},\n  \"list_id\": {{listId}},\n  \"is_private\": false,\n  \"client_request_id\": \"{{idemKey}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/create",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"create"
+							]
+						},
+						"description": "Ретрай потерянного запроса: тело байт-в-байт то же, включая `client_request_id`.\n\nСервер обязан вернуть **уже созданную** задачу с тем же `id`, а не создать вторую строку. Именно этот сценарий давал задвоение до фикса (разбор инцидента 23.08.2026)."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Todo (different key creates second task)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Different key creates a separate task\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    var firstId = parseInt(pm.environment.get(\"idemTodoId\"), 10);",
+									"    pm.expect(jsonData.id).to.not.eql(firstId);",
+									"    pm.environment.set(\"idemTodoId2\", jsonData.id);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"{{idemName}}\",\n  \"user_id\": {{userId}},\n  \"list_id\": {{listId}},\n  \"is_private\": false,\n  \"client_request_id\": \"{{idemKey2}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/create",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"create"
+							]
+						},
+						"description": "Осознанное повторное добавление того же текста несёт ДРУГОЙ ключ и обязано создать вторую задачу. Проверяет, что дедуп не схлопывает разные намерения — ради этого механизм и построен на ключе, а не на совпадении имени."
+					},
+					"response": []
+				},
+				{
+					"name": "Get List Todos (retry did not duplicate)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Exactly two tasks with the run name: retry collapsed, second key did not\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    var name = pm.environment.get(\"idemName\");",
+									"    var matching = jsonData.filter(function (t) { return t.name === name; });",
+									"    pm.expect(matching.length).to.eql(2);",
+									"    var ids = matching.map(function (t) { return t.id; }).sort();",
+									"    var expected = [",
+									"        parseInt(pm.environment.get(\"idemTodoId\"), 10),",
+									"        parseInt(pm.environment.get(\"idemTodoId2\"), 10)",
+									"    ].sort();",
+									"    pm.expect(ids).to.eql(expected);",
+									"});",
+									"",
+									"// Переменные прогона больше не нужны: сами задачи уносит Delete List в конце папки.",
+									"pm.environment.unset(\"idemName\");",
+									"pm.environment.unset(\"idemKey\");",
+									"pm.environment.unset(\"idemKey2\");",
+									"pm.environment.unset(\"idemTodoId\");",
+									"pm.environment.unset(\"idemTodoId2\");"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/lists/{{listId}}/todos",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"lists",
+								"{{listId}}",
+								"todos"
+							]
+						},
+						"description": "Проверка на уровне данных, а не ответа: в списке ровно ДВЕ задачи с уникальным именем прогона — одна от первой отправки (ретрай в неё схлопнулся) и одна от другого ключа. Три означали бы, что ретрай создал дубль."
+					},
+					"response": []
+				},
+				{
 					"name": "Delete Todo",
 					"event": [
 						{
@@ -2052,7 +2312,7 @@
 					"response": []
 				}
 			],
-			"description": "CRUD операции для задач (требуют JWT токен)",
+			"description": "CRUD операции для задач (требуют JWT токен)\n\n**Про due-запросы здесь и в папке `Due Dates`.** Наборы намеренно разные, это не дубль:\n\n- здесь due-поля проверяются внутри общей цепочки `Auth → Lists → Todos` (общие `accessToken`/`listId`), то есть в тех же условиях, в каких работает клиент, и на корзине `upcoming` (дата «через 2 дня»);\n- папка `Due Dates` самодостаточна (свой пользователь, свой список, своя чистка) и покрывает корзину `today`, сохранение полей при переименовании, снятие срока через `due_date: null`, форс `reminder_scope=SELF` для приватной задачи и дефолты пояса/времени.\n\nУникально только здесь: `Update Todo Due Date` — смена времени срока и окна напоминания у существующей задачи.",
 			"auth": {
 				"type": "bearer",
 				"bearer": [
@@ -2520,16 +2780,29 @@
 						}
 					],
 					"request": {
-						"auth": { "type": "noauth" },
+						"auth": {
+							"type": "noauth"
+						},
 						"method": "GET",
 						"header": [],
 						"url": {
 							"raw": "{{baseUrl}}/api/suggestions?prefix=хле&limit=5",
-							"host": [ "{{baseUrl}}" ],
-							"path": [ "api", "suggestions" ],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"suggestions"
+							],
 							"query": [
-								{ "key": "prefix", "value": "хле" },
-								{ "key": "limit", "value": "5" }
+								{
+									"key": "prefix",
+									"value": "хле"
+								},
+								{
+									"key": "limit",
+									"value": "5"
+								}
 							]
 						},
 						"description": "Глобальный словарь подсказок (Server R-6). **Публичный** (без JWT)."
@@ -2557,14 +2830,26 @@
 						}
 					],
 					"request": {
-						"auth": { "type": "noauth" },
+						"auth": {
+							"type": "noauth"
+						},
 						"method": "GET",
 						"header": [],
 						"url": {
 							"raw": "{{baseUrl}}/api/suggestions?prefix=х",
-							"host": [ "{{baseUrl}}" ],
-							"path": [ "api", "suggestions" ],
-							"query": [ { "key": "prefix", "value": "х" } ]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"suggestions"
+							],
+							"query": [
+								{
+									"key": "prefix",
+									"value": "х"
+								}
+							]
 						},
 						"description": "Префикс короче min-prefix-length — сервис возвращает пустой массив."
 					},
@@ -2586,16 +2871,29 @@
 						}
 					],
 					"request": {
-						"auth": { "type": "noauth" },
+						"auth": {
+							"type": "noauth"
+						},
 						"method": "GET",
 						"header": [],
 						"url": {
 							"raw": "{{baseUrl}}/api/suggestions?prefix=хле&limit=999",
-							"host": [ "{{baseUrl}}" ],
-							"path": [ "api", "suggestions" ],
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"suggestions"
+							],
 							"query": [
-								{ "key": "prefix", "value": "хле" },
-								{ "key": "limit", "value": "999" }
+								{
+									"key": "prefix",
+									"value": "хле"
+								},
+								{
+									"key": "limit",
+									"value": "999"
+								}
 							]
 						},
 						"description": "limit > 50 → 400 (bean validation @Max(50))."
@@ -2622,8 +2920,16 @@
 						"header": [],
 						"url": {
 							"raw": "{{baseUrl}}/api/admin/suggestions/test_block/block",
-							"host": [ "{{baseUrl}}" ],
-							"path": [ "api", "admin", "suggestions", "test_block", "block" ]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"suggestions",
+								"test_block",
+								"block"
+							]
 						},
 						"description": "Блокировка строки в словаре. Доступна только email'ам из app.super-admin.emails. Возвращает 204 если строка была заблокирована, 404 если её нет в словаре."
 					},
@@ -2649,8 +2955,16 @@
 						"header": [],
 						"url": {
 							"raw": "{{baseUrl}}/api/admin/suggestions/test_block/block",
-							"host": [ "{{baseUrl}}" ],
-							"path": [ "api", "admin", "suggestions", "test_block", "block" ]
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"suggestions",
+								"test_block",
+								"block"
+							]
 						},
 						"description": "Не-админский пользователь получает 404 (admin-эндпоинты скрыты accessDeniedHandler'ом)."
 					},

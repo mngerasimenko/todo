@@ -364,8 +364,16 @@ public class TodoServiceImplTest {
         verify(todoRepository, never()).save(any(Todo.class));
     }
 
+    /**
+     * Переназначение автора через PUT закрыто: user_id из тела игнорируется, автор задачи
+     * остаётся прежним. Раньше любой, кому разрешено править задачу, мог переписать авторство
+     * на ЛЮБОГО пользователя системы — членство нового «автора» в списке не проверялось,
+     * и задача всплывала в его выборках. Легитимного сценария у поля нет: и Android
+     * (TodoListViewModel: userId = todo.userId), и веб (TodoForm.tsx: user_id = editingTodo.user_id)
+     * шлют в PUT автора задачи, а не редактора.
+     */
     @Test
-    void updateTodo_WithChangedUserIdAndNonExistentUser_ThrowsUserNotFoundException() {
+    void updateTodo_SpoofedUserIdInBody_KeepsOriginalAuthor() {
         TodoDto updateDto = new TodoDto();
         updateDto.setName("Updated Todo");
         updateDto.setUserId(999L);
@@ -379,50 +387,13 @@ public class TodoServiceImplTest {
         when(todoRepository.findById(1L)).thenReturn(Optional.of(existingTodo));
         when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
                 .thenReturn(Optional.of(new TaskListUser(testTaskList, testUser, TaskListRole.USER)));
-        when(userRepository.findById(999L)).thenReturn(Optional.empty());
+        when(todoRepository.save(any(Todo.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(todoMapper.toDto(any(Todo.class))).thenReturn(new TodoDto());
 
-        assertThatThrownBy(() -> todoService.updateTodo(1L, updateDto, 1L))
-                .isInstanceOf(UserNotFoundException.class)
-                .hasMessage("User not found with id: 999");
+        todoService.updateTodo(1L, updateDto, 1L);
 
-        verify(todoRepository, never()).save(any(Todo.class));
-    }
-
-    @Test
-    void updateTodo_UpdatesUserIfUserIdChanged() {
-        User newUser = new User();
-        newUser.setId(2L);
-        newUser.setName("newuser");
-
-        TodoDto updateDto = new TodoDto();
-        updateDto.setName("Updated Todo");
-        updateDto.setUserId(2L);
-
-        Todo existingTodo = new Todo();
-        existingTodo.setId(1L);
-        existingTodo.setUser(testUser);
-        existingTodo.setTaskList(testTaskList);
-
-        Todo updatedTodo = new Todo();
-        updatedTodo.setId(1L);
-        updatedTodo.setUser(newUser);
-
-        TodoDto updatedTodoDto = new TodoDto();
-        updatedTodoDto.setId(1L);
-        updatedTodoDto.setUserId(newUser.getId());
-
-        when(todoRepository.findById(1L)).thenReturn(Optional.of(existingTodo));
-        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
-                .thenReturn(Optional.of(new TaskListUser(testTaskList, testUser, TaskListRole.USER)));
-        when(userRepository.findById(2L)).thenReturn(Optional.of(newUser));
-        doNothing().when(todoMapper).updateEntityFromDto(updateDto, existingTodo);
-        when(todoRepository.save(any(Todo.class))).thenReturn(updatedTodo);
-        when(todoMapper.toDto(updatedTodo)).thenReturn(updatedTodoDto);
-
-        TodoDto result = todoService.updateTodo(1L, updateDto, 1L);
-
-        assertThat(result.getUserId()).isEqualTo(2L);
-        verify(userRepository, times(1)).findById(2L);
+        assertThat(existingTodo.getUser()).isSameAs(testUser);
+        verify(userRepository, never()).findById(999L);
         verify(todoMapper, times(1)).updateEntityFromDto(updateDto, existingTodo);
     }
 
@@ -832,9 +803,13 @@ public class TodoServiceImplTest {
 
     @Test
     void getTodosByUserId_WithSameUser_ReturnsAllTodos() {
+        // Приватная — намеренно: свои приватные задачи владелец обязан видеть.
+        // Без этого фикс «фильтровать приватные» легко переносится за пределы ветки
+        // «чужой пользователь», и человек перестаёт видеть собственные задачи.
         Todo userTodo2 = new Todo();
         userTodo2.setId(2L);
         userTodo2.setName("User Todo 2");
+        userTodo2.setIsPrivate(true);
 
         TodoDto dto2 = new TodoDto();
         dto2.setId(2L);
@@ -857,23 +832,64 @@ public class TodoServiceImplTest {
         privateTodo.setId(2L);
         privateTodo.setName("Private Todo");
         privateTodo.setIsPrivate(true);
+        privateTodo.setListId(1L);
 
         Todo publicTodo = new Todo();
         publicTodo.setId(3L);
         publicTodo.setName("Public Todo");
         publicTodo.setIsPrivate(false);
+        publicTodo.setListId(1L);
 
         TodoDto publicDto = new TodoDto();
         publicDto.setId(3L);
         publicDto.setName("Public Todo");
 
-        when(todoRepository.findByUserId(1L)).thenReturn(Arrays.asList(privateTodo, publicTodo));
+        // Запрашивающий состоит в том же списке; приватные отсекает сам запрос
+        when(taskListUserRepository.findListIdsByUserId(99L)).thenReturn(List.of(1L));
+        when(todoRepository.findByAuthorInListsVisibleToOthers(1L, List.of(1L)))
+                .thenReturn(List.of(publicTodo));
         when(todoMapper.toDto(publicTodo)).thenReturn(publicDto);
 
         List<TodoDto> result = todoService.getTodosByUserId(1L, 99L);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getName()).isEqualTo("Public Todo");
+        // Чужой профиль не должен поднимать все задачи автора ради отбора в памяти
+        verify(todoRepository, never()).findByUserId(1L);
+    }
+
+    /**
+     * IDOR на чтение: чужие задачи видны только через ОБЩИЕ списки.
+     * Раньше выборка шла голым findByUserId без привязки к спискам, и любой держатель
+     * валидного токена перебором GET /api/todos/user/{id} читал непубличные задачи всех
+     * пользователей системы — включая списки, куда его никто не приглашал.
+     */
+    @Test
+    void getTodosByUserId_ForeignUserWithoutSharedList_ReturnsEmpty() {
+        // Запрашивающий не состоит ни в одном списке владельца задач
+        when(taskListUserRepository.findListIdsByUserId(99L)).thenReturn(List.of(42L));
+        when(todoRepository.findByAuthorInListsVisibleToOthers(1L, List.of(42L)))
+                .thenReturn(List.of());
+
+        List<TodoDto> result = todoService.getTodosByUserId(1L, 99L);
+
+        assertThat(result).isEmpty();
+        verify(todoRepository, never()).findByUserId(1L);
+    }
+
+    /**
+     * Пользователь без единого общего списка не должен стоить нам похода в таблицу задач:
+     * запрос обрывается на проверке членства. Иначе перебор чужих id оплачивался бы
+     * полным сканированием `todo` с расшифровкой имён — дешёвый DoS.
+     */
+    @Test
+    void getTodosByUserId_RequesterInNoLists_ShortCircuitsBeforeQueryingTodos() {
+        when(taskListUserRepository.findListIdsByUserId(99L)).thenReturn(List.of());
+
+        List<TodoDto> result = todoService.getTodosByUserId(1L, 99L);
+
+        assertThat(result).isEmpty();
+        verifyNoInteractions(todoRepository);
     }
 
     @Test
