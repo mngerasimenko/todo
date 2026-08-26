@@ -206,11 +206,14 @@ public class TodoServiceImpl implements TodoService {
                 .orElseThrow(() -> new TodoNotFoundException("Todo not found with id: " + id));
         assertCanModifyTodo(existingTodo, requestingUserId, false);
 
+        // Автор задачи неизменен. Раньше user_id из тела переназначал авторство на любого
+        // пользователя системы — членство нового «автора» в списке не проверялось, и задачу
+        // можно было «подбросить» постороннему, после чего она всплывала в его выборках.
+        // Легитимного сценария у поля нет: оба клиента шлют сюда автора задачи, а не редактора,
+        // поэтому значение просто игнорируется — расхождение уходит в лог как сигнал подмены.
         if (todoDto.getUserId() != null && !todoDto.getUserId().equals(existingTodo.getUserId())) {
-            User newUser = userRepository.findById(todoDto.getUserId())
-                    .orElseThrow(() -> new UserNotFoundException(
-                            "User not found with id: " + todoDto.getUserId()));
-            existingTodo.setUser(newUser);
+            log.warn("Попытка сменить автора задачи id={}: user_id из тела={}, автор остаётся={}",
+                    id, todoDto.getUserId(), existingTodo.getUserId());
         }
 
         boolean wasDone = Boolean.TRUE.equals(existingTodo.isDone());
@@ -250,7 +253,12 @@ public class TodoServiceImpl implements TodoService {
 
         // Логика completedAt и completorUser
         if (!wasDone && nowDone) {
-            // Задача выполнена: проставляем время выполнения и исполнителя
+            // Задача выполнена: проставляем время выполнения и исполнителя.
+            // ВНИМАНИЕ: completorUserId сюда приходит НЕ из HTTP-тела — в TodoRequest такого
+            // поля нет и маппер его не переносит, так что через REST значение всегда null.
+            // Если поле когда-нибудь появится в TodoRequest, здесь нужна проверка членства
+            // в списке (как в markAsDone, который берёт исполнителя из JWT): иначе перебором
+            // completor_user_id можно вытащить расшифрованные имена чужих пользователей.
             existingTodo.setCompletedAt(LocalDateTime.now());
             if (todoDto.getCompletorUserId() != null) {
                 User completor = userRepository.findById(todoDto.getCompletorUserId())
@@ -328,15 +336,24 @@ public class TodoServiceImpl implements TodoService {
     @Override
     @Transactional(readOnly = true)
     public List<TodoDto> getTodosByUserId(Long userId, Long requestingUserId) {
-        List<Todo> todos = todoRepository.findByUserId(userId);
+        List<Todo> todos;
+        if (userId.equals(requestingUserId)) {
+            todos = todoRepository.findByUserId(userId);
+        } else {
+            // Чужие задачи отдаём только через ОБЩИЕ списки и только публичные. Без этой
+            // отсечки выборка шла голым findByUserId, и любой держатель валидного токена
+            // перебором GET /api/todos/user/{id} вычитывал задачи всех пользователей —
+            // включая списки, куда его не приглашали.
+            // Членство спрашиваем ПЕРВЫМ: пустой ответ обрывает запрос до похода в todo,
+            // иначе атака стоила бы нам полного сканирования таблицы с расшифровкой имён.
+            List<Long> sharedListIds = taskListUserRepository.findListIdsByUserId(requestingUserId);
+            if (sharedListIds.isEmpty()) {
+                return List.of();
+            }
+            todos = todoRepository.findByAuthorInListsVisibleToOthers(userId, sharedListIds);
+        }
         log.debug("Загрузка задач для userId={}, requestingUserId={}, найдено: {}",
                 userId, requestingUserId, todos.size());
-        // Фильтрация: приватные задачи видны только их создателю
-        if (!userId.equals(requestingUserId)) {
-            todos = todos.stream()
-                    .filter(todo -> !Boolean.TRUE.equals(todo.getIsPrivate()))
-                    .toList();
-        }
         return todos.stream()
                 .map(todoMapper::toDto)
                 .toList();

@@ -73,6 +73,17 @@ public interface TodoRepository extends JpaRepository<Todo, Long> {
     List<Todo> findByListIdsVisibleToUser(@Param("listIds") List<Long> listIds, @Param("userId") Long userId);
 
     /**
+     * Публичные задачи конкретного автора в пределах указанных списков.
+     * Для чужого профиля: отбор идёт в SQL, а не в памяти — иначе пришлось бы поднять
+     * ВСЕ задачи автора (полное сканирование `todo` — индекса по одному user_id нет)
+     * и расшифровать каждое имя, чтобы затем выбросить почти всё.
+     */
+    @Query("SELECT t FROM Todo t JOIN FETCH t.user LEFT JOIN FETCH t.completorUser " +
+            "WHERE t.user.id = :userId AND t.taskList.id IN :listIds AND t.isPrivate = false")
+    List<Todo> findByAuthorInListsVisibleToOthers(@Param("userId") Long userId,
+                                                  @Param("listIds") List<Long> listIds);
+
+    /**
      * Количество задач в списке.
      */
     @Query("SELECT COUNT(t) FROM Todo t WHERE t.taskList.id = :listId")

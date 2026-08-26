@@ -84,6 +84,10 @@ class TodoRestControllerTest {
     @Test
     @WithMockUser(username = "user@mail.ru", roles = {"USER"})
     void create_ValidRequest_ReturnsCreatedTodo() throws Exception {
+        UserDto currentUser = new UserDto();
+        currentUser.setId(1L);
+        currentUser.setName("user");
+
         TodoDto createdDto = new TodoDto();
         createdDto.setId(2L);
         createdDto.setName("New Todo");
@@ -100,6 +104,7 @@ class TodoRestControllerTest {
         createdResponse.setListId(1L);
         createdResponse.setCreatedAt(createdDto.getCreatedAt());
 
+        when(userService.getUserDtoForResponse("user@mail.ru")).thenReturn(currentUser);
         when(todoMapper.toDto(any(TodoRequest.class))).thenReturn(createdDto);
         when(todoService.createTodo(any(TodoDto.class))).thenReturn(createdDto);
         when(todoMapper.toResponse(any(TodoDto.class))).thenReturn(createdResponse);
@@ -119,6 +124,87 @@ class TodoRestControllerTest {
         verify(todoMapper, times(1)).toResponse(any(TodoDto.class));
     }
 
+    /**
+     * IDOR: автор задачи должен браться из JWT, а не из тела запроса.
+     * Тело объявляет автором чужого пользователя — сервер обязан подставить своего.
+     * Без этого любой держатель валидного токена пишет задачи в чужие списки от чужого
+     * имени: проверка членства в TodoServiceImpl смотрит на user_id ИЗ ТЕЛА, то есть
+     * на жертву, а не на отправителя.
+     */
+    @Test
+    @WithMockUser(username = "user@mail.ru", roles = {"USER"})
+    void create_SpoofedUserIdInBody_UsesAuthenticatedUserInstead() throws Exception {
+        UserDto currentUser = new UserDto();
+        currentUser.setId(1L);
+        currentUser.setName("user");
+
+        TodoRequest spoofed = new TodoRequest();
+        spoofed.setName("Задача от чужого имени");
+        spoofed.setUserId(999L);
+        spoofed.setListId(7L);
+
+        // Маппер отдаёт то, что пришло в теле, — подмена автора должна произойти после него
+        TodoDto mappedFromBody = new TodoDto();
+        mappedFromBody.setName("Задача от чужого имени");
+        mappedFromBody.setUserId(999L);
+        mappedFromBody.setListId(7L);
+
+        when(userService.getUserDtoForResponse("user@mail.ru")).thenReturn(currentUser);
+        when(todoMapper.toDto(any(TodoRequest.class))).thenReturn(mappedFromBody);
+        when(todoService.createTodo(any(TodoDto.class))).thenReturn(mappedFromBody);
+        when(todoMapper.toResponse(any(TodoDto.class))).thenReturn(new TodoResponse());
+
+        mockMvc.perform(post("/api/todos/create")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(spoofed)))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<TodoDto> sentToService = ArgumentCaptor.forClass(TodoDto.class);
+        verify(todoService).createTodo(sentToService.capture());
+        assertThat(sentToService.getValue().getUserId())
+                .as("автор берётся из JWT, значение user_id из тела игнорируется")
+                .isEqualTo(1L);
+        // list_id из тела остаётся: доступ к списку проверяет сервис по автору из токена
+        assertThat(sentToService.getValue().getListId()).isEqualTo(7L);
+    }
+
+    /**
+     * Токен ещё жив, а пользователя за ним уже нет (удалён аккаунт, сменён email).
+     * Ожидается 401, и это не косметика: Android на 404 в todo-операции считает задачу
+     * удалённой на сервере и стирает её из Room (SyncManagerImpl.handleError), а у
+     * несинхронизированного создания там отрицательный временный id — задача исчезает
+     * безвозвратно. На 401 очередь уцелеет. И уж точно не 500 от NPE.
+     */
+    @Test
+    @WithMockUser(username = "ghost@mail.ru", roles = {"USER"})
+    void create_AuthenticatedUserVanished_Returns401NotServerError() throws Exception {
+        when(userService.getUserDtoForResponse("ghost@mail.ru")).thenReturn(null);
+
+        mockMvc.perform(post("/api/todos/create")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(testTodoRequest)))
+                .andExpect(status().isUnauthorized());
+
+        verify(todoService, never()).createTodo(any(TodoDto.class));
+    }
+
+    /**
+     * То же самое для мутации существующей задачи — путь, по которому ходит фоновая
+     * синхронизация. Здесь цена ошибки выше всего: 404 стёр бы локальную задачу.
+     */
+    @Test
+    @WithMockUser(username = "ghost@mail.ru", roles = {"USER"})
+    void update_AuthenticatedUserVanished_Returns401NotNotFound() throws Exception {
+        when(userService.getUserDtoForResponse("ghost@mail.ru")).thenReturn(null);
+
+        mockMvc.perform(put("/api/todos/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(testTodoRequest)))
+                .andExpect(status().isUnauthorized());
+
+        verify(todoService, never()).updateTodo(any(Long.class), any(TodoDto.class), any(Long.class));
+    }
+
     @Test
     @WithMockUser(username = "user@mail.ru", roles = {"USER"})
     void create_InvalidRequest_ReturnsBadRequest() throws Exception {
@@ -130,9 +216,19 @@ class TodoRestControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
+    /**
+     * Гонка: токен резолвится, но к моменту сохранения строки пользователя уже нет
+     * (аккаунт удалён между двумя запросами). Единственный оставшийся путь к этому 404 —
+     * автор больше не приходит из тела, поэтому «несуществующий user_id» подсунуть нельзя.
+     */
     @Test
     @WithMockUser(username = "user@mail.ru", roles = {"USER"})
     void create_UserNotFound_ReturnsNotFound() throws Exception {
+        UserDto currentUser = new UserDto();
+        currentUser.setId(1L);
+        currentUser.setName("user");
+
+        when(userService.getUserDtoForResponse("user@mail.ru")).thenReturn(currentUser);
         when(todoMapper.toDto(any(TodoRequest.class))).thenReturn(testTodoDto);
         when(todoService.createTodo(any(TodoDto.class)))
                 .thenThrow(new UserNotFoundException("User not found with id: 999"));
@@ -167,7 +263,7 @@ class TodoRestControllerTest {
         updatedResponse.setListId(1L);
         updatedResponse.setCreatedAt(updatedDto.getCreatedAt());
 
-        when(userService.getUserByEmail("user@mail.ru")).thenReturn(currentUser);
+        when(userService.getUserDtoForResponse("user@mail.ru")).thenReturn(currentUser);
         when(todoMapper.toDto(any(TodoRequest.class))).thenReturn(updatedDto);
         when(todoService.updateTodo(eq(1L), any(TodoDto.class), eq(1L))).thenReturn(updatedDto);
         when(todoMapper.toResponse(any(TodoDto.class))).thenReturn(updatedResponse);
@@ -192,7 +288,7 @@ class TodoRestControllerTest {
         currentUser.setId(1L);
         currentUser.setName("user");
 
-        when(userService.getUserByEmail("user@mail.ru")).thenReturn(currentUser);
+        when(userService.getUserDtoForResponse("user@mail.ru")).thenReturn(currentUser);
         when(todoMapper.toDto(any(TodoRequest.class))).thenReturn(testTodoDto);
         when(todoService.updateTodo(eq(999L), any(TodoDto.class), eq(1L)))
                 .thenThrow(new TodoNotFoundException("Todo not found with id: 999"));
@@ -216,7 +312,7 @@ class TodoRestControllerTest {
         currentUser.setId(1L);
         currentUser.setName("user");
 
-        when(userService.getUserByEmail("user@mail.ru")).thenReturn(currentUser);
+        when(userService.getUserDtoForResponse("user@mail.ru")).thenReturn(currentUser);
         when(todoMapper.toDto(any(TodoRequest.class))).thenReturn(testTodoDto);
         when(todoService.updateTodo(eq(1L), any(TodoDto.class), eq(1L))).thenReturn(testTodoDto);
         when(todoMapper.toResponse(any(TodoDto.class))).thenReturn(testTodoResponse);
@@ -239,7 +335,7 @@ class TodoRestControllerTest {
         currentUser.setId(1L);
         currentUser.setName("user");
 
-        when(userService.getUserByEmail("user@mail.ru")).thenReturn(currentUser);
+        when(userService.getUserDtoForResponse("user@mail.ru")).thenReturn(currentUser);
         when(todoMapper.toDto(any(TodoRequest.class))).thenReturn(testTodoDto);
         when(todoService.updateTodo(eq(1L), any(TodoDto.class), eq(1L))).thenReturn(testTodoDto);
         when(todoMapper.toResponse(any(TodoDto.class))).thenReturn(testTodoResponse);
@@ -261,7 +357,7 @@ class TodoRestControllerTest {
         currentUser.setId(1L);
         currentUser.setName("user");
 
-        when(userService.getUserByEmail("user@mail.ru")).thenReturn(currentUser);
+        when(userService.getUserDtoForResponse("user@mail.ru")).thenReturn(currentUser);
         when(todoService.getTodoById(1L, 1L)).thenReturn(testTodoDto);
         when(todoMapper.toResponse(testTodoDto)).thenReturn(testTodoResponse);
 
@@ -285,7 +381,7 @@ class TodoRestControllerTest {
         currentUser.setId(1L);
         currentUser.setName("user");
 
-        when(userService.getUserByEmail("user@mail.ru")).thenReturn(currentUser);
+        when(userService.getUserDtoForResponse("user@mail.ru")).thenReturn(currentUser);
         when(todoService.getTodoById(999L, 1L))
                 .thenThrow(new TodoNotFoundException("Todo not found with id: 999"));
 
@@ -326,7 +422,7 @@ class TodoRestControllerTest {
         response2.setDone(true);
         response2.setUserId(1L);
 
-        when(userService.getUserByEmail("user@mail.ru")).thenReturn(currentUser);
+        when(userService.getUserDtoForResponse("user@mail.ru")).thenReturn(currentUser);
         when(todoService.getAllTodos(1L)).thenReturn(Arrays.asList(todo1, todo2));
         when(todoMapper.toResponse(todo1)).thenReturn(response1);
         when(todoMapper.toResponse(todo2)).thenReturn(response2);
@@ -352,7 +448,7 @@ class TodoRestControllerTest {
         currentUser.setId(1L);
         currentUser.setName("user");
 
-        when(userService.getUserByEmail("user@mail.ru")).thenReturn(currentUser);
+        when(userService.getUserDtoForResponse("user@mail.ru")).thenReturn(currentUser);
         when(todoService.getAllTodos(1L)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/todos/all")
@@ -392,7 +488,7 @@ class TodoRestControllerTest {
         response2.setDone(true);
         response2.setUserId(1L);
 
-        when(userService.getUserByEmail("user@mail.ru")).thenReturn(currentUser);
+        when(userService.getUserDtoForResponse("user@mail.ru")).thenReturn(currentUser);
         when(todoService.getTodosByUserId(1L, 1L)).thenReturn(Arrays.asList(todo1, todo2));
         when(todoMapper.toResponse(todo1)).thenReturn(response1);
         when(todoMapper.toResponse(todo2)).thenReturn(response2);
@@ -418,7 +514,7 @@ class TodoRestControllerTest {
         currentUser.setId(1L);
         currentUser.setName("user");
 
-        when(userService.getUserByEmail("user@mail.ru")).thenReturn(currentUser);
+        when(userService.getUserDtoForResponse("user@mail.ru")).thenReturn(currentUser);
         when(todoService.getTodosByUserId(1L, 1L)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/todos/user/1")
@@ -456,7 +552,7 @@ class TodoRestControllerTest {
         currentUser.setId(1L);
         currentUser.setName("user");
 
-        when(userService.getUserByEmail("user@mail.ru")).thenReturn(currentUser);
+        when(userService.getUserDtoForResponse("user@mail.ru")).thenReturn(currentUser);
         doNothing().when(todoService).deleteTodo(1L, 1L);
 
         mockMvc.perform(delete("/api/todos/1"))
@@ -472,7 +568,7 @@ class TodoRestControllerTest {
         currentUser.setId(1L);
         currentUser.setName("user");
 
-        when(userService.getUserByEmail("user@mail.ru")).thenReturn(currentUser);
+        when(userService.getUserDtoForResponse("user@mail.ru")).thenReturn(currentUser);
         doThrow(new TodoNotFoundException("Todo not found with id: 999"))
                 .when(todoService).deleteTodo(999L, 1L);
 
@@ -500,7 +596,7 @@ class TodoRestControllerTest {
         markedResponse.setDone(true);
         markedResponse.setUserId(1L);
 
-        when(userService.getUserByEmail("user@mail.ru")).thenReturn(currentUser);
+        when(userService.getUserDtoForResponse("user@mail.ru")).thenReturn(currentUser);
         when(todoService.markAsDone(1L, 1L)).thenReturn(markedDto);
         when(todoMapper.toResponse(markedDto)).thenReturn(markedResponse);
 
@@ -509,7 +605,7 @@ class TodoRestControllerTest {
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.done").value(true));
 
-        verify(userService, times(1)).getUserByEmail("user@mail.ru");
+        verify(userService, times(1)).getUserDtoForResponse("user@mail.ru");
         verify(todoService, times(1)).markAsDone(1L, 1L);
     }
 
@@ -520,7 +616,7 @@ class TodoRestControllerTest {
         currentUser.setId(1L);
         currentUser.setName("user");
 
-        when(userService.getUserByEmail("user@mail.ru")).thenReturn(currentUser);
+        when(userService.getUserDtoForResponse("user@mail.ru")).thenReturn(currentUser);
         when(todoService.markAsDone(999L, 1L))
                 .thenThrow(new TodoNotFoundException("Todo not found with id: 999"));
 
@@ -548,7 +644,7 @@ class TodoRestControllerTest {
         unmarkedResponse.setDone(false);
         unmarkedResponse.setUserId(1L);
 
-        when(userService.getUserByEmail("user@mail.ru")).thenReturn(currentUser);
+        when(userService.getUserDtoForResponse("user@mail.ru")).thenReturn(currentUser);
         when(todoService.markAsUndone(1L, 1L)).thenReturn(unmarkedDto);
         when(todoMapper.toResponse(unmarkedDto)).thenReturn(unmarkedResponse);
 
@@ -567,7 +663,7 @@ class TodoRestControllerTest {
         currentUser.setId(1L);
         currentUser.setName("user");
 
-        when(userService.getUserByEmail("user@mail.ru")).thenReturn(currentUser);
+        when(userService.getUserDtoForResponse("user@mail.ru")).thenReturn(currentUser);
         when(todoService.markAsUndone(999L, 1L))
                 .thenThrow(new TodoNotFoundException("Todo not found with id: 999"));
 
@@ -579,7 +675,7 @@ class TodoRestControllerTest {
     @Test
     @WithMockUser(username = "due@test.ru")
     void getDue_ReturnsThreeGroups() throws Exception {
-        when(userService.getUserByEmail("due@test.ru"))
+        when(userService.getUserDtoForResponse("due@test.ru"))
                 .thenReturn(UserDto.builder().id(42L).email("due@test.ru").build());
         when(todoService.getDueTodos(42L)).thenReturn(DueTodosResponse.builder()
                 .overdue(List.of(todoResponse("Полить теплицу")))
