@@ -3446,6 +3446,600 @@
 			"description": "Негативные тесты (проверка обработки ошибок)"
 		},
 		{
+			"name": "Authorization (IDOR)",
+			"description": "Регресс на три дефекта авторизации, закрытых 2026-08-26 (PR #121): сервер брал актора из тела запроса, а не из токена.\n\nПапка самодостаточна: заводит собственную пару «жертва / атакующий», свои списки и убирает за собой удалением обоих аккаунтов. От порядка выполнения других папок не зависит.\n\nЧто ловится:\n- запись в чужой список от чужого имени (запрос 5);\n- подмена автора при создании (7) и при обновлении (9);\n- чтение чужих задач перебором user_id (8).\n\nЗапрос 10 — контрольный: проверки не должны были сломать нормальную работу со своим списком.\n\n**Цена прогона: две регистрации.** На `/api/auth/register` действует отдельный лимит `rate-limit.register.requests=3` за 3600 с на IP (`application.properties`). Вся коллекция целиком в него не укладывается и без того (Auth + Due Dates + Delete Account Cascade + эта папка), поэтому гонять её одним прогоном с одного IP нельзя: первая же лишняя регистрация вернёт 429, а дальше пойдёт каскад 401. Запускать эту папку отдельно — `newman run ... --folder \"Authorization (IDOR)\"`, либо снимать флаг `rate-limit.enabled` на время полного прогона.",
+			"item": [
+				{
+					"name": "1. Register victim",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"var ts = Date.now().toString().slice(-6);",
+									"pm.environment.set('idorRunId', ts);"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201', function () { pm.response.to.have.status(201); });",
+									"var json = pm.response.json();",
+									"pm.environment.set('idorVictimToken', json.access_token);",
+									"pm.environment.set('idorVictimId', json.user.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"idor_victim_{{idorRunId}}@example.com\",\n  \"name\": \"idorVictim_{{idorRunId}}\",\n  \"password\": \"idorVictimPass\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/register",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"register"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2. Register attacker",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201', function () { pm.response.to.have.status(201); });",
+									"var json = pm.response.json();",
+									"pm.environment.set('idorAttackerToken', json.access_token);",
+									"pm.environment.set('idorAttackerId', json.user.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"idor_attacker_{{idorRunId}}@example.com\",\n  \"name\": \"idorAttacker_{{idorRunId}}\",\n  \"password\": \"idorAttackerPass\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/register",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"register"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "3. Victim creates a private-to-them list",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201', function () { pm.response.to.have.status(201); });",
+									"pm.environment.set('idorVictimListId', pm.response.json().id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{idorVictimToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Список жертвы {{idorRunId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/lists",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"lists"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "4. Victim creates a todo there",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201', function () { pm.response.to.have.status(201); });",
+									"pm.environment.set('idorVictimTodoId', pm.response.json().id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{idorVictimToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Задача жертвы\",\n  \"user_id\": {{idorVictimId}},\n  \"list_id\": {{idorVictimListId}},\n  \"is_private\": false\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/create",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"create"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "5. IDOR write: attacker posts into victim's list under victim's name",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// До фикса (2026-08-26) автор брался из тела, а проверка членства смотрела на автора,",
+									"// то есть на ЖЕРТВУ — запрос проходил, и задача появлялась в чужом списке. Теперь автор",
+									"// берётся из токена, атакующий в этом списке не состоит, и создание отбивается.",
+									"pm.test('Rejected: attacker is not a member of that list', function () {",
+									"    pm.response.to.have.status(400);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{idorAttackerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Задача, подброшенная в чужой список\",\n  \"user_id\": {{idorVictimId}},\n  \"list_id\": {{idorVictimListId}},\n  \"is_private\": false\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/create",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"create"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "6. Attacker creates their own list",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201', function () { pm.response.to.have.status(201); });",
+									"pm.environment.set('idorAttackerListId', pm.response.json().id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{idorAttackerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Список атакующего {{idorRunId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/lists",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"lists"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "7. Spoofed author is ignored, JWT owner wins",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201', function () { pm.response.to.have.status(201); });",
+									"",
+									"// user_id из тела не отвергается (выпущенные клиенты шлют там свой же id),",
+									"// но и не используется: автором становится владелец токена.",
+									"pm.test('Author comes from the token, not from the body', function () {",
+									"    var json = pm.response.json();",
+									"    var attacker = parseInt(pm.environment.get('idorAttackerId'), 10);",
+									"    var victim = parseInt(pm.environment.get('idorVictimId'), 10);",
+									"    pm.expect(json.user_id).to.eql(attacker);",
+									"    pm.expect(json.user_id).to.not.eql(victim);",
+									"});",
+									"pm.environment.set('idorSpoofTodoId', pm.response.json().id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{idorAttackerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Задача с подменённым автором\",\n  \"user_id\": {{idorVictimId}},\n  \"list_id\": {{idorAttackerListId}},\n  \"is_private\": false\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/create",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"create"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "8. IDOR read: attacker enumerates victim's todos",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// До фикса выборка шла голым findByUserId без привязки к спискам: перебором id",
+									"// вычитывались непубличные задачи любого пользователя. Теперь чужие задачи видны",
+									"// только через ОБЩИЕ списки, а общих у этих двоих нет.",
+									"pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('No tasks leak from lists the caller does not share', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.be.an('array');",
+									"    pm.expect(json.length, 'ожидался пустой список').to.eql(0);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{idorAttackerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/user/{{idorVictimId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"user",
+								"{{idorVictimId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "9. Author cannot be reassigned through PUT",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Раньше user_id из тела переназначал автора на любого пользователя, без проверки",
+									"// членства в списке — задачу можно было «подбросить» постороннему.",
+									"pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Author unchanged', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json.user_id).to.eql(parseInt(pm.environment.get('idorAttackerId'), 10));",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{idorAttackerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Попытка переписать авторство\",\n  \"done\": false,\n  \"user_id\": {{idorVictimId}},\n  \"list_id\": {{idorAttackerListId}}\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/todos/{{idorSpoofTodoId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"todos",
+								"{{idorSpoofTodoId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "10. Regression: victim still sees their own todo",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Отсечка не должна задеть нормальную работу: свой список, свои задачи — на месте.",
+									"pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Own todo is still there and nothing was planted', function () {",
+									"    var json = pm.response.json();",
+									"    var mine = parseInt(pm.environment.get('idorVictimTodoId'), 10);",
+									"    pm.expect(json.some(function (t) { return t.id === mine; }), 'своя задача пропала').to.be.true;",
+									"    pm.expect(json.length, 'в списке появилась чужая задача').to.eql(1);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{idorVictimToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/lists/{{idorVictimListId}}/todos",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"lists",
+								"{{idorVictimListId}}",
+								"todos"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "11. Cleanup - delete attacker account",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Deleted', function () { pm.expect(pm.response.code).to.be.oneOf([200, 204]); });"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{idorAttackerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/users/{{idorAttackerId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"users",
+								"{{idorAttackerId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "12. Cleanup - delete victim account",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Deleted', function () { pm.expect(pm.response.code).to.be.oneOf([200, 204]); });"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{idorVictimToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/users/{{idorVictimId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"users",
+								"{{idorVictimId}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
 			"name": "Rate Limiting",
 			"item": [
 				{
