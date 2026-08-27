@@ -8,6 +8,129 @@
 	},
 	"item": [
 		{
+			"name": "Setup - Disable Rate Limit",
+			"description": "Гасит `rate-limit.enabled` на время прогона. Без этого вся коллекция за один заход не проходит: на `/api/auth/register` действует лимит 3 запроса в час на IP (`rate-limit.register.requests`), а регистраций в коллекции больше (Auth, Due Dates, Delete Account Cascade, Authorization (IDOR)) — первая лишняя ловит 429, дальше каскадом сыплются 401.\n\nФлаг относится к защитным: его переключение живёт только до рестарта приложения (`OverrideLifetime.PROCESS`), в БД не сохраняется. Даже если прогон оборвётся и teardown не отработает, снятая защита вернётся сама при следующем рестарте — но лучше не полагаться на это и дать прогону дойти до конца.\n\nКреды супер-админа в файле не лежат — передаются флагами:\n`newman run ... --env-var adminEmail=<email> --env-var adminPassword=<pass>`.\nНе переданы — папка пропускает себя, коллекция работает как раньше.\n\nПапка `Rate Limiting` намеренно стоит ПЕРЕД этой: она проверяет сами лимиты и должна выполняться, пока они включены.",
+			"item": [
+				{
+					"name": "1. Admin login",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Креды супер-админа не хардкодятся: передаются прогону как",
+									"//   newman run ... --env-var adminEmail=... --env-var adminPassword=...",
+									"// Не переданы — папка тихо пропускает себя, и коллекция ведёт себя как раньше",
+									"// (с включёнными лимитами; тогда полный прогон в register-лимит не уложится).",
+									"var email = pm.variables.get('adminEmail');",
+									"var password = pm.variables.get('adminPassword');",
+									"if (!email || !password) {",
+									"    console.log('adminEmail/adminPassword не заданы — пропускаю переключение rate-limit');",
+									"    pm.execution.skipRequest();",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Admin logged in', function () { pm.response.to.have.status(200); });",
+									"if (pm.response.code === 200) {",
+									"    pm.environment.set('adminToken', pm.response.json().access_token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2. Disable rate limit",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"if (!pm.environment.get('adminToken')) {",
+									"    console.log('adminToken отсутствует — переключение rate-limit пропущено');",
+									"    pm.execution.skipRequest();",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Rate limit выключен на время прогона', function () {",
+									"    pm.response.to.have.status(200);",
+									"    pm.expect(pm.response.json().enabled).to.eql(false);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/flags/rate-limit.enabled/false",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"flags",
+								"rate-limit.enabled",
+								"false"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
 			"name": "Auth",
 			"item": [
 				{
@@ -2816,13 +2939,16 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"pm.test(\"Status code is 200\", function () {",
+									"pm.test('Status code is 200', function () {",
 									"    pm.response.to.have.status(200);",
 									"});",
 									"",
-									"pm.test(\"Returns empty list\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData).to.be.an('array').that.is.empty;",
+									"// Порог — app.suggestions.min-prefix-length=1, то есть подсказки идут уже",
+									"// с первого символа. Тест раньше слал 'х' и ждал пустоту: он писался под",
+									"// больший порог и с тех пор проверял несуществующее правило.",
+									"// Короче минимума теперь только пустой префикс — на нём и проверяем отсечку.",
+									"pm.test('Prefix shorter than min length returns empty list', function () {",
+									"    pm.expect(pm.response.json()).to.be.an('array').that.is.empty;",
 									"});"
 								],
 								"type": "text/javascript"
@@ -2836,7 +2962,7 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{baseUrl}}/api/suggestions?prefix=х",
+							"raw": "{{baseUrl}}/api/suggestions?prefix=",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -2847,7 +2973,7 @@
 							"query": [
 								{
 									"key": "prefix",
-									"value": "х"
+									"value": ""
 								}
 							]
 						},
@@ -2904,14 +3030,29 @@
 					"name": "Admin Block Suggestion (super-admin only)",
 					"event": [
 						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// adminToken выдаёт папка Setup - Disable Rate Limit; без кред супер-админа",
+									"// её пропускают, а значит проверять здесь нечего.",
+									"if (!pm.environment.get('adminToken')) {",
+									"    console.log('adminToken отсутствует — проверка супер-админского доступа пропущена');",
+									"    pm.execution.skipRequest();",
+									"}"
+								]
+							}
+						},
+						{
 							"listen": "test",
 							"script": {
+								"type": "text/javascript",
 								"exec": [
-									"pm.test(\"Status code is 204 or 404\", function () {",
+									"// 204 — строка нашлась и заблокирована, 404 — такой строки в словаре нет.",
+									"pm.test('Status code is 204 or 404', function () {",
 									"    pm.expect(pm.response.code).to.be.oneOf([204, 404]);",
 									"});"
-								],
-								"type": "text/javascript"
+								]
 							}
 						}
 					],
@@ -2931,7 +3072,17 @@
 								"block"
 							]
 						},
-						"description": "Блокировка строки в словаре. Доступна только email'ам из app.super-admin.emails. Возвращает 204 если строка была заблокирована, 404 если её нет в словаре."
+						"description": "Блокировка строки в словаре. Доступна только email'ам из app.super-admin.emails. Возвращает 204 если строка была заблокирована, 404 если её нет в словаре.",
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						}
 					},
 					"response": []
 				},
@@ -2942,7 +3093,11 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"pm.test(\"Status code is 404 (admin endpoints hidden)\", function () {",
+									"// Смысл проверки — сокрытие существования /api/admin от обычного пользователя:",
+									"// accessDeniedHandler отдаёт 404 вместо 403 (ApiSecurityConfig). Раньше запрос",
+									"// уходил вообще без токена и упирался в 401 от entry point, то есть проверял",
+									"// отсутствие аутентификации, а не сокрытие.",
+									"pm.test('Status code is 404 (admin endpoints hidden)', function () {",
 									"    pm.response.to.have.status(404);",
 									"});"
 								],
@@ -2966,7 +3121,17 @@
 								"block"
 							]
 						},
-						"description": "Не-админский пользователь получает 404 (admin-эндпоинты скрыты accessDeniedHandler'ом)."
+						"description": "Не-админский пользователь получает 404 (admin-эндпоинты скрыты accessDeniedHandler'ом).",
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						}
 					},
 					"response": []
 				}
@@ -3447,7 +3612,7 @@
 		},
 		{
 			"name": "Authorization (IDOR)",
-			"description": "Регресс на три дефекта авторизации, закрытых 2026-08-26 (PR #121): сервер брал актора из тела запроса, а не из токена.\n\nПапка самодостаточна: заводит собственную пару «жертва / атакующий», свои списки и убирает за собой удалением обоих аккаунтов. От порядка выполнения других папок не зависит.\n\nЧто ловится:\n- запись в чужой список от чужого имени (запрос 5);\n- подмена автора при создании (7) и при обновлении (9);\n- чтение чужих задач перебором user_id (8).\n\nЗапрос 10 — контрольный: проверки не должны были сломать нормальную работу со своим списком.\n\n**Цена прогона: две регистрации.** На `/api/auth/register` действует отдельный лимит `rate-limit.register.requests=3` за 3600 с на IP (`application.properties`). Вся коллекция целиком в него не укладывается и без того (Auth + Due Dates + Delete Account Cascade + эта папка), поэтому гонять её одним прогоном с одного IP нельзя: первая же лишняя регистрация вернёт 429, а дальше пойдёт каскад 401. Запускать эту папку отдельно — `newman run ... --folder \"Authorization (IDOR)\"`, либо снимать флаг `rate-limit.enabled` на время полного прогона.",
+			"description": "Регресс на три дефекта авторизации, закрытых 2026-08-26 (PR #121): сервер брал актора из тела запроса, а не из токена.\n\nПапка самодостаточна: заводит собственную пару «жертва / атакующий», свои списки и убирает за собой удалением обоих аккаунтов. От порядка выполнения других папок не зависит.\n\nЧто ловится:\n- запись в чужой список от чужого имени (запрос 5);\n- подмена автора при создании (7) и при обновлении (9);\n- чтение чужих задач перебором user_id (8).\n\nЗапрос 10 — контрольный: проверки не должны были сломать нормальную работу со своим списком.\n\n**Цена прогона: две регистрации.** На `/api/auth/register` действует лимит `rate-limit.register.requests=3` за 3600 с на IP. Вся коллекция в него не укладывается и без этой папки, поэтому в начало добавлена `Setup - Disable Rate Limit`: она гасит лимиты на время прогона (креды супер-админа передаются через `--env-var adminEmail=... --env-var adminPassword=...`). Без этих переменных setup себя пропускает — тогда запускать папку отдельно: `newman run ... --folder \"Authorization (IDOR)\"`.",
 			"item": [
 				{
 					"name": "1. Register victim",
@@ -4038,175 +4203,6 @@
 					"response": []
 				}
 			]
-		},
-		{
-			"name": "Rate Limiting",
-			"item": [
-				{
-					"name": "Login Rate Limit - 429",
-					"event": [
-						{
-							"listen": "prerequest",
-							"script": {
-								"exec": [
-									"// Последовательно отправляем 5 запросов login, чтобы исчерпать лимит (5 запросов/мин)",
-									"const baseUrl = pm.variables.get('baseUrl');",
-									"const reqOpts = {",
-									"    url: baseUrl + '/api/auth/login',",
-									"    method: 'POST',",
-									"    header: { 'Content-Type': 'application/json' },",
-									"    body: { mode: 'raw', raw: JSON.stringify({ email: 'fake@example.com', password: 'fakePass' }) }",
-									"};",
-									"pm.sendRequest(reqOpts, () => {",
-									"    pm.sendRequest(reqOpts, () => {",
-									"        pm.sendRequest(reqOpts, () => {",
-									"            pm.sendRequest(reqOpts, () => {",
-									"                pm.sendRequest(reqOpts, () => {",
-									"                    console.log('Pre-request: 5 login requests sent to exhaust rate limit');",
-									"                });",
-									"            });",
-									"        });",
-									"    });",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						},
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test(\"Status code is 429 Too Many Requests\", function () {",
-									"    pm.response.to.have.status(429);",
-									"});",
-									"",
-									"pm.test(\"Response has Retry-After header\", function () {",
-									"    pm.expect(pm.response.headers.get('Retry-After')).to.exist;",
-									"});",
-									"",
-									"pm.test(\"Response has X-Rate-Limit-Remaining header\", function () {",
-									"    pm.expect(pm.response.headers.get('X-Rate-Limit-Remaining')).to.eql('0');",
-									"});",
-									"",
-									"pm.test(\"Response body contains error message\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData.error).to.eql('Too Many Requests');",
-									"    pm.expect(jsonData.retryAfter).to.be.a('number');",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"email\": \"fake@example.com\",\n  \"password\": \"fakePass\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/auth/login",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"api",
-								"auth",
-								"login"
-							]
-						},
-						"description": "Тест rate limiting на эндпоинте login.\nПредварительно отправляются 5 запросов (лимит: 5/мин), затем 6-й должен получить 429.\n\n**Ожидается:** 429 Too Many Requests с заголовками Retry-After и X-Rate-Limit-Remaining."
-					},
-					"response": []
-				},
-				{
-					"name": "Refresh Rate Limit - 429",
-					"event": [
-						{
-							"listen": "prerequest",
-							"script": {
-								"exec": [
-									"// Последовательно отправляем 10 запросов refresh, чтобы исчерпать лимит (10 запросов/мин)",
-									"const baseUrl = pm.variables.get('baseUrl');",
-									"const reqOpts = {",
-									"    url: baseUrl + '/api/auth/refresh',",
-									"    method: 'POST',",
-									"    header: { 'Content-Type': 'application/json' },",
-									"    body: { mode: 'raw', raw: JSON.stringify({ refresh_token: 'invalid_token' }) }",
-									"};",
-									"pm.sendRequest(reqOpts, () => {",
-									"pm.sendRequest(reqOpts, () => {",
-									"pm.sendRequest(reqOpts, () => {",
-									"pm.sendRequest(reqOpts, () => {",
-									"pm.sendRequest(reqOpts, () => {",
-									"pm.sendRequest(reqOpts, () => {",
-									"pm.sendRequest(reqOpts, () => {",
-									"pm.sendRequest(reqOpts, () => {",
-									"pm.sendRequest(reqOpts, () => {",
-									"pm.sendRequest(reqOpts, () => {",
-									"    console.log('Pre-request: 10 refresh requests sent to exhaust rate limit');",
-									"});});});});});});});});});});"
-								],
-								"type": "text/javascript"
-							}
-						},
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test(\"Status code is 429 Too Many Requests\", function () {",
-									"    pm.response.to.have.status(429);",
-									"});",
-									"",
-									"pm.test(\"Response has Retry-After header\", function () {",
-									"    pm.expect(pm.response.headers.get('Retry-After')).to.exist;",
-									"});",
-									"",
-									"pm.test(\"Response body contains error message\", function () {",
-									"    var jsonData = pm.response.json();",
-									"    pm.expect(jsonData.error).to.eql('Too Many Requests');",
-									"    pm.expect(jsonData.retryAfter).to.be.a('number');",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"refresh_token\": \"invalid_token\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/auth/refresh",
-							"host": [
-								"{{baseUrl}}"
-							],
-							"path": [
-								"api",
-								"auth",
-								"refresh"
-							]
-						},
-						"description": "Тест rate limiting на эндпоинте refresh.\nПредварительно отправляются 10 запросов (лимит: 10/мин), затем 11-й должен получить 429.\n\n**Ожидается:** 429 Too Many Requests с заголовками Retry-After и X-Rate-Limit-Remaining."
-					},
-					"response": []
-				}
-			],
-			"description": "Тесты rate limiting — проверка ограничения частоты запросов"
 		},
 		{
 			"name": "Delete Account Cascade",
@@ -5436,6 +5432,238 @@
 				}
 			],
 			"description": "Самодостаточный набор тестов due-date функционала задач (due_date/due_time/due_timezone/remind_before_minutes/reminder_scope). Полностью изолирован от остальной коллекции: регистрирует отдельного пользователя, создаёт отдельный список, использует переменные окружения с префиксом dd*, и удаляет пользователя (каскадно — список и задачи) в конце. Можно запускать многократно подряд."
+		},
+		{
+			"name": "Teardown - Restore Rate Limit",
+			"description": "Возвращает `rate-limit.enabled` в true. Пропускает себя, если setup не отработал (креды не передавались) — тогда флаг никто и не трогал.",
+			"item": [
+				{
+					"name": "1. Restore rate limit",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"if (!pm.environment.get('adminToken')) {",
+									"    console.log('adminToken отсутствует — переключение rate-limit пропущено');",
+									"    pm.execution.skipRequest();",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Rate limit возвращён после прогона', function () {",
+									"    pm.response.to.have.status(200);",
+									"    pm.expect(pm.response.json().enabled).to.eql(true);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{adminToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/admin/flags/rate-limit.enabled/true",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"flags",
+								"rate-limit.enabled",
+								"true"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Rate Limiting",
+			"item": [
+				{
+					"name": "Login Rate Limit - 429",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Лимит логина — rate-limit.login.requests=7 за 300 с (application.properties).",
+									"// Раньше здесь слалось 5 запросов под старое значение лимита: основной запрос",
+									"// становился шестым, до порога не доходил и получал 401 вместо 429 — тест",
+									"// молча проверял не то. Выбираем квоту целиком, тогда основной запрос — лишний.",
+									"const baseUrl = pm.variables.get('baseUrl');",
+									"const ATTEMPTS = 7;",
+									"const reqOpts = {",
+									"    url: baseUrl + '/api/auth/login',",
+									"    method: 'POST',",
+									"    header: { 'Content-Type': 'application/json' },",
+									"    body: { mode: 'raw', raw: JSON.stringify({ email: 'fake@example.com', password: 'fakePass' }) }",
+									"};",
+									"function fire(left, done) {",
+									"    if (left === 0) { done(); return; }",
+									"    pm.sendRequest(reqOpts, function () { fire(left - 1, done); });",
+									"}",
+									"fire(ATTEMPTS, function () {",
+									"    console.log('Pre-request: ' + ATTEMPTS + ' login requests sent to exhaust the quota');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 429 Too Many Requests\", function () {",
+									"    pm.response.to.have.status(429);",
+									"});",
+									"",
+									"pm.test(\"Response has Retry-After header\", function () {",
+									"    pm.expect(pm.response.headers.get('Retry-After')).to.exist;",
+									"});",
+									"",
+									"pm.test(\"Response has X-Rate-Limit-Remaining header\", function () {",
+									"    pm.expect(pm.response.headers.get('X-Rate-Limit-Remaining')).to.eql('0');",
+									"});",
+									"",
+									"pm.test(\"Response body contains error message\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.error).to.eql('Too Many Requests');",
+									"    pm.expect(jsonData.retryAfter).to.be.a('number');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"fake@example.com\",\n  \"password\": \"fakePass\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"login"
+							]
+						},
+						"description": "Тест rate limiting на эндпоинте login.\nПредварительно отправляются 5 запросов (лимит: 5/мин), затем 6-й должен получить 429.\n\n**Ожидается:** 429 Too Many Requests с заголовками Retry-After и X-Rate-Limit-Remaining."
+					},
+					"response": []
+				},
+				{
+					"name": "Refresh Rate Limit - 429",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Последовательно отправляем 10 запросов refresh, чтобы исчерпать лимит (10 запросов/мин)",
+									"const baseUrl = pm.variables.get('baseUrl');",
+									"const reqOpts = {",
+									"    url: baseUrl + '/api/auth/refresh',",
+									"    method: 'POST',",
+									"    header: { 'Content-Type': 'application/json' },",
+									"    body: { mode: 'raw', raw: JSON.stringify({ refresh_token: 'invalid_token' }) }",
+									"};",
+									"pm.sendRequest(reqOpts, () => {",
+									"pm.sendRequest(reqOpts, () => {",
+									"pm.sendRequest(reqOpts, () => {",
+									"pm.sendRequest(reqOpts, () => {",
+									"pm.sendRequest(reqOpts, () => {",
+									"pm.sendRequest(reqOpts, () => {",
+									"pm.sendRequest(reqOpts, () => {",
+									"pm.sendRequest(reqOpts, () => {",
+									"pm.sendRequest(reqOpts, () => {",
+									"pm.sendRequest(reqOpts, () => {",
+									"    console.log('Pre-request: 10 refresh requests sent to exhaust rate limit');",
+									"});});});});});});});});});});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 429 Too Many Requests\", function () {",
+									"    pm.response.to.have.status(429);",
+									"});",
+									"",
+									"pm.test(\"Response has Retry-After header\", function () {",
+									"    pm.expect(pm.response.headers.get('Retry-After')).to.exist;",
+									"});",
+									"",
+									"pm.test(\"Response body contains error message\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.error).to.eql('Too Many Requests');",
+									"    pm.expect(jsonData.retryAfter).to.be.a('number');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refresh_token\": \"invalid_token\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/refresh",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"refresh"
+							]
+						},
+						"description": "Тест rate limiting на эндпоинте refresh.\nПредварительно отправляются 10 запросов (лимит: 10/мин), затем 11-й должен получить 429.\n\n**Ожидается:** 429 Too Many Requests с заголовками Retry-After и X-Rate-Limit-Remaining."
+					},
+					"response": []
+				}
+			],
+			"description": "Проверка rate limiting: запросы намеренно упираются в 429.\n\n**Папка стоит последней, и это существенно.** Она выбирает квоту логина целиком (7 запросов при `rate-limit.login.requests=7`), поэтому в начале прогона она оставила бы без логина папку `Setup - Disable Rate Limit`: админ получил бы 429, лимиты не снялись бы, и дальше посыпался бы каскад 401. Здесь же она выполняется после `Teardown`, когда защита уже возвращена — то есть проверяет ровно то, что должна, и никому не мешает."
 		}
 	],
 	"event": [
