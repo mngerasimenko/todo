@@ -1,5 +1,7 @@
 package ru.mngerasimenko.todolist.security;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.servlet.FilterChain;
@@ -8,6 +10,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
@@ -585,6 +590,188 @@ class RateLimitFilterTest {
 
             // Должен был пометить Redis unhealthy, чтобы следующий запрос не пытался его использовать
             verify(health, atLeastOnce()).markUnhealthy();
+        }
+    }
+
+    // --- Локализация тела 429-ответа ---
+
+    @Nested
+    @DisplayName("429 — локализация message по Accept-Language")
+    class TooManyRequestsMessageLocalization {
+
+        private final ObjectMapper json = new ObjectMapper();
+
+        /**
+         * Исчерпывает лимит login (3/мин) и возвращает 429-ответ на 4-й запрос
+         * с указанным Accept-Language (null — заголовок не отправляется вовсе).
+         */
+        private MockHttpServletResponse exhaustLoginLimit(String acceptLanguage)
+                throws ServletException, IOException {
+            for (int i = 0; i < 3; i++) {
+                filter.doFilterInternal(createRequest("POST", "/api/auth/login"),
+                        new MockHttpServletResponse(), filterChain);
+            }
+            // Заголовок отдаётся через переопределённый getHeader, а не addHeader: сам
+            // MockHttpServletRequest на addHeader("Accept-Language", ...) зовёт
+            // HttpHeaders.getAcceptLanguageAsLocales(), а тот падает на враждебных значениях
+            // вроде "-" — ровно тот баг JDK, который обходит фильтр. Реальный Tomcat заголовок
+            // при getHeader() не разбирает, так что стенд ближе к проду, а не дальше.
+            MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/auth/login") {
+                @Override
+                public String getHeader(String name) {
+                    return HttpHeaders.ACCEPT_LANGUAGE.equalsIgnoreCase(name)
+                            ? acceptLanguage
+                            : super.getHeader(name);
+                }
+            };
+            request.setRemoteAddr("192.168.1.1");
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            filter.doFilterInternal(request, response, filterChain);
+            assertThat(response.getStatus()).isEqualTo(429);
+            return response;
+        }
+
+        /**
+         * Разбирает тело как JSON из СЫРЫХ БАЙТ ответа — так проверяется разом и
+         * синтаксическая валидность JSON, и то, что кириллица уехала в UTF-8.
+         */
+        private JsonNode parseBody(MockHttpServletResponse response) throws IOException {
+            return json.readTree(response.getContentAsByteArray());
+        }
+
+        @Test
+        @DisplayName("Accept-Language: en — message на английском, ровно ожидаемый текст")
+        void englishHeader_ReturnsEnglishMessage() throws ServletException, IOException {
+            MockHttpServletResponse response = exhaustLoginLimit("en");
+            long retryAfter = Long.parseLong(response.getHeader("Retry-After"));
+
+            assertThat(parseBody(response).path("message").asText())
+                    .isEqualTo("Too many requests. Retry in " + retryAfter + " sec.");
+        }
+
+        @Test
+        @DisplayName("Accept-Language: ru — message на русском (регрессия не сломана)")
+        void russianHeader_ReturnsRussianMessage() throws ServletException, IOException {
+            MockHttpServletResponse response = exhaustLoginLimit("ru");
+            long retryAfter = Long.parseLong(response.getHeader("Retry-After"));
+
+            assertThat(parseBody(response).path("message").asText())
+                    .isEqualTo("Слишком много запросов. Повторите через " + retryAfter + " сек.");
+        }
+
+        @Test
+        @DisplayName("Без Accept-Language — русский (дефолт сервера)")
+        void noHeader_ReturnsRussianMessage() throws ServletException, IOException {
+            MockHttpServletResponse response = exhaustLoginLimit(null);
+
+            assertThat(parseBody(response).path("message").asText())
+                    .startsWith("Слишком много запросов");
+        }
+
+        @Test
+        @DisplayName("Машиночитаемые поля не зависят от локали")
+        void machineReadableFields_AreLocaleIndependent() throws ServletException, IOException {
+            for (String header : new String[]{"en", "ru", "de"}) {
+                MockHttpServletResponse response = exhaustLoginLimit(header);
+                JsonNode body = parseBody(response);
+
+                assertThat(body.path("error").asText()).isEqualTo("Too Many Requests");
+                assertThat(body.path("retryAfter").isNumber()).isTrue();
+                assertThat(body.path("retryAfter").asLong())
+                        .isEqualTo(Long.parseLong(response.getHeader("Retry-After")));
+                assertThat(response.getContentType()).startsWith("application/json");
+                assertThat(response.getCharacterEncoding()).isEqualToIgnoringCase("UTF-8");
+            }
+        }
+
+        @Test
+        @DisplayName("Враждебный заголовок \"-\" не роняет ответ (JDK LanguageRange бросал на нём AIOOBE)")
+        void hostileHeader_DoesNotBreakResponse() throws ServletException, IOException {
+            MockHttpServletResponse response = exhaustLoginLimit("-");
+
+            assertThat(parseBody(response).path("message").asText())
+                    .startsWith("Слишком много запросов");
+        }
+    }
+
+    // --- Разбор Accept-Language (прямые вызовы resolveMessageLanguage) ---
+
+    @Nested
+    @DisplayName("resolveMessageLanguage — выбор языка по Accept-Language")
+    class MessageLanguageResolution {
+
+        @ParameterizedTest(name = "[{index}] \"{0}\" -> {1}")
+        @CsvSource(nullValues = "NULL", value = {
+                // Явные и региональные теги
+                "NULL,                      ru",
+                "en,                        en",
+                "ru,                        ru",
+                "EN,                        en",
+                "en-GB,                     en",
+                "ru-RU,                     ru",
+                // Полные браузерные заголовки: первый range и q-веса согласованы
+                "'en-US,en;q=0.9,ru;q=0.8', en",
+                "'ru-RU,ru;q=0.9,en;q=0.8', ru",
+                // q-веса РАСХОДЯТСЯ с порядком — единственные кейсы, отличающие
+                // разбор весов от наивного "берём первый range"
+                "'ru;q=0.3,en;q=0.9',       en",
+                "'en;q=0.3,ru;q=0.9',       ru",
+                // q=0 по RFC 9110 — "неприемлемо", такой язык не выбираем
+                "'en;q=0',                  ru",
+                "'en;q=0,de',               ru",
+                "'ru;q=0,en;q=0.5',         en",
+                // Битый q — элемент игнорируется, разбор не падает
+                "'en;q=abc',                ru",
+                // Неподдерживаемые и мусорные заголовки → дефолт сервера
+                "'de-DE,de;q=0.9',          ru",
+                "'###',                     ru",
+                "'*',                       ru",
+                "'*;q=1,en;q=0.5',          en",
+                // Входы, на которых JDK LanguageRange.parse бросал AIOOBE
+                "'-',                       ru",
+                "'--',                      ru",
+                "'ru,-',                    ru",
+                "'-,en',                    en",
+                // Один битый элемент не должен обнулять валидные соседние
+                "'en, ru_RU',               en"
+        })
+        void resolvesLanguage(String header, String expected) {
+            assertThat(filter.resolveMessageLanguage(header)).isEqualTo(expected);
+        }
+
+        @Test
+        @DisplayName("Пустой заголовок и заголовок из пробелов — дефолт сервера")
+        void blankHeaders_FallBackToDefault() {
+            assertThat(filter.resolveMessageLanguage("")).isEqualTo("ru");
+            assertThat(filter.resolveMessageLanguage("   ")).isEqualTo("ru");
+        }
+
+        @Test
+        @DisplayName("Заголовок 8 КБ разбирается за ограниченное время (DoS на ветке 429)")
+        void hugeHostileHeader_IsResolvedInBoundedTime() {
+            // "de-*-*-*-…" на 8 КБ (дефолтный лимит размера заголовка в Tomcat).
+            // Через Locale.lookupTag такой вход стоил ~6 секунд CPU на КАЖДЫЙ 429-ответ —
+            // то есть уже отшитый лимитом клиент мог заказывать себе секунды процессора.
+            String hostile = "de" + "-*".repeat(4000);
+
+            long startNanos = System.nanoTime();
+            String lang = filter.resolveMessageLanguage(hostile);
+            long elapsedMillis = (System.nanoTime() - startNanos) / 1_000_000;
+
+            assertThat(lang).isEqualTo("ru");
+            // Запас к реальному времени разбора — три порядка: порог ловит возврат
+            // к квадратичному regex-разбору, а не медленный CI.
+            assertThat(elapsedMillis).isLessThan(500L);
+        }
+
+        @Test
+        @DisplayName("Число разбираемых элементов ограничено — хвост длинного заголовка игнорируется")
+        void rangeCount_IsCapped() {
+            // Осознанный компромисс: реальные клиенты присылают единицы языков,
+            // а тысячи range'ей — признак атаки, а не браузера.
+            String flood = "de-de,".repeat(1300) + "en";
+
+            assertThat(filter.resolveMessageLanguage(flood)).isEqualTo("ru");
         }
     }
 }
