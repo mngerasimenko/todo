@@ -11,6 +11,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -21,6 +22,8 @@ import ru.mngerasimenko.todolist.service.RedisHealthService;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -33,6 +36,34 @@ import java.util.Optional;
 @Component
 @Slf4j
 public class RateLimitFilter extends OncePerRequestFilter {
+
+    /**
+     * Шаблоны человекочитаемого {@code message} в 429-ответе: язык → текст с {@code %d} секунд.
+     * Добавление языка сюда — единственное, что нужно для его поддержки: {@link #resolveMessageLanguage}
+     * выбирает язык из ключей этой карты, {@link #buildTooManyRequestsBody} берёт отсюда текст.
+     * <p>
+     * Осознанное исключение из политики {@code I18nConfig} («REST API не локализуется»): фильтр
+     * отрабатывает до Spring MVC и отдаёт тело сам, минуя {@code GlobalExceptionHandler}, поэтому
+     * его сообщение исторически было русским для всех. Строки лежат здесь, а не в {@code MessageSource}:
+     * тянуть его в security-цепочку ради двух строк не нужно.
+     */
+    private static final Map<String, String> MESSAGE_TEMPLATES = Map.of(
+            "ru", "Слишком много запросов. Повторите через %d сек.",
+            "en", "Too many requests. Retry in %d sec.");
+
+    /** Язык 429-сообщения по умолчанию — дефолтная локаль сервера (см. {@code I18nConfig}). */
+    private static final String DEFAULT_MESSAGE_LANG = "ru";
+
+    /**
+     * Максимум разбираемых элементов {@code Accept-Language}. Заголовок приходит от клиента
+     * и может быть до 8 КБ (дефолт Tomcat), а разбирается он на ветке 429 — ровно там, куда
+     * отшитый лимитом клиент попадает намеренно. Реальные клиенты присылают единицы языков;
+     * всё сверх лимита — признак атаки, а не браузера.
+     */
+    private static final int MAX_LANGUAGE_RANGES = 16;
+
+    /** Предельная длина primary language subtag по BCP 47 — всё длиннее заведомо ill-formed. */
+    private static final int MAX_PRIMARY_SUBTAG_LENGTH = 8;
 
     private final RateLimitProperties properties;
     private final BucketProvider bucketProvider;
@@ -113,11 +144,120 @@ public class RateLimitFilter extends OncePerRequestFilter {
             response.setCharacterEncoding("UTF-8");
             response.setHeader("Retry-After", String.valueOf(retryAfterSeconds));
             response.setHeader("X-Rate-Limit-Remaining", "0");
-            response.getWriter().write(
-                    "{\"error\":\"Too Many Requests\",\"message\":\"Слишком много запросов. Повторите через "
-                            + retryAfterSeconds + " сек.\",\"retryAfter\":" + retryAfterSeconds + "}"
-            );
+            response.getWriter().write(buildTooManyRequestsBody(
+                    request.getHeader(HttpHeaders.ACCEPT_LANGUAGE), retryAfterSeconds));
         }
+    }
+
+    /**
+     * Собирает JSON-тело 429-ответа с локализованным {@code message}.
+     * Машиночитаемые поля ({@code error}, {@code retryAfter}) не локализуются — клиент матчит их,
+     * а не текст. В тело попадают только константы из {@link #MESSAGE_TEMPLATES} и число секунд;
+     * пользовательский ввод в JSON не течёт, поэтому экранирование не требуется.
+     */
+    String buildTooManyRequestsBody(String acceptLanguage, long retryAfterSeconds) {
+        String template = MESSAGE_TEMPLATES.get(resolveMessageLanguage(acceptLanguage));
+        String message = String.format(Locale.ROOT, template, retryAfterSeconds);
+        return "{\"error\":\"Too Many Requests\",\"message\":\"" + message
+                + "\",\"retryAfter\":" + retryAfterSeconds + "}";
+    }
+
+    /**
+     * Выбирает язык сообщения по {@code Accept-Language}: берётся поддерживаемый язык
+     * с наибольшим q-весом ("ru;q=0.3,en;q=0.9" → "en"), региональные теги сводятся к языку
+     * ("en-GB" → "en"), {@code q=0} по RFC 9110 означает «неприемлемо» и язык не выбирается.
+     * Всё прочее — отсутствующий, битый, wildcard-заголовок или неподдерживаемый язык —
+     * даёт {@link #DEFAULT_MESSAGE_LANG}.
+     * <p>
+     * Разбор ручной, а не через {@code Locale.LanguageRange.parse} + {@code Locale.lookupTag}:
+     * JDK-реализация компилирует regex на каждый subtag, из-за чего враждебный 8-килобайтный
+     * заголовок стоил порядка 6 секунд CPU на один ответ — и заказать их мог именно тот клиент,
+     * которого лимит уже отшил. Плюс {@code parse} бросает на входе "-" не {@code IllegalArgumentException},
+     * а {@code ArrayIndexOutOfBoundsException}, что превращало 429 в 500. Здесь разбор линейный,
+     * ограниченный {@link #MAX_LANGUAGE_RANGES} и не бросающий исключений вовсе.
+     * <p>
+     * Package-private для unit-тестирования.
+     */
+    String resolveMessageLanguage(String acceptLanguage) {
+        if (acceptLanguage == null || acceptLanguage.isBlank()) {
+            return DEFAULT_MESSAGE_LANG;
+        }
+        String best = DEFAULT_MESSAGE_LANG;
+        double bestWeight = 0.0;
+        int from = 0;
+        for (int parsed = 0; parsed < MAX_LANGUAGE_RANGES && from < acceptLanguage.length(); parsed++) {
+            int comma = acceptLanguage.indexOf(',', from);
+            int end = (comma < 0) ? acceptLanguage.length() : comma;
+
+            String language = primarySubtag(acceptLanguage, from, end);
+            if (language != null && MESSAGE_TEMPLATES.containsKey(language)) {
+                double weight = parseQuality(acceptLanguage, from, end);
+                if (weight > bestWeight) {
+                    bestWeight = weight;
+                    best = language;
+                }
+            }
+
+            if (comma < 0) {
+                break;
+            }
+            from = comma + 1;
+        }
+        return best;
+    }
+
+    /**
+     * Достаёт primary language subtag элемента {@code Accept-Language} в нижнем регистре:
+     * " en-GB;q=0.9" → "en". Возвращает null, если subtag пустой ("-") или заведомо ill-formed
+     * (длиннее {@link #MAX_PRIMARY_SUBTAG_LENGTH}) — такой элемент просто пропускается.
+     */
+    private static String primarySubtag(String header, int from, int end) {
+        int tagEnd = from;
+        while (tagEnd < end && header.charAt(tagEnd) != ';') {
+            tagEnd++;
+        }
+        int start = from;
+        while (start < tagEnd && Character.isWhitespace(header.charAt(start))) {
+            start++;
+        }
+        int stop = tagEnd;
+        while (stop > start && Character.isWhitespace(header.charAt(stop - 1))) {
+            stop--;
+        }
+        int dash = start;
+        while (dash < stop && header.charAt(dash) != '-') {
+            dash++;
+        }
+        int length = dash - start;
+        if (length == 0 || length > MAX_PRIMARY_SUBTAG_LENGTH) {
+            return null;
+        }
+        return header.substring(start, dash).toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Достаёт q-вес элемента {@code Accept-Language}; без параметров — 1.0 (RFC 9110).
+     * Битое значение ("q=abc") трактуется как 0.0 — такой элемент не выбирается, но и не роняет разбор.
+     */
+    private static double parseQuality(String header, int from, int end) {
+        for (int i = from; i < end - 1; i++) {
+            char c = header.charAt(i);
+            if ((c != 'q' && c != 'Q') || header.charAt(i + 1) != '=') {
+                continue;
+            }
+            int valueStart = i + 2;
+            int valueEnd = valueStart;
+            while (valueEnd < end
+                    && (Character.isDigit(header.charAt(valueEnd)) || header.charAt(valueEnd) == '.')) {
+                valueEnd++;
+            }
+            try {
+                return Double.parseDouble(header.substring(valueStart, valueEnd));
+            } catch (NumberFormatException ex) {
+                return 0.0;
+            }
+        }
+        return 1.0;
     }
 
     /**
