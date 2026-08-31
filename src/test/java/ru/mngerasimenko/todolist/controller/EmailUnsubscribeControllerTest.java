@@ -18,6 +18,7 @@ import ru.mngerasimenko.todolist.service.UserService;
 
 import java.util.Locale;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -42,6 +43,10 @@ class EmailUnsubscribeControllerTest {
 
     @MockitoBean
     private MessageService messageService;
+
+    /** Нужен для прямых вызовов package-private resolveLocaleFromHeader в обход MockMvc. */
+    @Autowired
+    private EmailUnsubscribeController controller;
 
     @BeforeEach
     void setUp() {
@@ -75,6 +80,45 @@ class EmailUnsubscribeControllerTest {
         mockMvc.perform(get("/api/users/unsubscribe-reminder").param("token", "good-token-en"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("lang=\"en\"")));
+    }
+
+    @Test
+    void unsubscribe_ValidTokenRegionalEnLocale_RendersEnglishSuccessPage() throws Exception {
+        // "en-US" из БД — тот же английский: язык страницы берётся по primary subtag.
+        when(userService.unsubscribeFromReminders("good-token-en-us")).thenReturn("en-US");
+
+        mockMvc.perform(get("/api/users/unsubscribe-reminder").param("token", "good-token-en-us"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("lang=\"en\"")));
+    }
+
+    @Test
+    void unsubscribe_ValidTokenUppercaseLocale_RendersEnglishSuccessPage() throws Exception {
+        // Явный locale клиента уходит в БД как прислан (LocaleValidation.PATTERN_OPTIONAL
+        // разрешает верхний регистр), поэтому в колонке лежит и "EN". Письмо такой юзер
+        // получает английское — страница отписки обязана совпасть с ним, а не разойтись.
+        when(userService.unsubscribeFromReminders("token-upper")).thenReturn("EN");
+
+        mockMvc.perform(get("/api/users/unsubscribe-reminder").param("token", "token-upper"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("lang=\"en\"")));
+    }
+
+    @Test
+    void unsubscribe_ValidTokenUnsupportedLocale_RendersRussianPageWithMatchingLangAttribute() throws Exception {
+        // Атрибут lang обязан описывать текст, который реально на странице. Бандла messages_eng
+        // нет, текст приходит русский — значит и lang должен быть ru. Прежняя проверка
+        // locale.getLanguage().startsWith("en") принимала "eng" за английский и выдавала
+        // <html lang="en"> вокруг русского текста: скринридер читал русский английским голосом.
+        when(userService.unsubscribeFromReminders("token-eng")).thenReturn("eng");
+        when(userService.unsubscribeFromReminders("token-de")).thenReturn("de");
+
+        mockMvc.perform(get("/api/users/unsubscribe-reminder").param("token", "token-eng"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("lang=\"ru\"")));
+        mockMvc.perform(get("/api/users/unsubscribe-reminder").param("token", "token-de"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("lang=\"ru\"")));
     }
 
     @Test
@@ -125,6 +169,107 @@ class EmailUnsubscribeControllerTest {
                         .header("Accept-Language", "en-US,en;q=0.9"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("lang=\"en\"")));
+    }
+
+    @Test
+    void unsubscribe_InvalidTokenAcceptLanguageByQuality_PicksHighestWeightedLanguage() throws Exception {
+        // Клиент прямо сказал, что английский ему приятнее русского. Разбор по первому
+        // элементу списка это игнорировал и отдавал русскую страницу.
+        when(userService.unsubscribeFromReminders("bad-token"))
+                .thenThrow(new UserNotFoundException("Invalid or expired unsubscribe token"));
+
+        mockMvc.perform(get("/api/users/unsubscribe-reminder")
+                        .param("token", "bad-token")
+                        .header("Accept-Language", "ru;q=0.1,en;q=0.9"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("lang=\"en\"")));
+    }
+
+    @Test
+    void unsubscribe_InvalidTokenWeakEnglishBeforeImplicitRussian_PicksRussian() throws Exception {
+        // Единственный вход, на котором прежний разбор («первый элемент списка») и новый
+        // расходятся не в пользу нового по интуиции, но в пользу RFC: у "ru" без параметра
+        // вес 1.0, и он обыгрывает явно ослабленный английский. Пинним осознанно.
+        when(userService.unsubscribeFromReminders("bad-token"))
+                .thenThrow(new UserNotFoundException("Invalid or expired unsubscribe token"));
+
+        mockMvc.perform(get("/api/users/unsubscribe-reminder")
+                        .param("token", "bad-token")
+                        .header("Accept-Language", "en;q=0.9,ru"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("lang=\"ru\"")));
+    }
+
+    @Test
+    void unsubscribe_InvalidTokenUnsupportedPreferredLanguage_FallsBackToSupportedOne() throws Exception {
+        // Главный практический выигрыш: немецкому клиенту, который английский всё же принимает,
+        // прежний разбор отдавал русскую страницу — он смотрел только на первый элемент.
+        when(userService.unsubscribeFromReminders("bad-token"))
+                .thenThrow(new UserNotFoundException("Invalid or expired unsubscribe token"));
+
+        mockMvc.perform(get("/api/users/unsubscribe-reminder")
+                        .param("token", "bad-token")
+                        .header("Accept-Language", "de-DE,de;q=0.9,en;q=0.8"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("lang=\"en\"")));
+    }
+
+    @Test
+    void unsubscribe_InvalidTokenUnacceptableLanguage_FallsBackToRu() throws Exception {
+        // q=0 по RFC 9110 означает «неприемлемо» — такой язык выбирать нельзя.
+        when(userService.unsubscribeFromReminders("bad-token"))
+                .thenThrow(new UserNotFoundException("Invalid or expired unsubscribe token"));
+
+        mockMvc.perform(get("/api/users/unsubscribe-reminder")
+                        .param("token", "bad-token")
+                        .header("Accept-Language", "en;q=0"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("lang=\"ru\"")));
+    }
+
+    /**
+     * Эндпоинт открытый (permitAll), Accept-Language приходит произвольный.
+     * <p>
+     * Разбор здесь и раньше не падал на «-» (был ручной split), поэтому первые строки —
+     * защита от регрессии при переходе на общий парсер. Настоящие изменения поведения —
+     * в последних трёх: битый элемент рядом с валидным больше не заслоняет язык,
+     * а «eng»/«en_US» перестали считаться английским (прежний {@code startsWith("en")}
+     * принимал и их).
+     * <p>
+     * Проверяется прямым вызовом, а не через MockMvc: такой заголовок роняет сам
+     * {@code MockHttpServletRequest.addHeader} (он парсит Accept-Language через
+     * {@code Locale.LanguageRange.parse}, а тот бросает на «-» ArrayIndexOutOfBoundsException),
+     * поэтому до контроллера в MockMvc он не долетает.
+     */
+    @Test
+    void resolveLocaleFromHeader_MalformedAcceptLanguage_FallsBackToRu() {
+        assertThat(controller.resolveLocaleFromHeader("-")).isEqualTo(new Locale("ru"));
+        assertThat(controller.resolveLocaleFromHeader("-,en")).isEqualTo(Locale.ENGLISH);
+        assertThat(controller.resolveLocaleFromHeader("-".repeat(8000))).isEqualTo(new Locale("ru"));
+        assertThat(controller.resolveLocaleFromHeader(null)).isEqualTo(new Locale("ru"));
+        // "eng"/"english" — не английский по BCP-47; прежний startsWith("en") их принимал.
+        assertThat(controller.resolveLocaleFromHeader("eng")).isEqualTo(new Locale("ru"));
+        assertThat(controller.resolveLocaleFromHeader("en_US")).isEqualTo(new Locale("ru"));
+    }
+
+    @Test
+    void unsubscribe_HugeAcceptLanguage_RendersPageInsteadOfFailing() throws Exception {
+        // Tomcat пропускает заголовок до 8 КБ. Тест характеризационный — прежний split его тоже
+        // переживал; он фиксирует, что переход на общий парсер этого не сломал.
+        StringBuilder header = new StringBuilder();
+        for (int i = 0; header.length() < 8000; i++) {
+            header.append("qa").append((char) ('a' + i % 26)).append("-x").append(i).append(";q=0.5,");
+        }
+        header.append("zz");
+
+        when(userService.unsubscribeFromReminders("bad-token"))
+                .thenThrow(new UserNotFoundException("Invalid or expired unsubscribe token"));
+
+        mockMvc.perform(get("/api/users/unsubscribe-reminder")
+                        .param("token", "bad-token")
+                        .header("Accept-Language", header.toString()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("lang=\"ru\"")));
     }
 
     // ===== scope=todo_due (Task 7) =====
