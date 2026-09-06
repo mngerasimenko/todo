@@ -544,6 +544,22 @@ public class TodoServiceImpl implements TodoService {
         Instant now = Instant.now();
         List<Todo> due = todoRepository.findDueForReminder(now, now.minus(STALE_AFTER));
 
+        // Состояние каналов — одной строкой на свип, а не на получателя: иначе оператор,
+        // разбирающий "почему не пришло", видит только "Обработано задач: N" и не отличает
+        // закрытый флагом канал от отсутствия верифицированных получателей. Читаем флаг ОДИН
+        // раз и передаём в notifyOne, чтобы строка не могла разойтись с поведением.
+        // Про push пишем отдельно и не утверждаем за него: PushNotificationServiceImpl гасится
+        // своим флагом молча, и при обоих закрытых каналах свип не шлёт НИЧЕГО, но всё равно
+        // проставляет reminder_sent_at — напоминания теряются навсегда. Молчим, когда
+        // рассылать нечего, иначе строка капает каждые 5 минут круглосуточно.
+        boolean emailEnabled = flagStore.isEnabled(FeatureFlag.TODO_REMINDER_EMAIL);
+        if (!due.isEmpty() && !emailEnabled) {
+            log.info("[todo-reminder] Канал писем выключен флагом {}; push: {}",
+                    FeatureFlag.TODO_REMINDER_EMAIL.getName(),
+                    flagStore.isEnabled(FeatureFlag.PUSH_NOTIFICATIONS)
+                            ? "включён" : "ВЫКЛЮЧЕН, напоминания не уходят никому");
+        }
+
         // Один токен отписки на пользователя за весь свип: колонка User.unsubscribeToken общая
         // на пользователя, и issueUnsubscribeToken её перезаписывает. Без переиспользования
         // пользователь с двумя задачами в одном окне получил бы два письма, но рабочей была бы
@@ -560,7 +576,7 @@ public class TodoServiceImpl implements TodoService {
         for (Todo todo : due) {
             try {
                 for (User recipient : resolveRecipients(todo)) {
-                    notifyOne(todo, recipient, unsubscribeTokens, listNames);
+                    notifyOne(todo, recipient, emailEnabled, unsubscribeTokens, listNames);
                 }
             } catch (Exception e) {
                 // Падение одной задачи не должно рвать весь проход.
@@ -602,8 +618,8 @@ public class TodoServiceImpl implements TodoService {
         return LocalDateTime.of(todo.getDueDate(), todo.getDueTime()).format(DUE_AT_FORMATTER);
     }
 
-    private void notifyOne(Todo todo, User recipient, Map<Long, String> unsubscribeTokens,
-                            Map<Long, String> listNames) {
+    private void notifyOne(Todo todo, User recipient, boolean emailEnabled,
+                            Map<Long, String> unsubscribeTokens, Map<Long, String> listNames) {
         String dueAt = formatDueAt(todo);
         try {
             pushNotificationService.sendTodoDuePush(
@@ -612,6 +628,14 @@ public class TodoServiceImpl implements TodoService {
             log.warn("[todo-reminder] Push не отправлен userId={}: {}", recipient.getId(), e.getMessage());
         }
 
+        // Канал писем закрыт отдельным флагом: напоминания запускаются push'ами, пока не
+        // закрыты два решения по почте (общий токен отписки и отсутствие обратного включения
+        // согласия). Проверка стоит ДО гейтов получателя и до выпуска токена — issueUnsubscribeToken
+        // пишет в колонку, общую с маркетинговой рассылкой, и вхолостую его дёргать нельзя.
+        // Значение приходит параметром: прочитано один раз на свип в dispatchDueReminders.
+        if (!emailEnabled) {
+            return;
+        }
         if (!recipient.isEmailVerified() || !recipient.isTodoReminderEmailEnabled()) {
             return;
         }
