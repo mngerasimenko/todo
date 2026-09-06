@@ -14,8 +14,11 @@ import ru.mngerasimenko.todolist.service.TodoService;
  * вся логика (кому, каким каналом, что при сбое) живёт в TodoServiceImpl.dispatchDueReminders,
  * чтобы её можно было протестировать и вызвать вручную (см. TriggerReminderEndpoint по образцу).
  *
- * Включение/выключение — через {@link FeatureFlag#TODO_REMINDERS} (по умолчанию выключен,
- * включается вручную после проверки на staging).
+ * Флагов ДВА, и они разного уровня. {@link FeatureFlag#TODO_REMINDERS} гасит весь свип и
+ * проверяется здесь. {@link FeatureFlag#TODO_REMINDER_EMAIL} гасит только канал писем внутри
+ * свипа и проверяется в TodoServiceImpl.dispatchDueReminders — это позволяет запустить
+ * напоминания push'ами, не трогая согласия живых пользователей. Оба по умолчанию выключены и
+ * включаются вручную после проверки на staging.
  */
 @Slf4j
 @Component

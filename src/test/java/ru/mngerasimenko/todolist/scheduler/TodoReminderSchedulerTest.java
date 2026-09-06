@@ -1,6 +1,10 @@
 package ru.mngerasimenko.todolist.scheduler;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import org.hibernate.LazyInitializationException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,6 +30,7 @@ import ru.mngerasimenko.todolist.service.SuggestionService;
 import ru.mngerasimenko.todolist.service.TodoService;
 import ru.mngerasimenko.todolist.service.TodoServiceImpl;
 import ru.mngerasimenko.todolist.service.UserService;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -33,6 +38,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -105,9 +111,107 @@ class TodoReminderSchedulerTest {
         private EmailService emailService;
         @Mock
         private UserService userService;
+        @Mock
+        private FeatureFlagStore flagStore;
 
         @InjectMocks
         private TodoServiceImpl todoService;
+
+        /**
+         * Этот класс описывает МЕХАНИКУ доставки — кому уходит, сколько раз выпускается токен,
+         * что происходит при detached-связи. Канал писем по умолчанию включён, иначе каждый
+         * тест доставки молча уходил бы по ветке "канал закрыт" и проходил вхолостую.
+         * Тест самого флага ниже переопределяет этот стаб явно.
+         */
+        @BeforeEach
+        void enableEmailChannel() {
+            lenient().when(flagStore.isEnabled(FeatureFlag.TODO_REMINDER_EMAIL)).thenReturn(true);
+        }
+
+        @Test
+        void dispatchDueReminders_EmailChannelDisabled_SendsPushOnly() {
+            // Ради этого флаг и заведён: напоминания запускаются push'ами, пока не закрыты два
+            // решения по почте. Письмо не уходит даже получателю, у которого подтверждена почта
+            // и включено согласие, — то есть гейт канала стоит выше гейтов получателя.
+            when(flagStore.isEnabled(FeatureFlag.TODO_REMINDER_EMAIL)).thenReturn(false);
+            // Push включён явно: без этого стаба мок отдаёт false, и диагностическая строка
+            // свипа печатала бы "push ВЫКЛЮЧЕН" в тесте, который ниже проверяет, что push ушёл.
+            when(flagStore.isEnabled(FeatureFlag.PUSH_NOTIFICATIONS)).thenReturn(true);
+            Todo todo = todoWithScope(ReminderScope.SELF, 10L, 86L);
+            when(todoRepository.findDueForReminder(any(), any())).thenReturn(List.of(todo));
+
+            todoService.dispatchDueReminders();
+
+            verify(pushNotificationService).sendTodoDuePush(eq(10L), eq(todo.getId()), eq(86L), any(), any());
+            verifyNoInteractions(emailService);
+            // Токен отписки не выпускается вхолостую: колонка общая с маркетинговой рассылкой,
+            // и лишний выпуск обесценил бы ссылку в уже доставленном письме.
+            verifyNoInteractions(userService);
+            // Позитивный контроль к этому тесту — dispatchDueReminders_EligibleUser_SendsEmail
+            // ниже: те же гейты получателя, но канал открыт стабом из enableEmailChannel().
+        }
+
+        /**
+         * Сторож диагностической строки свипа. Она существует ради одного вопроса оператора —
+         * "почему не пришло" — и уже один раз соврала: первая версия утверждала "уходят только
+         * push'ом", не проверяя push вовсе. Самый опасный случай — оба канала закрыты: свип
+         * молча проставляет reminder_sent_at, напоминания теряются навсегда, и строка лога
+         * остаётся единственным следом. Поэтому проверяется именно она, а не факт неотправки.
+         */
+        @Test
+        void dispatchDueReminders_BothChannelsDisabled_LogsThatNobodyIsNotified() {
+            when(flagStore.isEnabled(FeatureFlag.TODO_REMINDER_EMAIL)).thenReturn(false);
+            when(flagStore.isEnabled(FeatureFlag.PUSH_NOTIFICATIONS)).thenReturn(false);
+            // Строится ДО when(...): todoWithScope сам регистрирует стабы, и вызов внутри
+            // when(...) даёт UnfinishedStubbingException.
+            Todo todo = todoWithScope(ReminderScope.SELF, 10L, 86L);
+            when(todoRepository.findDueForReminder(any(), any())).thenReturn(List.of(todo));
+
+            Logger logger = (Logger) LoggerFactory.getLogger(TodoServiceImpl.class);
+            ListAppender<ILoggingEvent> appender = new ListAppender<>();
+            appender.start();
+            logger.addAppender(appender);
+            try {
+                todoService.dispatchDueReminders();
+            } finally {
+                logger.detachAppender(appender);
+            }
+
+            String channels = appender.list.stream()
+                    .map(ILoggingEvent::getFormattedMessage)
+                    .filter(m -> m.contains("Канал писем выключен"))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("свип не сообщил о состоянии каналов"));
+            assertTrue(channels.contains("ВЫКЛЮЧЕН, напоминания не уходят никому"),
+                    "при обоих закрытых каналах строка обязана сказать, что не уходит ничего: " + channels);
+        }
+
+        /** Обратная ветка того же тернарника: письма закрыты, push жив — строка не должна пугать. */
+        @Test
+        void dispatchDueReminders_EmailChannelDisabledPushAlive_LogsPushIsOn() {
+            when(flagStore.isEnabled(FeatureFlag.TODO_REMINDER_EMAIL)).thenReturn(false);
+            when(flagStore.isEnabled(FeatureFlag.PUSH_NOTIFICATIONS)).thenReturn(true);
+            Todo todo = todoWithScope(ReminderScope.SELF, 10L, 86L);
+            when(todoRepository.findDueForReminder(any(), any())).thenReturn(List.of(todo));
+
+            Logger logger = (Logger) LoggerFactory.getLogger(TodoServiceImpl.class);
+            ListAppender<ILoggingEvent> appender = new ListAppender<>();
+            appender.start();
+            logger.addAppender(appender);
+            try {
+                todoService.dispatchDueReminders();
+            } finally {
+                logger.detachAppender(appender);
+            }
+
+            String channels = appender.list.stream()
+                    .map(ILoggingEvent::getFormattedMessage)
+                    .filter(m -> m.contains("Канал писем выключен"))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("свип не сообщил о состоянии каналов"));
+            assertTrue(channels.contains("push: включён"),
+                    "при живом push строка обязана это сказать: " + channels);
+        }
 
         @Test
         void dispatchDueReminders_ScopeSelf_NotifiesAuthorOnly() {
@@ -175,7 +279,7 @@ class TodoReminderSchedulerTest {
         }
 
         @Test
-        void dispatchDueReminders_EmailDisabled_SkipsEmail() {
+        void dispatchDueReminders_UserConsentDisabled_SkipsEmail() {
             Todo todo = todoWithScope(ReminderScope.SELF, 10L, 86L);
             User author = userWithEmail(10L, "a@test.ru");
             author.setTodoReminderEmailEnabled(false);
