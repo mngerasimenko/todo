@@ -166,7 +166,7 @@ public class PushNotificationServiceImpl implements PushNotificationService {
                                String titleKey, Object[] titleArgs,
                                String bodyKey, Object[] bodyArgs,
                                Long listId) {
-        sendLocalized(tokens, pushType, titleKey, titleArgs, bodyKey, bodyArgs, listId, Map.of());
+        sendLocalized(tokens, pushType, titleKey, titleArgs, bodyKey, bodyArgs, listId, Map.of(), null);
     }
 
     /**
@@ -178,7 +178,8 @@ public class PushNotificationServiceImpl implements PushNotificationService {
                                String titleKey, Object[] titleArgs,
                                String bodyKey, Object[] bodyArgs,
                                Long listId,
-                               Map<String, String> extraData) {
+                               Map<String, String> extraData,
+                               String notificationTag) {
         String listName = listId != null
                 ? taskListRepository.findById(listId).map(list -> list.getName()).orElse("")
                 : "";
@@ -189,14 +190,28 @@ public class PushNotificationServiceImpl implements PushNotificationService {
             String body = messageService.getMessage(bodyKey, locale, bodyArgs);
             String fcmToken = pt.getFcmToken();
             try {
+                // Tag — часть контракта с Android-клиентом, а не косметика. При закрытом
+                // приложении onMessageReceived НЕ вызывается: уведомление рисует сам FCM SDK
+                // через notify(tag, 0, ...). Без нашего tag он подставляет свой,
+                // "FCM-Notification:<uptime>", уникальный на каждое сообщение — и тогда
+                // (а) повторное напоминание по той же задаче ложится РЯДОМ со старым, где
+                // стоит уже неверное время, и (б) клиент не может снять уведомление, потому
+                // что не знает его адрес. Детерминированный tag чинит оба: система сама
+                // заменяет уведомление с тем же tag, а клиент снимает его
+                // cancel("todo_due_<id>", 0) — см. ReminderNotifications.tagFor в
+                // todolist-android. Менять формат в одиночку нельзя, только парой.
+                var androidNotification = com.google.firebase.messaging.AndroidNotification.builder()
+                        .setTitle(title)
+                        .setBody(body)
+                        .setChannelId("todo_notifications_v2");
+                if (notificationTag != null) {
+                    androidNotification.setTag(notificationTag);
+                }
+
                 Message.Builder messageBuilder = Message.builder()
                         .setToken(fcmToken)
                         .setAndroidConfig(com.google.firebase.messaging.AndroidConfig.builder()
-                                .setNotification(com.google.firebase.messaging.AndroidNotification.builder()
-                                        .setTitle(title)
-                                        .setBody(body)
-                                        .setChannelId("todo_notifications_v2")
-                                        .build())
+                                .setNotification(androidNotification.build())
                                 .build())
                         // Phase 3.1-server: семантический маркер типа для будущей аналитики
                         // (Android-парсинг отложен до явного потребителя, см. fromIdeas/
@@ -281,6 +296,16 @@ public class PushNotificationServiceImpl implements PushNotificationService {
         log.info("Onboarding push-напоминание отправлено userId={} на {} устройств(а)", userId, tokens.size());
     }
 
+    /**
+     * Tag уведомления о сроке задачи. Формат — часть контракта с Android-клиентом
+     * ({@code ReminderNotifications.tagFor} в todolist-android): по нему клиент снимает
+     * уведомление, когда пользователь с задачей разобрался, а система по нему же заменяет
+     * предыдущее напоминание по той же задаче. Менять только одновременно с клиентом.
+     */
+    static String todoDueNotificationTag(Long todoId) {
+        return "todo_due_" + todoId;
+    }
+
     @Override
     @Async
     public void sendTodoDuePush(Long userId, Long todoId, Long listId, String todoName, String dueAt) {
@@ -301,7 +326,8 @@ public class PushNotificationServiceImpl implements PushNotificationService {
                 "push.todo.due.title", new Object[]{},
                 "push.todo.due.body", new Object[]{todoName, dueAt},
                 listId,
-                Map.of("todo_id", String.valueOf(todoId)));
+                Map.of("todo_id", String.valueOf(todoId)),
+                todoDueNotificationTag(todoId));
 
         log.info("Push-напоминание о сроке отправлено userId={}, todoId={} на {} устройств(а)", userId, todoId, tokens.size());
     }
