@@ -105,6 +105,117 @@ class PushNotificationServiceImplTest {
         }
     }
 
+    /**
+     * Tag уведомления — контракт с Android-клиентом, а не косметика.
+     *
+     * При закрытом приложении onMessageReceived не вызывается: уведомление рисует FCM SDK
+     * через notify(tag, 0, ...). Без нашего tag он подставляет свой, уникальный на каждое
+     * сообщение, и тогда клиент не может ни заменить напоминание по той же задаче, ни снять
+     * его — оба дефекта, ради которых это и делалось. Формат обязан посимвольно совпадать
+     * с ReminderNotifications.tagFor в todolist-android.
+     */
+    @Test
+    void sendTodoDuePush_SetsDeterministicNotificationTag() throws Exception {
+        when(pushTokenRepository.findByUserId(53L)).thenReturn(List.of(tokenFor(53L, "ru")));
+        TaskList list = new TaskList();
+        list.setId(86L);
+        list.setName("Теплица");
+        when(taskListRepository.findById(86L)).thenReturn(Optional.of(list));
+
+        try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+
+            pushNotificationService.sendTodoDuePush(53L, 777L, 86L, "Полить теплицу", "25.08.2026 09:00");
+
+            ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
+            verify(firebaseMessaging).send(captor.capture());
+            assertNotificationConfigured(captor.getValue());
+            assertThat(extractNotificationTag(captor.getValue())).isEqualTo("todo_due_777");
+        }
+    }
+
+    /** Прочие типы push тегом не помечаются — им замена по задаче не нужна. */
+    @Test
+    void notifyNewTodo_HasNoNotificationTag() throws Exception {
+        when(pushTokenRepository.findByListIdExcludingUser(86L, 53L))
+                .thenReturn(List.of(tokenFor(53L, "ru")));
+        TaskList list = new TaskList();
+        list.setId(86L);
+        list.setName("Теплица");
+        when(taskListRepository.findById(86L)).thenReturn(Optional.of(list));
+
+        try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+
+            pushNotificationService.notifyNewTodo(86L, 53L, "Иван", "Хлеб");
+
+            ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
+            verify(firebaseMessaging).send(captor.capture());
+            // Сначала убеждаемся, что AndroidNotification вообще собран и канал тот самый:
+            // иначе «tag == null» проходил бы и при отвалившемся AndroidConfig целиком,
+            // а вместе с ним отвалились бы channelId, title и body.
+            assertNotificationConfigured(captor.getValue());
+            assertThat(extractNotificationTag(captor.getValue())).isNull();
+        }
+    }
+
+    /**
+     * Проверяет, что AndroidNotification вообще собран и канал тот, который заводит клиент
+     * (`TodoApp.createNotificationChannel`). Без канала система роняет уведомление в
+     * fallback-канал FCM SDK — этот дефект в проекте уже был.
+     */
+    private void assertNotificationConfigured(Message message) {
+        assertThat(readField(readField(message, "androidConfig"), "notification")).isNotNull();
+        assertThat((String) readField(
+                readField(readField(message, "androidConfig"), "notification"), "channelId"))
+                .isEqualTo("todo_notifications_v2");
+    }
+
+    /** Читает приватное поле по имени — общий кирпич для проверок собранного Message. */
+    private Object readField(Object target, String name) {
+        if (target == null) {
+            return null;
+        }
+        try {
+            java.lang.reflect.Field field = target.getClass().getDeclaredField(name);
+            field.setAccessible(true);
+            return field.get(target);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Не удалось прочитать поле " + name, e);
+        }
+    }
+
+    /**
+     * Достаёт tag из AndroidNotification собранного Message — через reflection, потому что
+     * у AndroidConfig и AndroidNotification публичных читателей нет вовсе, только поля
+     * (в отличие от Message.getData(), который package-private).
+     *
+     * Возвращает null и когда tag не задан, и когда отсутствует сам AndroidNotification —
+     * поэтому проверять только его недостаточно, см. assertNotificationConfigured.
+     */
+    private String extractNotificationTag(Message message) {
+        try {
+            java.lang.reflect.Field androidField = Message.class.getDeclaredField("androidConfig");
+            androidField.setAccessible(true);
+            Object androidConfig = androidField.get(message);
+            if (androidConfig == null) {
+                return null;
+            }
+            java.lang.reflect.Field notificationField =
+                    androidConfig.getClass().getDeclaredField("notification");
+            notificationField.setAccessible(true);
+            Object notification = notificationField.get(androidConfig);
+            if (notification == null) {
+                return null;
+            }
+            java.lang.reflect.Field tagField = notification.getClass().getDeclaredField("tag");
+            tagField.setAccessible(true);
+            return (String) tagField.get(notification);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Не удалось прочитать tag из Message", e);
+        }
+    }
+
     /** Строит push-токен для userId с заданной локалью — минимальная фикстура для FCM-тестов. */
     private PushToken tokenFor(Long userId, String locale) {
         User user = new User();
