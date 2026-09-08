@@ -58,8 +58,18 @@ services:
       - certbot-conf:/etc/letsencrypt
       - certbot-www:/var/www/certbot
 
-    # Проверка и обновление сертификатов каждые 12 часов
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done'"
+    # Проверка и обновление сертификатов каждые 12 часов.
+    #
+    # --deploy-hook срабатывает ТОЛЬКО когда сертификат реально обновился, и
+    # оставляет маркер на общем томе certbot-conf. Сам хук до nginx дотянуться не
+    # может (другой контейнер, docker-сокета здесь намеренно нет), поэтому reload
+    # делает monitoring/certbot-renew.sh с хоста, забирая маркер.
+    #
+    # Раньше reload висел отдельной строкой в root-crontab прода
+    # (`certbot renew && nginx -s reload`, каждые 12 ч, безусловно). Её не было в
+    # git: пересборка хоста унесла бы её бесшумно, а проявилось бы это через недели
+    # протухшим сертификатом из памяти nginx — ровно инцидент replyAI 14.08.2026.
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet --deploy-hook \"touch /etc/letsencrypt/.nginx-reload-needed\"; sleep 12h & wait $${!}; done'"
 
     networks:
       - todo-network

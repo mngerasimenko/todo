@@ -183,7 +183,7 @@ mvn test -Pintegration
 
 ## Мониторинг сервера
 
-Telegram-бот для мониторинга состояния сервера. Работает в двух режимах:
+VK-бот для мониторинга состояния сервера изнутри машины. Работает в двух режимах:
 
 **Автоматические алерты** (cron, каждые 5 минут):
 - RAM > 80%, Swap > 50%, Disk > 85%
@@ -204,7 +204,28 @@ Telegram-бот для мониторинга состояния сервера.
 | `/config` | Настройки алертов |
 | `/help` | Справка |
 
-Конфигурация: `monitoring/monitor.conf` (Telegram Bot Token + Chat ID, не коммитится). Шаблон: `monitoring/monitor.conf.example`.
+Конфигурация: `monitoring/monitor.conf` (токен VK и адресат, не коммитится). Шаблон: `monitoring/monitor.conf.example`.
+
+### Портфельная опрашивалка (внешнее наблюдение)
+
+Отдельный слой, который смотрит на портфель **снаружи** наблюдаемой машины и
+сторожит сам мониторинг. Живёт на двух хостах сразу и решает три задачи:
+
+- **взаимный дед-мэн** — каждая сторона оставляет маячок и читает маячок другой;
+  молчание дольше порога даёт сигнал. Без него смерть опрашивалки неотличима от
+  «всё хорошо»: и то и другое выглядит как тишина в чате;
+- **сроки TLS из рукопожатия** на всех доменах портфеля — ловит отказ вида
+  «сертификат на диске обновлён, а nginx держит в памяти старый»;
+- **дисциплина шума** — сигнал на смену состояния, сообщение о восстановлении,
+  все отказы прогона одним сообщением, состояние вне `/tmp`, лог с историей.
+
+Устройство, пороги, установка и разбор того, чего она НЕ ловит —
+[`monitoring/README.md`](monitoring/README.md).
+
+Продление сертификатов и перезагрузка nginx после него — `monitoring/certbot-renew.sh`
+(перезагружает по факту продления, а не по таймеру).
+
+Тесты обоих скриптов — `monitoring/tests/`, сеть и удалённые машины не трогают.
 
 **Автоматический backup PostgreSQL** (cron, ежедневно в 3:00):
 - `monitoring/backup.sh` — дамп БД, хранение 7 дней
@@ -258,6 +279,9 @@ src/main/resources/templates/      HTML-шаблоны email (верификац
 src/test/java/        Unit + integration тесты (controller, service, repository, mapper, security, crypto, concurrency, redis blacklist integration, redis rate-limit integration, redis user-auth cache, admin-endpoint)
 postman/             Postman-коллекция + окружения
 monitoring/          VK-мониторинг (скрипты, systemd-сервис, конфиг) + backup PostgreSQL
+monitoring/portfolio-monitor.sh  Внешняя портфельная опрашивалка + взаимный дед-мэн
+monitoring/certbot-renew.sh      Продление сертификатов и reload nginx по факту продления
+monitoring/tests/                Тесты скриптов мониторинга на заглушках
 monitoring/prometheus/   Prometheus scrape-конфиг
 monitoring/grafana/      Grafana provisioning: datasources, dashboards (JVM, Spring Boot Statistics)
 ```

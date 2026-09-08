@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Заглушка ssh: подменяет обе операции взаимного дед-мэна — чтение маячка пира
+# и доставку своего маячка пиру. Сеть не трогается.
+#
+# STUB_PEER=unreachable        — соединение не встало (rc 255)
+# STUB_PEER=push_fails         — читать даёт, писать нет
+# STUB_PEER_BEACON=<строка>    — что отдаёт удалённый `cat`; пусто = файла нет (rc 1)
+# Доставленный маячок пишется в $STUB_STATE/ssh.push
+
+[ -n "${STUB_STATE:-}" ] && printf '%s\n' "$*" >> "${STUB_STATE}/ssh.argv"
+
+# Удалённая команда — последний аргумент.
+remote="${!#}"
+
+if [ "${STUB_PEER:-ok}" = "unreachable" ]; then
+  echo "ssh: connect to host port 22: Connection timed out" >&2
+  exit 255
+fi
+
+case "$remote" in
+  *"cat >"*)
+    if [ "${STUB_PEER:-ok}" = "push_fails" ]; then
+      echo "bash: line 1: cannot create" >&2
+      exit 1
+    fi
+    cat >> "${STUB_STATE:-/tmp}/ssh.push"
+    ;;
+  *cat*)
+    if [ -z "${STUB_PEER_BEACON:-}" ]; then
+      echo "cat: No such file or directory" >&2
+      exit 1
+    fi
+    printf '%s\n' "$STUB_PEER_BEACON"
+    ;;
+  *)
+    exit 0
+    ;;
+esac

@@ -1,0 +1,9 @@
+/var/log/certbot-renew.log {
+    monthly
+    rotate 6
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

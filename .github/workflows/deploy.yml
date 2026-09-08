@@ -167,7 +167,20 @@ jobs:
             # Update repo
             git fetch origin master
             git reset --hard origin/master
-            
+
+            # Портфельная опрашивалка живёт на стейдже (наблюдатель вне наблюдаемой
+            # машины). До этого шага рабочая копия в /root/monitoring была положена
+            # руками и совпадала с репозиторием по счастью — расхождение вернулось бы
+            # само через пару месяцев. Установщик идемпотентен и сам гоняет тесты.
+            sed -i 's/\r$//' /root/todo/monitoring/*.sh 2>/dev/null || true
+            chmod +x /root/todo/monitoring/*.sh 2>/dev/null || true
+            # ssh-action не останавливается на ненулевом коде (script_stop не включён,
+            # а set -e тут нельзя — ниже есть команды, штатно возвращающие не 0).
+            # Поэтому падение установщика выносим наружу руками: молча зелёный деплой
+            # при неустановленной опрашивалке — тот же тихий отказ, который мы чиним.
+            bash /root/todo/monitoring/install-portfolio-monitor.sh external \
+              || { echo "::error::install-portfolio-monitor failed"; exit 1; }
+
             # Create volumes/network if not exist (idempotent)
             docker network create staging-network 2>/dev/null || true
             docker volume create staging-redis-data 2>/dev/null || true
@@ -229,6 +242,15 @@ jobs:
             # Update repo (nginx.conf, assetlinks.json, monitoring)
             git fetch origin master
             git reset --hard origin/master
+
+            # Права на скрипты мониторинга чиним СРАЗУ после reset, а не в конце джобы.
+            # Раньше между reset и chmod проходило несколько минут, и попавшие в это
+            # окно запуски cron падали с "Permission denied": так внутренний монитор
+            # прода молча простоял ~26 часов суммарно и никто не узнал — лог никто не
+            # читает, MTA на машине нет. Исполняемый бит теперь ещё и в git (100755),
+            # так что chmod здесь — страховка, а не единственная опора.
+            sed -i 's/\r$//' monitoring/*.sh 2>/dev/null || true
+            chmod +x monitoring/*.sh 2>/dev/null || true
 
             # Create network and volumes if not exist
             docker network create todo-network 2>/dev/null || true
@@ -336,7 +358,11 @@ jobs:
               # сервисы. todo-app уже пересоздан выше — не задеваем.
               # nginx-proxy сюда не включён — у него ниже своя ветка с защитой
               # от битого external-конфига.
-              docker compose up -d postgres-db redis prometheus grafana
+              # certbot здесь обязателен: в его entrypoint живёт --deploy-hook, который
+              # ставит маркер для перезагрузки nginx. Без пересоздания контейнер крутил бы
+              # старый цикл без хука — сертификат продлевался бы, а nginx держал в памяти
+              # прежний, то есть ровно инцидент replyAI 14.08.2026.
+              docker compose up -d postgres-db redis prometheus grafana certbot
             else
               docker compose up -d prometheus grafana
             fi
@@ -413,9 +439,11 @@ jobs:
             docker image prune -a -f 2>/dev/null || true
             docker builder prune -a -f 2>/dev/null || true
 
-            # Fix monitoring scripts (CRLF → LF, +x)
-            sed -i 's/\r$//' /home/deploy/todo/monitoring/*.sh 2>/dev/null || true
-            chmod +x /home/deploy/todo/monitoring/*.sh 2>/dev/null || true
+            # Права на monitoring/*.sh выставлены выше, сразу после git reset.
+            # Установка портфельной опрашивалки на прод (роль peer) идёт отдельно,
+            # руками из-под root: пользователь deploy не имеет sudo, а установщику
+            # нужны root-crontab, /etc/logrotate.d и /var/lib.
+            # См. monitoring/README.md, раздел «Установка».
 
             echo "Production deployed successfully"
 
