@@ -1,0 +1,8 @@
+# Shell-скрипты всегда с LF: копия с CRLF на Linux падает с "bad interpreter",
+# и это ещё один тихий отказ — cron проглатывает ошибку, лог никто не читает.
+*.sh text eol=lf
+monitoring/tests/stubs/* text eol=lf
+# logrotate и cron-подобные конфиги на \r тоже спотыкаются, а sed их не чинит.
+*.conf text eol=lf
+*.logrotate text eol=lf
+*.service text eol=lf
