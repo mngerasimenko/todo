@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Заглушка openssl: s_client отдаёт маркер с именем хоста, x509 превращает маркер в даты.
+#
+# Срок до конца задаётся STUB_CERT_DAYS (общий) или STUB_CERT_DAYS_<host с _ вместо . и ->.
+# Возраст серта в эфире (для проверки расхождения «эфир против диска») —
+# STUB_WIRE_AGE_DAYS[_<host>], по умолчанию 0 дней назад.
+case "${1:-}" in
+  s_client)
+    host=""
+    prev=""
+    for a in "$@"; do
+      [ "$prev" = "-servername" ] && host="$a"
+      prev="$a"
+    done
+    dkey="STUB_CERT_DAYS_${host//[.-]/_}"
+    days="${!dkey:-${STUB_CERT_DAYS:-60}}"
+    [ "$days" = "none" ] && exit 1
+    akey="STUB_WIRE_AGE_DAYS_${host//[.-]/_}"
+    age="${!akey:-${STUB_WIRE_AGE_DAYS:-0}}"
+    echo "STUBCERT $days $age"
+    ;;
+  x509)
+    want_start=0
+    for a in "$@"; do
+      [ "$a" = "-startdate" ] && want_start=1
+    done
+    read -r marker days age || exit 1
+    [ "$marker" = "STUBCERT" ] || exit 1
+    if [ "$want_start" = "1" ]; then
+      date -u -d "-${age} days" '+notBefore=%b %e %H:%M:%S %Y GMT'
+    else
+      date -u -d "+${days} days" '+notAfter=%b %e %H:%M:%S %Y GMT'
+    fi
+    ;;
+  *)
+    exit 1
+    ;;
+esac
