@@ -1,8 +1,12 @@
 package ru.mngerasimenko.todolist.service;
 
 import com.google.firebase.FirebaseApp;
+import com.google.firebase.messaging.AndroidConfig;
+import com.google.firebase.messaging.BatchResponse;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.Message;
+import com.google.firebase.messaging.MulticastMessage;
+import com.google.firebase.messaging.SendResponse;
 import com.google.firebase.messaging.Notification;
 import com.google.firebase.messaging.FirebaseMessagingException;
 import com.google.firebase.messaging.MessagingErrorCode;
@@ -42,9 +46,13 @@ public class PushNotificationServiceImpl implements PushNotificationService {
     private final MessageService messageService;
 
     /**
-     * Значения для FCM data-поля {@code push_type} (Phase 3.1-server). Android-клиент сможет
-     * сегментировать события по типу когда подключит парсинг (Android-часть Phase 3.1 отложена
-     * до явного потребителя, см. fromIdeas/response_push_typization_phase31_2026-05-17.md).
+     * Значения для FCM data-поля {@code push_type} (Phase 3.1-server).
+     * <p>
+     * Заводились как маркер для аналитики, но у поля уже есть ОДИН реальный потребитель на
+     * клиенте: {@code todo_due} открывает по тапу саму задачу, а не список. Остальные типы,
+     * включая {@code todo_updated}, Android по типу не разбирает — он реагирует на наличие
+     * {@code list_id}, а тишина {@code todo_updated} обеспечивается отсутствием
+     * notification-payload, а не типом.
      */
     public static final String PUSH_TYPE_TASK_ADDED = "task_added";
     public static final String PUSH_TYPE_TASK_COMPLETED = "task_completed";
@@ -52,6 +60,14 @@ public class PushNotificationServiceImpl implements PushNotificationService {
     public static final String PUSH_TYPE_INACTIVE_REMINDER = "inactive_reminder";
     public static final String PUSH_TYPE_ONBOARDING_REMINDER = "onboarding_reminder";
     public static final String PUSH_TYPE_TODO_DUE = "todo_due";
+    /** Тихая синхронизация: клиент перечитывает список и ничего не показывает. */
+    public static final String PUSH_TYPE_TODO_UPDATED = "todo_updated";
+    /** Общий ключ схлопывания для тихой синхронизации — см. {@link #notifyTodoUpdated}. */
+    private static final String SYNC_COLLAPSE_KEY = "todo_sync";
+    /** Час: протухшая синхронизация бесполезна, список всё равно перечитывается при открытии. */
+    private static final long SYNC_TTL_MILLIS = 3_600_000L;
+    /** Потолок FCM на один multicast-вызов; больше — {@code IllegalArgumentException} из build(). */
+    private static final int MULTICAST_BATCH_LIMIT = 500;
 
     /** Кешированный результат проверки Firebase */
     private volatile boolean firebaseHealthyCache = false;
@@ -118,6 +134,97 @@ public class PushNotificationServiceImpl implements PushNotificationService {
                 "push.todo.done.title", new Object[]{},
                 "push.todo.done.body", new Object[]{completorName, todoName},
                 listId);
+    }
+
+    @Override
+    @Async
+    public void notifyTodoUpdated(Long listId, Long editorUserId, Long todoId) {
+        if (pushDisabled()) return;
+        if (!flagStore.isEnabled(FeatureFlag.TODO_UPDATE_SYNC_PUSH)) return;
+        // Редактора НЕ исключаем, в отличие от видимых уведомлений: сообщение ничего не
+        // показывает, а исключение идёт по пользователю — то есть отсекло бы и второе
+        // устройство самого редактора, оставив его со строкой «до правки».
+        List<PushToken> tokens = pushTokenRepository.findByListId(listId);
+        if (tokens.isEmpty()) return;
+        log.debug("Отправка sync-push: задача {} в списке {} изменена userId={}, получателей {}",
+                todoId, listId, editorUserId, tokens.size());
+
+        // Ни notification, ни AndroidNotification: сообщение обязано остаться невидимым. Стоит
+        // добавить сюда notification-payload — и каждая правка чужой задачи начнёт звенеть у
+        // всех участников.
+        //
+        // collapseKey и ttl — не оптимизация, а защита СОСЕДНИХ уведомлений. Сообщения без
+        // collapse key складываются в очередь офлайн-устройства, её потолок — сотня, и при
+        // переполнении FCM выбрасывает ВСЮ очередь целиком. Этот канал самый частый из наших
+        // (по сообщению на каждую правку каждому участнику), а в той же очереди лежит
+        // напоминание о сроке — то самое, ради которого сделана вся ветка. Ключ общий, а не
+        // на список: у FCM потолок в четыре разных ключа на устройство, а участник легко
+        // состоит в большем числе списков. Цена — при офлайне доедет синхронизация только по
+        // последнему изменённому списку; остальные всё равно перечитываются при открытии.
+        // ⚠️ Схлопывание работает ТОЛЬКО для очереди офлайн-устройства. Онлайновый получатель
+        // получает каждое сообщение отдельно и на каждое тянет весь список — серия быстрых
+        // правок сериями и прилетит. Ограничителя частоты здесь нет, только флаг.
+        //
+        // Приоритет НЕ высокий, и это осознанно. HIGH разбудил бы устройство в Doze, но выигрыш
+        // мнимый: обновление на клиенте запускается незавершаемой корутиной и при закрытом
+        // приложении всё равно может не доработать. А цена реальна — FCM понижает приоритет
+        // приложению, которое часто шлёт high-priority сообщения без взаимодействия с
+        // пользователем, и понижение затронуло бы напоминания о сроке. На доставку в foreground,
+        // где обновление и работает, приоритет не влияет.
+        AndroidConfig androidConfig = AndroidConfig.builder()
+                .setPriority(AndroidConfig.Priority.NORMAL)
+                .setCollapseKey(SYNC_COLLAPSE_KEY)
+                .setTtl(SYNC_TTL_MILLIS)
+                .build();
+
+        // Нарезка обязательна: build() у MulticastMessage сам отбивает больше 500 токенов
+        // IllegalArgumentException'ом, и без неё большой список не получал бы синхронизацию
+        // вовсе. Сборка внутри try по той же причине — исключение из build() иначе улетало бы
+        // мимо нашего лога, в обработчик необработанных исключений @Async.
+        for (int offset = 0; offset < tokens.size(); offset += MULTICAST_BATCH_LIMIT) {
+            List<PushToken> batch = tokens.subList(offset,
+                    Math.min(offset + MULTICAST_BATCH_LIMIT, tokens.size()));
+            try {
+                MulticastMessage message = MulticastMessage.builder()
+                        .addAllTokens(batch.stream().map(PushToken::getFcmToken).toList())
+                        .setAndroidConfig(androidConfig)
+                        .putData("push_type", PUSH_TYPE_TODO_UPDATED)
+                        .putData("list_id", String.valueOf(listId))
+                        .build();
+
+                // Запросов по-прежнему N — sendEachForMulticast внутри разворачивает пачку в
+                // отдельный вызов на токен. Разница в том, ГДЕ они выполняются: параллельно на
+                // собственном (ленивом) пуле Firebase, а наш @Async-поток блокируется один раз на
+                // всю пачку, а не N раз подряд. Пул @Async общий с отправкой писем, и занимать
+                // его последовательными HTTPS-вызовами дороже. Payload у всех одинаковый — в
+                // отличие от sendLocalized, где текст рендерится под локаль каждого токена.
+                BatchResponse response = FirebaseMessaging.getInstance().sendEachForMulticast(message);
+                // Порядок ответов совпадает с порядком токенов — на этом и держится связка ниже.
+                for (int i = 0; i < response.getResponses().size(); i++) {
+                    SendResponse sendResponse = response.getResponses().get(i);
+                    if (sendResponse.isSuccessful()) continue;
+                    FirebaseMessagingException e = sendResponse.getException();
+                    if (e != null && e.getMessagingErrorCode() == MessagingErrorCode.UNREGISTERED) {
+                        // Свой try: fcm_token в схеме НЕ уникален (уникален device_id), и дубль
+                        // уронил бы findByFcmToken — вместе с чисткой остальных токенов пачки.
+                        try {
+                            pushTokenRepository.findByFcmToken(batch.get(i).getFcmToken())
+                                    .ifPresent(deadToken -> {
+                                        pushTokenRepository.delete(deadToken);
+                                        log.info("Удалён невалидный push-токен для устройства: {}",
+                                                deadToken.getDeviceId());
+                                    });
+                        } catch (RuntimeException ex) {
+                            log.warn("Не удалось убрать невалидный токен: {}", ex.toString());
+                        }
+                    } else {
+                        log.warn("Ошибка отправки sync-push: {}", e != null ? e.toString() : "неизвестно");
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Не удалось отправить sync-push по списку {}: {}", listId, e.toString());
+            }
+        }
     }
 
     @Override

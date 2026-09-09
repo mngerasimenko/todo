@@ -218,6 +218,12 @@ public class TodoServiceImpl implements TodoService {
 
         boolean wasDone = Boolean.TRUE.equals(existingTodo.isDone());
         boolean nowDone = todoDto.isDone();
+        // Снимок для sync-push: рассылать на ХОЛОСТОЙ PUT нельзя. Клиенты шлют обновление
+        // целиком, поэтому телом, совпадающим с текущим состоянием, приходят и ретрай
+        // офлайн-очереди при потерянном ответе, и форма, закрытая без правок. Три РЕАЛЬНЫЕ
+        // правки подряд дадут три рассылки и с этой проверкой — она отсекает только повторы.
+        String nameBeforeUpdate = existingTodo.getName();
+        boolean privateBeforeUpdate = existingTodo.getIsPrivate();
 
         log.debug("updateTodo: входной done={}, существующий done={}", nowDone, wasDone);
 
@@ -274,6 +280,65 @@ public class TodoServiceImpl implements TodoService {
         Todo updatedTodo = todoRepository.save(existingTodo);
         log.info("Обновлена задача: id={}, name='{}', done={}, completedAt={}",
                 updatedTodo.getId(), updatedTodo.getName(), updatedTodo.isDone(), updatedTodo.getCompletedAt());
+
+        // Участники списка о правке иначе не узнают: push'и есть на создание задачи и на её
+        // выполнение, а на изменение имени или срока не было ни одного. У соседа оставалась
+        // строка в состоянии «до правки» — по этому и приходило напоминание о сроке, которого
+        // в его копии задачи ещё не было (баг с прода 08.09.2026).
+        boolean dueChanged = !Objects.equals(dueDateBeforeMapping, updatedTodo.getDueDate())
+                || !Objects.equals(dueTimeBeforeMapping, updatedTodo.getDueTime())
+                || !Objects.equals(dueTimezoneBeforeMapping, updatedTodo.getDueTimezone())
+                || !Objects.equals(remindBeforeMinutesBeforeMapping, updatedTodo.getRemindBeforeMinutes())
+                || !Objects.equals(reminderScopeBeforeMapping, updatedTodo.getReminderScope());
+        boolean changed = dueChanged
+                || !Objects.equals(nameBeforeUpdate, updatedTodo.getName())
+                || wasDone != Boolean.TRUE.equals(updatedTodo.isDone())
+                // Приватность меняет ВИДИМОСТЬ задачи для остальных, то есть для них это самое
+                // заметное изменение из возможных. Веб-форма шлёт is_private в каждом PUT.
+                || privateBeforeUpdate != updatedTodo.getIsPrivate();
+        // Приватная задача остальным не видна — но ПЕРЕХОД приватности рассылать надо в обе
+        // стороны: стала общей — она у участников появилась, стала приватной — обязана исчезнуть,
+        // иначе у них останется строка, тап по которой вернёт 403. Молчим только про задачу,
+        // которая была приватной и такой осталась.
+        boolean stayedPrivate = privateBeforeUpdate && updatedTodo.getIsPrivate();
+        // Флаг проверяется и здесь, и внутри notifyTodoUpdated. Здесь — чтобы при выключенном
+        // флаге (а он выключен по умолчанию) не ставить задачу в общий @Async-пул на каждый PUT;
+        // там — потому что защищать рассылку обязан сам отправитель, а не каждый вызывающий.
+        if (changed && !stayedPrivate
+                && flagStore.isEnabled(FeatureFlag.TODO_UPDATE_SYNC_PUSH)) {
+            final Long syncListId = updatedTodo.getTaskList().getId();
+            final Long syncTodoId = updatedTodo.getId();
+            // Строго afterCommit, по образцу пополнения словаря подсказок выше и ровно по той же
+            // причине, только цена ошибки тут выше: @Async отправляет НЕМЕДЛЕННО, то есть до
+            // коммита. Откат дал бы участникам команду перечитать список из-за правки, которой
+            // не было, а на нагрузке получатель успел бы прочитать ДОкоммитный снимок — то есть
+            // остался бы с устаревшей строкой, ради которой всё и делается, и второго пуша уже
+            // не будет.
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        // try/catch обязателен, как и в образце: Spring вызывает afterCommit УЖЕ
+                        // после коммита и пробрасывает исключение вызывающему, оставляя
+                        // транзакцию зафиксированной. Без перехвата отказ постановки в пул
+                        // (TaskRejectedException при shutdown; очередь пула по умолчанию
+                        // неограниченная) стал бы пятисоткой на успешно применённой правке,
+                        // и клиент повторил бы PUT.
+                        try {
+                            pushNotificationService.notifyTodoUpdated(syncListId, requestingUserId, syncTodoId);
+                        } catch (RuntimeException ex) {
+                            log.warn("[sync-push] afterCommit failed: {}", ex.toString());
+                        }
+                    }
+                });
+            } else {
+                try {
+                    pushNotificationService.notifyTodoUpdated(syncListId, requestingUserId, syncTodoId);
+                } catch (RuntimeException ex) {
+                    log.warn("[sync-push] inline notify failed: {}", ex.toString());
+                }
+            }
+        }
         return todoMapper.toDto(updatedTodo);
     }
 

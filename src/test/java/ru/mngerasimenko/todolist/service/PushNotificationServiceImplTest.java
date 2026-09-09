@@ -1,5 +1,10 @@
 package ru.mngerasimenko.todolist.service;
 
+import com.google.firebase.messaging.MulticastMessage;
+import com.google.firebase.messaging.BatchResponse;
+import com.google.firebase.messaging.MessagingErrorCode;
+import com.google.firebase.messaging.SendResponse;
+import com.google.firebase.messaging.FirebaseMessagingException;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.Message;
 import org.junit.jupiter.api.BeforeEach;
@@ -288,5 +293,170 @@ class PushNotificationServiceImplTest {
                 pushNotificationService.registerToken(99L, "fcm", "device-x", "ru")
         ).isInstanceOf(ru.mngerasimenko.todolist.exception.UserNotFoundException.class)
          .hasMessageContaining("User not found: 99");
+    }
+
+    /**
+     * Главный инвариант тихой синхронизации: в сообщении НЕТ notification-payload.
+     *
+     * Стоит его добавить — и каждая правка чужой задачи начнёт звенеть у всех участников
+     * списка. Охранять это одним комментарием в коде мало.
+     */
+    @Test
+    void notifyTodoUpdated_SendsSilentDataOnlyMessage() throws Exception {
+        when(flagStore.isEnabled(FeatureFlag.TODO_UPDATE_SYNC_PUSH)).thenReturn(true);
+        // Среди получателей — устройство САМОГО редактора (userId 53): у видимых уведомлений
+        // его исключают, у тихой синхронизации исключать некого, иначе второе устройство
+        // редактора осталось бы со строкой «до правки».
+        when(pushTokenRepository.findByListId(86L))
+                .thenReturn(List.of(tokenFor(11L, "ru"), tokenFor(53L, "ru")));
+
+        try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+            when(firebaseMessaging.sendEachForMulticast(any(MulticastMessage.class)))
+                    .thenReturn(mock(BatchResponse.class));
+
+            pushNotificationService.notifyTodoUpdated(86L, 53L, 777L);
+
+            ArgumentCaptor<MulticastMessage> captor = ArgumentCaptor.forClass(MulticastMessage.class);
+            verify(firebaseMessaging).sendEachForMulticast(captor.capture());
+            MulticastMessage sent = captor.getValue();
+
+            @SuppressWarnings("unchecked")
+            List<String> sentTokens = (List<String>) readField(sent, "tokens");
+            assertThat(sentTokens).contains("fcm-token-53");
+
+            assertThat(readField(sent, "notification")).isNull();
+            Object androidConfig = readField(sent, "androidConfig");
+            assertThat(androidConfig).isNotNull();
+            assertThat(readField(androidConfig, "notification")).isNull();
+            // Wire-ключи — единственное, на чём держится эффект правки: Android читает именно
+            // list_id и по нему перечитывает список. Переименуй ключ — фича молча мертва.
+            @SuppressWarnings("unchecked")
+            Map<String, String> data = (Map<String, String>) readField(sent, "data");
+            assertThat(data).containsEntry("push_type", "todo_updated")
+                            .containsEntry("list_id", "86");
+            // todo_id намеренно НЕ шлём: потребителя у него нет. Клиент читает это поле
+            // только при push_type=todo_due, так что здесь оно было бы мёртвым байтом.
+            assertThat(data).doesNotContainKey("todo_id");
+            // Приоритет задан ЯВНО и он normal: high разбудил бы устройство в Doze, но частые
+            // high-priority без взаимодействия — повод для FCM понизить приоритет всему
+            // приложению, включая напоминания о сроке. Проверка заодно ловит удаление
+            // setPriority: без него поле остаётся null и hasToString падает.
+            assertThat(readField(androidConfig, "priority")).hasToString("normal");
+            // Ключ схлопывания и TTL защищают ОЧЕРЕДЬ устройства: без них тихая синхронизация,
+            // самый частый наш канал, вытесняла бы из неё настоящие уведомления — включая
+            // напоминание о сроке.
+            assertThat(readField(androidConfig, "collapseKey")).isEqualTo("todo_sync");
+            assertThat(readField(androidConfig, "ttl")).isEqualTo("3600s");
+        }
+    }
+
+    /** Выключенный флаг — ни одного обращения к FCM. */
+    @Test
+    void notifyTodoUpdated_FlagDisabled_SendsNothing() {
+        when(flagStore.isEnabled(FeatureFlag.TODO_UPDATE_SYNC_PUSH)).thenReturn(false);
+        pushNotificationService.notifyTodoUpdated(86L, 53L, 777L);
+
+        // Проверяем РЕПОЗИТОРИЙ, а не мок FirebaseMessaging: у сервиса нет поля с ним, SDK
+        // достаётся статикой, и без mockStatic мок с продовым кодом не связан вовсе — такой
+        // verifyNoInteractions не способен упасть ни при каком поведении. А вот получателей
+        // метод спрашивает СРАЗУ после проверки флага, поэтому инвертированная проверка
+        // немедленно валит этот тест.
+        verify(pushTokenRepository, never()).findByListId(anyLong());
+    }
+
+    /**
+     * Нарезка по 500 и связка «ответ ↔ токен» ВНУТРИ пачки.
+     *
+     * `MulticastMessage.build()` сам отбивает больше 500 токенов исключением, поэтому без
+     * нарезки большой список не получал бы синхронизацию вовсе. А индексы ответов считаются
+     * от пачки, а не от полного списка: ошибка здесь удалила бы ЧУЖОЙ живой push-токен по
+     * ответу UNREGISTERED из второй пачки.
+     */
+    @Test
+    void notifyTodoUpdated_SplitsIntoBatchesAndMapsResponsesToTokens() throws Exception {
+        when(flagStore.isEnabled(FeatureFlag.TODO_UPDATE_SYNC_PUSH)).thenReturn(true);
+        List<PushToken> many = new java.util.ArrayList<>();
+        for (long i = 1; i <= 501; i++) {
+            many.add(tokenFor(i, "ru"));
+        }
+        when(pushTokenRepository.findByListId(86L)).thenReturn(many);
+
+        SendResponse failed = mock(SendResponse.class);
+        when(failed.isSuccessful()).thenReturn(false);
+        FirebaseMessagingException unregistered = mock(FirebaseMessagingException.class);
+        when(unregistered.getMessagingErrorCode()).thenReturn(MessagingErrorCode.UNREGISTERED);
+        when(failed.getException()).thenReturn(unregistered);
+
+        BatchResponse firstBatch = mock(BatchResponse.class);
+        when(firstBatch.getResponses()).thenReturn(List.of());
+        BatchResponse secondBatch = mock(BatchResponse.class);
+        when(secondBatch.getResponses()).thenReturn(List.of(failed));
+
+        try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+            when(firebaseMessaging.sendEachForMulticast(any(MulticastMessage.class)))
+                    .thenReturn(firstBatch, secondBatch);
+
+            pushNotificationService.notifyTodoUpdated(86L, 53L, 777L);
+
+            ArgumentCaptor<MulticastMessage> captor = ArgumentCaptor.forClass(MulticastMessage.class);
+            verify(firebaseMessaging, times(2)).sendEachForMulticast(captor.capture());
+            @SuppressWarnings("unchecked")
+            List<String> firstTokens = (List<String>) readField(captor.getAllValues().get(0), "tokens");
+            @SuppressWarnings("unchecked")
+            List<String> secondTokens = (List<String>) readField(captor.getAllValues().get(1), "tokens");
+            assertThat(firstTokens).hasSize(500);
+            assertThat(secondTokens).containsExactly("fcm-token-501");
+
+            // Неуспешным был единственный ответ ВТОРОЙ пачки — значит спрашивать надо про
+            // 501-й токен. Индексация от полного списка дала бы здесь первый.
+            verify(pushTokenRepository).findByFcmToken("fcm-token-501");
+        }
+    }
+
+    /**
+     * Транзиентная ошибка FCM НЕ должна удалять живой токен.
+     *
+     * Без проверки кода сервер за один инцидент (UNAVAILABLE, INTERNAL, QUOTA_EXCEEDED) вычистит
+     * токены всех участников, и уведомления вернутся к ним только когда каждое устройство само
+     * перерегистрируется. Дефект тихий и необратимый, а канал самый частый — попасть в окно
+     * шансов больше, чем у соседей.
+     */
+    @Test
+    void notifyTodoUpdated_TransientFailure_KeepsToken() throws Exception {
+        when(flagStore.isEnabled(FeatureFlag.TODO_UPDATE_SYNC_PUSH)).thenReturn(true);
+        when(pushTokenRepository.findByListId(86L)).thenReturn(List.of(tokenFor(11L, "ru")));
+
+        SendResponse failed = mock(SendResponse.class);
+        when(failed.isSuccessful()).thenReturn(false);
+        FirebaseMessagingException transientError = mock(FirebaseMessagingException.class);
+        when(transientError.getMessagingErrorCode()).thenReturn(MessagingErrorCode.UNAVAILABLE);
+        when(failed.getException()).thenReturn(transientError);
+        BatchResponse response = mock(BatchResponse.class);
+        when(response.getResponses()).thenReturn(List.of(failed));
+
+        try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+            when(firebaseMessaging.sendEachForMulticast(any(MulticastMessage.class))).thenReturn(response);
+
+            pushNotificationService.notifyTodoUpdated(86L, 53L, 777L);
+
+            verify(pushTokenRepository, never()).findByFcmToken(any());
+        }
+    }
+
+    /** Глобальный рубильник гасит и этот канал — им в первую очередь и будут гасить самый частый. */
+    @Test
+    void notifyTodoUpdated_PushGloballyDisabled_SendsNothing() {
+        when(flagStore.isEnabled(FeatureFlag.PUSH_NOTIFICATIONS)).thenReturn(false);
+        // Без этой заглушки метод выходил бы на ВТОРОМ гарде (флаг канала по умолчанию false),
+        // и тест оставался бы зелёным даже без самого рубильника. lenient — потому что при
+        // живом pushDisabled() до неё не доходит.
+        lenient().when(flagStore.isEnabled(FeatureFlag.TODO_UPDATE_SYNC_PUSH)).thenReturn(true);
+
+        pushNotificationService.notifyTodoUpdated(86L, 53L, 777L);
+
+        verify(pushTokenRepository, never()).findByListId(anyLong());
     }
 }

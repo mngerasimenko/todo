@@ -35,6 +35,22 @@ public interface PushTokenRepository extends JpaRepository<PushToken, Long> {
     List<PushToken> findByListIdExcludingUser(Long listId, Long excludeUserId);
 
     /**
+     * Все push-токены участников списка, БЕЗ исключений.
+     * <p>
+     * Нужно тихой синхронизации ({@code todo_updated}): она ничего не показывает, поэтому
+     * исключать редактора незачем — а вредно. Исключение идёт по пользователю, то есть отсекло
+     * бы и ВТОРОЕ устройство самого редактора, и оно осталось бы со строкой «до правки» —
+     * ровно с тем багом, ради которого рассылка и заведена.
+     * <p>
+     * Для ВИДИМЫХ уведомлений этот запрос не годится: там автор действия не должен получать
+     * сообщение о собственном действии — см. {@link #findByListIdExcludingUser}.
+     */
+    @Query("SELECT pt FROM PushToken pt " +
+            "JOIN TaskListUser tlu ON tlu.user.id = pt.user.id " +
+            "WHERE tlu.id.listId = :listId")
+    List<PushToken> findByListId(Long listId);
+
+    /**
      * Найти токен по FCM-токену (для удаления невалидных).
      */
     Optional<PushToken> findByFcmToken(String fcmToken);

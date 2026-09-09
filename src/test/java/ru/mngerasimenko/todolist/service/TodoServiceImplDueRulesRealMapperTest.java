@@ -5,7 +5,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import ru.mngerasimenko.todolist.dto.TodoDto;
+import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.mapper.TodoMapper;
 import ru.mngerasimenko.todolist.model.ReminderScope;
@@ -26,6 +29,10 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -254,5 +261,255 @@ class TodoServiceImplDueRulesRealMapperTest {
         assertThat(existing.getRemindBeforeMinutes()).isZero();
         assertThat(existing.getReminderScope()).isEqualTo(ReminderScope.SELF);
         assertThat(existing.getReminderSentAt()).isNull();
+    }
+
+    /**
+     * Участники списка о правке иначе не узнают: push'и есть на создание задачи и на её
+     * выполнение, а на изменение имени или срока не было ни одного. У соседа оставалась строка
+     * в состоянии «до правки» — и напоминание о сроке приходило про срок, которого в его копии
+     * задачи ещё не было (баг с прода 08.09.2026).
+     */
+    @Test
+    void updateTodo_DueChanged_SendsSyncPush() {
+        Todo existing = sharedTodo();
+        existing.setDueDate(LocalDate.of(2026, 7, 31));
+        // Пояс фиксируем с обеих сторон намеренно: иначе applyDueRules подставит дефолтный,
+        // изменятся ДВА поля, и тест был бы зелёным по двум независимым причинам — удаление
+        // любого одного сравнения из пяти он бы пережил.
+        existing.setDueTimezone("Europe/Moscow");
+        when(flagStore.isEnabled(FeatureFlag.TODO_UPDATE_SYNC_PUSH)).thenReturn(true);
+
+        TodoDto dto = dtoFor(existing);
+        dto.setDueDate(LocalDate.of(2026, 8, 5));
+        dto.setDueTime(LocalTime.of(9, 0));
+        dto.setDueTimezone("Europe/Moscow");
+        dto.setRemindBeforeMinutes(0);
+        dto.setReminderScope(ReminderScope.SELF);
+        dto.setDueFieldsProvided(true);
+
+        todoService.updateTodo(7L, dto, 1L);
+
+        verify(pushNotificationService).notifyTodoUpdated(3L, 1L, 7L);
+    }
+
+    @Test
+    void updateTodo_NameChanged_SendsSyncPush() {
+        Todo existing = sharedTodo();
+        when(flagStore.isEnabled(FeatureFlag.TODO_UPDATE_SYNC_PUSH)).thenReturn(true);
+
+        TodoDto dto = dtoFor(existing);
+        dto.setName("Полить огурцы");
+
+        todoService.updateTodo(7L, dto, 1L);
+
+        verify(pushNotificationService).notifyTodoUpdated(3L, 1L, 7L);
+    }
+
+    /**
+     * Холостой PUT рассылку не порождает. Клиенты шлют обновление целиком на каждое действие,
+     * и без сравнения три подряд правки срока дали бы участникам три перечитывания списка.
+     */
+    @Test
+    void updateTodo_NothingChanged_DoesNotSendSyncPush() {
+        Todo existing = sharedTodo();
+        // lenient: до флага условие не доходит (короткое замыкание), но БЕЗ этой заглушки флаг
+        // по умолчанию false — и тест проходил бы именно из-за него, а не из-за того, что
+        // проверяет. Мутация «changed всегда true» иначе осталась бы зелёной.
+        lenient().when(flagStore.isEnabled(FeatureFlag.TODO_UPDATE_SYNC_PUSH)).thenReturn(true);
+
+        todoService.updateTodo(7L, dtoFor(existing), 1L);
+
+        verify(pushNotificationService, never()).notifyTodoUpdated(anyLong(), anyLong(), anyLong());
+    }
+
+    /**
+     * Выключенный флаг — рассылки нет. Обязательная вторая ветка: правила проекта требуют
+     * теста на оба положения флага, иначе «выключить» остаётся непроверенным обещанием.
+     */
+    @Test
+    void updateTodo_SyncPushFlagDisabled_DoesNotSendSyncPush() {
+        Todo existing = sharedTodo();
+        when(flagStore.isEnabled(FeatureFlag.TODO_UPDATE_SYNC_PUSH)).thenReturn(false);
+
+        TodoDto dto = dtoFor(existing);
+        dto.setName("Полить огурцы");
+
+        todoService.updateTodo(7L, dto, 1L);
+
+        verify(pushNotificationService, never()).notifyTodoUpdated(anyLong(), anyLong(), anyLong());
+    }
+
+    /**
+     * Задача стала общей — участникам её надо показать. Меняется ТОЛЬКО приватность, поэтому
+     * без учёта этого поля в условии «реально изменилось» рассылки бы не было вовсе.
+     */
+    @Test
+    void updateTodo_BecamePublic_SendsSyncPush() {
+        Todo existing = sharedTodo();
+        existing.setIsPrivate(true);
+        when(flagStore.isEnabled(FeatureFlag.TODO_UPDATE_SYNC_PUSH)).thenReturn(true);
+
+        TodoDto dto = dtoFor(existing);
+        dto.setIsPrivate(false);
+
+        todoService.updateTodo(7L, dto, 1L);
+
+        verify(pushNotificationService).notifyTodoUpdated(3L, 1L, 7L);
+    }
+
+    /**
+     * Задача стала приватной — участникам надо УБРАТЬ её из списка. Молчание оставило бы у них
+     * строку, которую им больше нельзя видеть, а тап по ней вернул бы 403.
+     */
+    @Test
+    void updateTodo_BecamePrivate_SendsSyncPush() {
+        Todo existing = sharedTodo();
+        when(flagStore.isEnabled(FeatureFlag.TODO_UPDATE_SYNC_PUSH)).thenReturn(true);
+
+        TodoDto dto = dtoFor(existing);
+        dto.setIsPrivate(true);
+
+        todoService.updateTodo(7L, dto, 1L);
+
+        verify(pushNotificationService).notifyTodoUpdated(3L, 1L, 7L);
+    }
+
+    /** Приватная задача остальным участникам не видна — сообщать им о её правках нечего. */
+    @Test
+    void updateTodo_PrivateTodo_DoesNotSendSyncPush() {
+        Todo existing = sharedTodo();
+        // См. соседний тест: без заглушки флага проверка приватности не проверялась бы вовсе.
+        lenient().when(flagStore.isEnabled(FeatureFlag.TODO_UPDATE_SYNC_PUSH)).thenReturn(true);
+        existing.setIsPrivate(true);
+
+        TodoDto dto = dtoFor(existing);
+        dto.setName("Полить огурцы");
+        dto.setIsPrivate(true);
+
+        todoService.updateTodo(7L, dto, 1L);
+
+        verify(pushNotificationService, never()).notifyTodoUpdated(anyLong(), anyLong(), anyLong());
+    }
+
+    /**
+     * Задача в общем списке, автор — testUser; репозитории застабаны под updateTodo.
+     *
+     * Идентификаторы РАЗНЫЕ намеренно: задача 7, список 3, редактор 1. У `notifyTodoUpdated`
+     * три параметра типа Long подряд, и с одинаковыми значениями перестановка любых двух
+     * прошла бы зелёной.
+     */
+    private Todo sharedTodo() {
+        TaskList sharedList = new TaskList("SharedList", testUser);
+        sharedList.setId(3L);
+
+        Todo existing = new Todo();
+        existing.setId(7L);
+        existing.setName("Полить теплицу");
+        existing.setDone(false);
+        existing.setIsPrivate(false);
+        existing.setCreatedAt(LocalDateTime.now());
+        existing.setUser(testUser);
+        existing.setTaskList(sharedList);
+        existing.setDueTime(LocalTime.of(9, 0));
+        existing.setRemindBeforeMinutes(0);
+        existing.setReminderScope(ReminderScope.SELF);
+
+        when(todoRepository.findById(7L)).thenReturn(Optional.of(existing));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(3L, 1L))
+                .thenReturn(Optional.of(new TaskListUser(sharedList, testUser, TaskListRole.USER)));
+        when(todoRepository.save(any(Todo.class))).thenAnswer(inv -> inv.getArgument(0));
+        // Флаг стабится не здесь, а в тестах: до него доходит не каждый путь (условие
+        // короткозамыкается), и лишняя заглушка уронила бы strict-stubs.
+        return existing;
+    }
+
+    /** Тело запроса, повторяющее текущее состояние задачи: изменения задают поверх него. */
+    private TodoDto dtoFor(Todo todo) {
+        TodoDto dto = new TodoDto();
+        dto.setName(todo.getName());
+        dto.setUserId(1L);
+        dto.setDone(todo.isDone());
+        dto.setIsPrivate(todo.getIsPrivate());
+        return dto;
+    }
+
+    /**
+     * Боевая ветка: с активной транзакцией отправка обязана уйти ТОЛЬКО после коммита.
+     *
+     * В остальных тестах синхронизация не активна, и все они идут по ветке else — то есть
+     * продовый путь не исполняется ни разу, и забытый registerSynchronization остался бы
+     * зелёным. Здесь синхронизация поднимается руками.
+     */
+    @Test
+    void updateTodo_WithActiveTransaction_SendsSyncPushOnlyAfterCommit() {
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            Todo existing = sharedTodo();
+            when(flagStore.isEnabled(FeatureFlag.TODO_UPDATE_SYNC_PUSH)).thenReturn(true);
+
+            TodoDto dto = dtoFor(existing);
+            dto.setName("Полить огурцы");
+
+            todoService.updateTodo(7L, dto, 1L);
+
+            // До коммита — молчим.
+            verify(pushNotificationService, never()).notifyTodoUpdated(anyLong(), anyLong(), anyLong());
+
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+
+            verify(pushNotificationService).notifyTodoUpdated(3L, 1L, 7L);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    /**
+     * Смена галочки через PUT. Путь живой: офлайн-очередь Android кладёт `done` в тело PUT,
+     * а не в отдельный PATCH, — и без этого терма в условии участники о ней не узнают.
+     * Прогоняем через БОЕВУЮ ветку с активной транзакцией.
+     */
+    @Test
+    void updateTodo_DoneChanged_SendsSyncPushAfterCommit() {
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            Todo existing = sharedTodo();
+            when(flagStore.isEnabled(FeatureFlag.TODO_UPDATE_SYNC_PUSH)).thenReturn(true);
+
+            TodoDto dto = dtoFor(existing);
+            dto.setDone(true);
+
+            todoService.updateTodo(7L, dto, 1L);
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+
+            verify(pushNotificationService).notifyTodoUpdated(3L, 1L, 7L);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    /**
+     * Изменился только запас времени — остальные четыре due-поля те же. Без отдельного терма
+     * в сравнении такая правка прошла бы молча, а участнику она меняет момент напоминания.
+     */
+    @Test
+    void updateTodo_OnlyRemindBeforeChanged_SendsSyncPush() {
+        Todo existing = sharedTodo();
+        existing.setDueDate(LocalDate.of(2026, 8, 5));
+        existing.setDueTimezone("Europe/Moscow");
+        when(flagStore.isEnabled(FeatureFlag.TODO_UPDATE_SYNC_PUSH)).thenReturn(true);
+
+        TodoDto dto = dtoFor(existing);
+        dto.setDueDate(LocalDate.of(2026, 8, 5));
+        dto.setDueTime(LocalTime.of(9, 0));
+        dto.setDueTimezone("Europe/Moscow");
+        dto.setRemindBeforeMinutes(60);
+        dto.setReminderScope(ReminderScope.SELF);
+        dto.setDueFieldsProvided(true);
+
+        todoService.updateTodo(7L, dto, 1L);
+
+        verify(pushNotificationService).notifyTodoUpdated(3L, 1L, 7L);
     }
 }
