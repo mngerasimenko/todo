@@ -30,6 +30,20 @@ class FeatureFlagTest {
         assertThat(FeatureFlag.TODO_REMINDER_EMAIL.getAudience()).isEqualTo(Audience.SERVER);
     }
 
+    /**
+     * Выключатель «остаёмся наверху» в списке задач Android (1.2.7). Имя — кросс-репный контракт
+     * с ClientFeatureFlag.KEEP_TOP, совпадать обязано посимвольно: иначе PUT выключит флаг,
+     * которого клиент не знает, и прокрутка останется включённой. Дефолт true: правило включено у
+     * всех установок, выключатель — на случай, если его побочный эффект окажется хуже бага.
+     */
+    @Test
+    void clientTodoListKeepTop_IsClientVisibleAndOnByDefault() {
+        assertThat(FeatureFlag.CLIENT_TODOLIST_KEEP_TOP.getName()).isEqualTo("client.todolist.keep-top.enabled");
+        assertThat(FeatureFlag.CLIENT_TODOLIST_KEEP_TOP.isClientVisible()).isTrue();
+        assertThat(FeatureFlag.CLIENT_TODOLIST_KEEP_TOP.getDefaultValue()).isTrue();
+        assertThat(FeatureFlag.CLIENT_TODOLIST_KEEP_TOP.getOverrideLifetime()).isEqualTo(OverrideLifetime.PERSISTENT);
+    }
+
     @Test
     void clientDueDates_IsClientVisible() {
         assertThat(FeatureFlag.CLIENT_TODO_DUE_DATES.isClientVisible()).isTrue();
