@@ -125,6 +125,7 @@ class FeatureFlagStoreTest {
         assertEquals(
                 Map.of("client.suggestions.history.enabled", true,
                         "client.suggestions.dedup.enabled", true,
+                        "client.todolist.keep-top.enabled", true,
                         "client.todo.due-dates.enabled", true),
                 flags,
                 "контракт клиентских флагов на проводе изменился");
