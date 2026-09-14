@@ -11,6 +11,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -18,9 +19,14 @@ import ru.mngerasimenko.todolist.config.RedisCacheConfig;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.service.RedisHealthService;
+import ru.mngerasimenko.todolist.util.AcceptLanguageParser;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -33,6 +39,25 @@ import java.util.Optional;
 @Component
 @Slf4j
 public class RateLimitFilter extends OncePerRequestFilter {
+
+    /**
+     * Шаблоны человекочитаемого {@code message} в 429-ответе: язык → текст с {@code %d} секунд.
+     * {@link #resolveMessageLanguage} выбирает язык из ключей этой карты, {@link #buildTooManyRequestsBody}
+     * берёт отсюда текст. Набор языков и {@link #DEFAULT_MESSAGE_LANG} держать равными
+     * {@code SUPPORTED_PAGE_LANGUAGES} и {@code DEFAULT_PAGE_LANGUAGE} в {@code EmailUnsubscribeController}:
+     * иначе один и тот же заголовок даст 429 и страницу отписки на разных языках.
+     * <p>
+     * Осознанное исключение из политики {@code I18nConfig} («REST API не локализуется»): фильтр
+     * отрабатывает до Spring MVC и отдаёт тело сам, минуя {@code GlobalExceptionHandler}, поэтому
+     * его сообщение исторически было русским для всех. Строки лежат здесь, а не в {@code MessageSource}:
+     * тянуть его в security-цепочку ради двух строк не нужно.
+     */
+    private static final Map<String, String> MESSAGE_TEMPLATES = Map.of(
+            "ru", "Слишком много запросов. Повторите через %d сек.",
+            "en", "Too many requests. Retry in %d sec.");
+
+    /** Язык 429-сообщения по умолчанию — дефолтная локаль сервера (см. {@code I18nConfig}). */
+    private static final String DEFAULT_MESSAGE_LANG = "ru";
 
     private final RateLimitProperties properties;
     private final BucketProvider bucketProvider;
@@ -113,11 +138,52 @@ public class RateLimitFilter extends OncePerRequestFilter {
             response.setCharacterEncoding("UTF-8");
             response.setHeader("Retry-After", String.valueOf(retryAfterSeconds));
             response.setHeader("X-Rate-Limit-Remaining", "0");
-            response.getWriter().write(
-                    "{\"error\":\"Too Many Requests\",\"message\":\"Слишком много запросов. Повторите через "
-                            + retryAfterSeconds + " сек.\",\"retryAfter\":" + retryAfterSeconds + "}"
-            );
+            response.getWriter().write(buildTooManyRequestsBody(acceptLanguage(request), retryAfterSeconds));
         }
+    }
+
+    /**
+     * Все строки {@code Accept-Language}, склеенные через запятую. По RFC 9110 несколько строк
+     * заголовка равны одной, и ровно так их получают контроллеры через {@code @RequestHeader String}:
+     * {@code getHeader} отдал бы только первую строку, и на запросе «de» + «en» язык 429 разошёлся бы
+     * со страницей отписки. Вызывается только на ветке 429.
+     */
+    private static String acceptLanguage(HttpServletRequest request) {
+        Enumeration<String> values = request.getHeaders(HttpHeaders.ACCEPT_LANGUAGE);
+        return values == null ? null : String.join(",", Collections.list(values));
+    }
+
+    /**
+     * Собирает JSON-тело 429-ответа с локализованным {@code message}.
+     * Машиночитаемые поля ({@code error}, {@code retryAfter}) не локализуются. Там, где клиенты
+     * показывают серверную ошибку, это {@code message}, поэтому текст тоже часть контракта.
+     * В тело попадают только константы из {@link #MESSAGE_TEMPLATES} и число секунд;
+     * пользовательский ввод в JSON не течёт, поэтому экранирование не требуется.
+     */
+    String buildTooManyRequestsBody(String acceptLanguage, long retryAfterSeconds) {
+        String template = MESSAGE_TEMPLATES.get(resolveMessageLanguage(acceptLanguage));
+        String message = String.format(Locale.ROOT, template, retryAfterSeconds);
+        return "{\"error\":\"Too Many Requests\",\"message\":\"" + message
+                + "\",\"retryAfter\":" + retryAfterSeconds + "}";
+    }
+
+    /**
+     * Выбирает язык сообщения по {@code Accept-Language}: поддерживаемый язык с наибольшим
+     * q-весом ("ru;q=0.3,en;q=0.9" → "en", "en-GB" → "en"). {@link #DEFAULT_MESSAGE_LANG} —
+     * если ни один поддерживаемый язык не приемлем: заголовка нет, он битый, в нём только
+     * неподдерживаемые языки или {@code q=0}. Wildcard {@code *} языком не считается и не выбирается.
+     * <p>
+     * Разбор — общий {@link AcceptLanguageParser}, тот же, что выбирает язык страницы отписки:
+     * один заголовок не должен давать 429 и страницу на разных языках. Язык писем при регистрации
+     * берётся тем же разбором, но без сведения к поддерживаемым языкам.
+     * Заголовок читается только на ветке 429, куда отшитый лимитом клиент попадает намеренно, —
+     * поэтому разбор обязан быть линейным и не бросать исключений; парсер это гарантирует.
+     * <p>
+     * Package-private для unit-тестирования.
+     */
+    String resolveMessageLanguage(String acceptLanguage) {
+        return AcceptLanguageParser.bestSupportedLanguage(
+                acceptLanguage, MESSAGE_TEMPLATES.keySet(), DEFAULT_MESSAGE_LANG);
     }
 
     /**
