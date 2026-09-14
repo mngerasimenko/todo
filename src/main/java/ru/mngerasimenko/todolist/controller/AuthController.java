@@ -29,6 +29,7 @@ import ru.mngerasimenko.todolist.service.RefreshTokenService.RefreshTokenRotatio
 import ru.mngerasimenko.todolist.service.TokenBlacklistService;
 import ru.mngerasimenko.todolist.service.UserService;
 import ru.mngerasimenko.todolist.util.AcceptLanguageParser;
+import ru.mngerasimenko.todolist.util.LocaleNormalizer;
 import static ru.mngerasimenko.todolist.util.LogUtils.maskEmail;
 
 /**
@@ -335,9 +336,17 @@ public class AuthController {
      *      (e.g. "en-US,en;q=0.9,ru;q=0.8" → "en-US"); мусор и wildcard "*" игнорируются.
      *   3. Fallback {@link #DEFAULT_EMAIL_LOCALE} — если ни клиент, ни header ничего не дали.
      * <p>
+     * Оба источника сводятся одним {@link LocaleNormalizer} к {@code language[-REGION]} в каноническом
+     * регистре: один и тот же тег в теле запроса и в заголовке обязан лечь в колонку одинаково
+     * ("zh-Hant-TW" → "zh-TW", "en-us" → "en-US"). Явный locale сеттер DTO уже нормализовал —
+     * повторный вызов идемпотентен. Для заголовка это верно в пределах того, что принимает
+     * {@link AcceptLanguageParser}: well-formed тег не длиннее 35 символов с языком из 2–3 букв;
+     * более длинный тег в заголовке игнорируется. Исключение — язык {@code und}: нормализатор его
+     * не распознаёт, и тело с заголовком могут разойтись.
+     * <p>
      * Значение уходит в {@code User.preferredEmailLocale}, поэтому оно ограничено
-     * {@link LocaleValidation#MAX_LENGTH} — как и одноимённое поле DTO. Длинный тег
-     * ("zh-Hant-TW") сводится к primary subtag ("zh"), а не режется по символам:
+     * {@link LocaleValidation#MAX_LENGTH} — как и одноимённое поле DTO. Тег, который не влез и после
+     * нормализации, сводится к primary subtag, а не режется по символам:
      * обрезка давала "zh-Hant-" — значение, не проходящее собственную же валидацию.
      * <p>
      * Разбор заголовка — в {@link AcceptLanguageParser}: эндпоинт публичный, а
@@ -348,15 +357,15 @@ public class AuthController {
      */
     String resolveEmailLocale(String requested, String acceptLanguage) {
         if (requested != null && !requested.isBlank()) {
-            return truncateToPrimarySubtag(requested);
+            return truncateToPrimarySubtag(LocaleNormalizer.normalize(requested));
         }
         String tag = AcceptLanguageParser.bestLanguageTag(acceptLanguage);
-        return tag == null ? DEFAULT_EMAIL_LOCALE : truncateToPrimarySubtag(tag);
+        return tag == null ? DEFAULT_EMAIL_LOCALE : truncateToPrimarySubtag(LocaleNormalizer.normalize(tag));
     }
 
     /**
      * Укорачивает тег до {@link LocaleValidation#MAX_LENGTH}, сохраняя валидность BCP-47:
-     * {@code "zh-Hant-TW"} → {@code "zh"}. Если и primary subtag не влезает, локаль не
+     * {@code "und-Latn-RS"} → {@code "und"} (такой тег нормализатор возвращает как есть). Если и primary subtag не влезает, локаль не
      * восстановима — берём дефолт, а не срез: обрезка неизвестного тега по символам как раз
      * и давала значения вроде {@code "zh-Hant-"}, не проходящие собственную же валидацию.
      */

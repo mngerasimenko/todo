@@ -121,8 +121,8 @@ public class EmailUnsubscribeController {
         if (tag == null || tag.isBlank()) {
             return supportedLocale(null);
         }
-        // Регистр в колонке произвольный: явный locale клиента сохраняется как прислан,
-        // поэтому там встречается и "EN".
+        // Регистр в колонке произвольный: до нормализации locale (наряд 276) явный тег клиента
+        // сохранялся как прислан, и в старых строках встречаются "EN" и "en-us".
         return supportedLocale(AcceptLanguageParser.primarySubtagOf(tag.toLowerCase(Locale.ROOT)));
     }
 

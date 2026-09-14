@@ -8,6 +8,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import ru.mngerasimenko.todolist.dto.validation.LocaleValidation;
+import ru.mngerasimenko.todolist.util.LocaleNormalizer;
 
 /**
  * Запрос на регистрацию FCM push-токена устройства.
@@ -34,4 +35,14 @@ public class RegisterPushTokenRequest {
     @Size(max = LocaleValidation.MAX_LENGTH, message = LocaleValidation.MAX_LENGTH_MESSAGE)
     @Pattern(regexp = LocaleValidation.PATTERN_OPTIONAL, message = LocaleValidation.PATTERN_MESSAGE)
     private String locale;
+
+    /**
+     * Нормализует тег при десериализации до {@code language[-REGION]} —
+     * см. {@link LocaleNormalizer}. Клиент перерегистрирует токен при каждой смене
+     * языка в Settings и шлёт сырой {@code Locale.getDefault().toLanguageTag()},
+     * поэтому сюда приходит тот же раздутый тег, что и в регистрацию.
+     */
+    public void setLocale(String locale) {
+        this.locale = LocaleNormalizer.normalize(locale);
+    }
 }
