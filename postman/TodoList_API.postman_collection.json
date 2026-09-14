@@ -676,7 +676,7 @@
 								"email-locale"
 							]
 						},
-						"description": "Сменить язык email-уведомлений текущего пользователя (R-3 phase B.6). Влияет на verify / reset / invite / inactive-reminder. Локаль в формате BCP-47 (e.g. \"ru\", \"en\"), max 8 символов, NotBlank.\n\n**Ошибки:** `400` (валидация), `401` (нет авторизации)."
+						"description": "Сменить язык email-уведомлений текущего пользователя (R-3 phase B.6). Влияет на verify / reset / invite / inactive-reminder. Локаль в формате BCP-47 (e.g. \"ru\", \"en\"), NotBlank. Сервер сводит тег к language[-REGION] (ru-RU-u-fw-mon-ms-metric-mu-celsius -> ru-RU); тег без читаемого языка -> 400 (кроме und, он сохраняется как есть).\n\n**Ошибки:** `400` (валидация), `401` (нет авторизации)."
 					},
 					"response": []
 				}

@@ -412,7 +412,7 @@ class UserRestControllerTest {
     @WithMockUser(username = "test@mail.ru")
     void updateEmailLocale_NonBcp47Pattern_Returns400() throws Exception {
         // Невалидный BCP-47: цифровой и spec-символ-содержащий. До @Pattern попадали в БД.
-        for (String bad : new String[]{"123", "*", "!@#$", "ru-!", "  X"}) {
+        for (String bad : new String[]{"123", "*", "!@#$", "  X"}) {
             mockMvc.perform(patch("/api/users/me/email-locale")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"locale\": \"" + bad + "\"}"))
@@ -423,16 +423,132 @@ class UserRestControllerTest {
 
     @Test
     @WithMockUser(username = "test@mail.ru")
+    void updateEmailLocale_PartiallyMalformedTag_ReducedToLanguage() throws Exception {
+        // "ru-!" — язык вычитывается, битый хвост отбрасывается (наряд 276): 400 только
+        // когда языка нет вовсе. В БД при этом уходит чистое "ru", а не исходная строка.
+        when(userService.getUserByEmail("test@mail.ru")).thenReturn(testUserDto);
+
+        mockMvc.perform(patch("/api/users/me/email-locale")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"locale\": \"ru-!\"}"))
+                .andExpect(status().isNoContent());
+
+        verify(userService).updateEmailLocale(1L, "ru");
+    }
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
     void updateEmailLocale_ValidBcp47Variants_AllPass() throws Exception {
         when(userService.getUserByEmail("test@mail.ru")).thenReturn(testUserDto);
 
-        for (String ok : new String[]{"ru", "en", "pt-BR", "zh-Hant"}) {
+        for (String ok : new String[]{"ru", "en", "pt-BR"}) {
             mockMvc.perform(patch("/api/users/me/email-locale")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"locale\": \"" + ok + "\"}"))
                     .andExpect(status().isNoContent());
             verify(userService).updateEmailLocale(1L, ok);
         }
+    }
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void updateEmailLocale_ExtendedAndroid13Tag_NormalizedToLanguageAndRegion() throws Exception {
+        // Регрессия 276: тег из боевого лога Android 13+ давал 400 на @Size(max=8)
+        when(userService.getUserByEmail("test@mail.ru")).thenReturn(testUserDto);
+
+        mockMvc.perform(patch("/api/users/me/email-locale")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"locale\": \"ru-RU-u-fw-mon-ms-metric-mu-celsius\"}"))
+                .andExpect(status().isNoContent());
+
+        verify(userService).updateEmailLocale(1L, "ru-RU");
+    }
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void updateEmailLocale_ScriptSubtag_DroppedToLanguageAndRegion() throws Exception {
+        // "zh-Hans-CN" — 10 символов, в varchar(8) не влезает; сводим к языку с регионом
+        when(userService.getUserByEmail("test@mail.ru")).thenReturn(testUserDto);
+
+        mockMvc.perform(patch("/api/users/me/email-locale")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"locale\": \"zh-Hans-CN\"}"))
+                .andExpect(status().isNoContent());
+
+        verify(userService).updateEmailLocale(1L, "zh-CN");
+    }
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void updateEmailLocale_ScriptWithoutRegion_ReducedToLanguage() throws Exception {
+        // "zh-Hant" проходил валидацию и раньше — но теперь сводится к "zh".
+        // Тест держит эту смену поведения явной: раньше в колонку уходило "zh-Hant".
+        when(userService.getUserByEmail("test@mail.ru")).thenReturn(testUserDto);
+
+        mockMvc.perform(patch("/api/users/me/email-locale")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"locale\": \"zh-Hant\"}"))
+                .andExpect(status().isNoContent());
+
+        verify(userService).updateEmailLocale(1L, "zh");
+    }
+
+    // === POST /me/push-token ===
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void registerPushToken_ExtendedAndroid13Tag_NormalizedToLanguageAndRegion() throws Exception {
+        // Клиент перерегистрирует токен при каждой смене языка и шлёт тот же сырой тег
+        when(userService.getUserByEmail("test@mail.ru")).thenReturn(testUserDto);
+
+        mockMvc.perform(post("/api/users/me/push-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"fcm_token\": \"tok\", \"device_id\": \"dev\","
+                                + " \"locale\": \"ru-RU-u-fw-mon-ms-metric-mu-celsius\"}"))
+                .andExpect(status().isOk());
+
+        verify(pushNotificationService).registerToken(1L, "tok", "dev", "ru-RU");
+    }
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void registerPushToken_BlankLocale_StillAccepted() throws Exception {
+        // Обратная совместимость: часть старых сборок шлёт locale="" вместо отсутствия поля.
+        // Нормализация пустую строку не трогает, PATTERN_OPTIONAL её пропускает,
+        // fallback на "ru" делает сервис.
+        when(userService.getUserByEmail("test@mail.ru")).thenReturn(testUserDto);
+
+        mockMvc.perform(post("/api/users/me/push-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"fcm_token\": \"tok\", \"device_id\": \"dev\", \"locale\": \"\"}"))
+                .andExpect(status().isOk());
+
+        verify(pushNotificationService).registerToken(1L, "tok", "dev", "");
+    }
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void registerPushToken_WithoutLocale_StillAccepted() throws Exception {
+        // Обратная совместимость: старые сборки поле locale не шлют вовсе
+        when(userService.getUserByEmail("test@mail.ru")).thenReturn(testUserDto);
+
+        mockMvc.perform(post("/api/users/me/push-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"fcm_token\": \"tok\", \"device_id\": \"dev\"}"))
+                .andExpect(status().isOk());
+
+        verify(pushNotificationService).registerToken(1L, "tok", "dev", null);
+    }
+
+    @Test
+    @WithMockUser(username = "test@mail.ru")
+    void registerPushToken_GarbageLocale_Returns400() throws Exception {
+        mockMvc.perform(post("/api/users/me/push-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"fcm_token\": \"tok\", \"device_id\": \"dev\", \"locale\": \"ru_RU\"}"))
+                .andExpect(status().isBadRequest());
+
+        verify(pushNotificationService, never()).registerToken(anyLong(), anyString(), anyString(), anyString());
     }
 
     // === PATCH /me/sort-preferences (Task 5) ===

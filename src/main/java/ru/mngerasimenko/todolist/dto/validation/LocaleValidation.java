@@ -13,6 +13,20 @@ package ru.mngerasimenko.todolist.dto.validation;
  * как он попадёт в {@code User.preferredEmailLocale} и в БД. Дальше
  * {@code Locale.forLanguageTag} мягко fall-back'нет на дефолт при невалидном
  * BCP-47, поэтому строгая проверка не нужна.
+ *
+ * <p><b>Порядок важен:</b> эти ограничения применяются к <i>нормализованному</i> значению.
+ * Setter'ы locale-полей DTO прогоняют вход через
+ * {@link ru.mngerasimenko.todolist.util.LocaleNormalizer}, который сводит тег к
+ * {@code language[-REGION]}; поэтому {@link #MAX_LENGTH} в 8 символов не отклоняет
+ * длинные теги реальных клиентов ({@code ru-RU-u-fw-mon-ms-metric-mu-celsius} → {@code ru-RU}),
+ * а держит границу ровно по ширине колонок {@code varchar(8)} в БД.
+ *
+ * <p><b>Что на самом деле охраняет колонку — {@link #PATTERN}, а не {@link #MAX_LENGTH}.</b>
+ * Нормализатор длину не гарантирует: BCP-47 разрешает язык до восьми букв, а регион бывает
+ * трёхзначным числовым, так что {@code "abcdefgh-419"} доходит сюда двенадцатью символами.
+ * Отсекает его {@code [a-zA-Z]{2,3}} в PATTERN. Пара «язык 2–3 буквы + регион ≤3» даёт
+ * максимум 7 символов — отсюда и запас в {@link #MAX_LENGTH}. Кто будет расширять PATTERN
+ * под полный BCP-47, обязан заодно поставить границу длины в нормализаторе.
  */
 public final class LocaleValidation {
 

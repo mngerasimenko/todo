@@ -10,6 +10,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import ru.mngerasimenko.todolist.dto.validation.EmailValidation;
 import ru.mngerasimenko.todolist.dto.validation.LocaleValidation;
+import ru.mngerasimenko.todolist.util.LocaleNormalizer;
 
 /**
  * DTO для запроса регистрации пользователя
@@ -51,8 +52,21 @@ public class RegisterRequest {
      * Язык писем для нового пользователя в формате BCP-47 (e.g. "ru", "en").
      * Опциональное поле — если не указано, сервер использует Accept-Language
      * заголовок запроса, fallback "ru" (см. UserServiceImpl.createUser).
+     * <p>
+     * Валидация применяется к уже нормализованному значению — см. {@link #setLocale(String)}.
      */
     @Size(max = LocaleValidation.MAX_LENGTH, message = LocaleValidation.MAX_LENGTH_MESSAGE)
     @Pattern(regexp = LocaleValidation.PATTERN_OPTIONAL, message = LocaleValidation.PATTERN_MESSAGE)
     private String locale;
+
+    /**
+     * Нормализует тег при десериализации: клиент шлёт
+     * {@code Locale.getDefault().toLanguageTag()} целиком, и на Android 13+ это
+     * {@code ru-RU-u-fw-mon-ms-metric-mu-celsius}. Без сведения к {@code ru-RU}
+     * такой запрос отклонялся @Size ещё до контроллера — регистрация падала
+     * с HTTP 400 у всех, кто настроил региональные параметры вручную.
+     */
+    public void setLocale(String locale) {
+        this.locale = LocaleNormalizer.normalize(locale);
+    }
 }

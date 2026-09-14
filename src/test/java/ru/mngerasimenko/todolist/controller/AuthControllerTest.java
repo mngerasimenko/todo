@@ -355,8 +355,8 @@ class AuthControllerTest {
 
         ArgumentCaptor<UserDto> captor = ArgumentCaptor.forClass(UserDto.class);
         verify(userService).createUser(captor.capture());
-        // Из заголовка берётся самый приемлемый тег, приведённый к нижнему регистру
-        assertThat(captor.getValue().getPreferredEmailLocale()).isEqualTo("en-us");
+        // Из заголовка берётся самый приемлемый тег и сводится к каноническому language-REGION
+        assertThat(captor.getValue().getPreferredEmailLocale()).isEqualTo("en-US");
     }
 
     @Test
@@ -419,8 +419,8 @@ class AuthControllerTest {
     @Test
     void resolveEmailLocale_MalformedRangeAfterValidOne_UsesTheValidRange() {
         // Битый элемент в середине списка не должен обесценивать читаемые языки рядом.
-        assertThat(authController.resolveEmailLocale(null, "en-GB,-")).isEqualToIgnoringCase("en-GB");
-        assertThat(authController.resolveEmailLocale(null, "-,en-GB")).isEqualToIgnoringCase("en-GB");
+        assertThat(authController.resolveEmailLocale(null, "en-GB,-")).isEqualTo("en-GB");
+        assertThat(authController.resolveEmailLocale(null, "-,en-GB")).isEqualTo("en-GB");
     }
 
     @Test
@@ -436,7 +436,20 @@ class AuthControllerTest {
         // но защита не должна сама производить мусор: срез "abcdefghij" по восьми символам
         // дал бы "abcdefgh" — значение, не проходящее LocaleValidation.PATTERN.
         assertThat(authController.resolveEmailLocale("abcdefghij", null)).isEqualTo("ru");
-        assertThat(authController.resolveEmailLocale("zh-Hant-TW", null)).isEqualTo("zh");
+    }
+
+    @Test
+    void resolveEmailLocale_ExplicitScriptTag_ReducedToLanguageAndRegion() {
+        assertThat(authController.resolveEmailLocale("zh-Hant-TW", null)).isEqualTo("zh-TW");
+    }
+
+    @Test
+    void resolveEmailLocale_UndeterminedTagLongerThanColumn_ReducedToPrimarySubtag() {
+        // Единственный путь через HTTP к страховке ширины колонки: язык "und" нормализатор
+        // не распознаёт и возвращает тег как есть — 11 символов в varchar(8) не влезают.
+        // Без truncateToPrimarySubtag регистрация упала бы на insert.
+        assertThat(authController.resolveEmailLocale(null, "und-Latn-RS")).isEqualTo("und");
+        assertThat(authController.resolveEmailLocale(null, "und-u-ca-gregory")).isEqualTo("und");
     }
 
     @Test
@@ -444,7 +457,8 @@ class AuthControllerTest {
         // Что бы ни пришло в заголовке, в preferred_email_locale обязана уехать валидная локаль.
         String[] headers = {
                 "-", "*", "zh-Hant-TW", "en-US,en;q=0.9", "ru-Cyrl-RU-x-private-use-and-more",
-                "en;q=0", "-".repeat(8000), "en;seq=0.1,ru;q=0.2", ",,,", "en_US"
+                "en;q=0", "-".repeat(8000), "en;seq=0.1,ru;q=0.2", ",,,", "en_US",
+                "und-Latn-RS", "und-u-ca-gregory"
         };
         for (String header : headers) {
             String locale = authController.resolveEmailLocale(null, header);
@@ -468,17 +482,18 @@ class AuthControllerTest {
     void resolveEmailLocale_BlankExplicitLocale_FallsThroughToTheHeader() {
         // LocaleValidation.PATTERN_OPTIONAL разрешает пустую строку ради старых Android-клиентов
         // (см. его javadoc) — значит пустой locale обязан не «побеждать» заголовок.
-        assertThat(authController.resolveEmailLocale("", "en-GB")).isEqualTo("en-gb");
-        assertThat(authController.resolveEmailLocale("   ", "en-GB")).isEqualTo("en-gb");
+        assertThat(authController.resolveEmailLocale("", "en-GB")).isEqualTo("en-GB");
+        assertThat(authController.resolveEmailLocale("   ", "en-GB")).isEqualTo("en-GB");
         assertThat(authController.resolveEmailLocale("", null)).isEqualTo("ru");
     }
 
     @Test
-    void resolveEmailLocale_ExplicitLocale_IsStoredAsSent() {
-        // Явный locale клиента сохраняется как прислан, без нормализации регистра — в отличие
-        // от разобранного из заголовка ("en-US" → "en-us"). Пиннится, чтобы асимметрия
-        // не поменялась молча: сравнивать такие значения нужно регистронезависимо.
-        assertThat(authController.resolveEmailLocale("PT-br", null)).isEqualTo("PT-br");
+    void resolveEmailLocale_ExplicitLocaleAndHeader_ShareCanonicalCase() {
+        // Явный locale и тег из заголовка сводятся одним LocaleNormalizer: язык в нижнем регистре,
+        // регион в верхнем. Раньше явный сохранялся как прислан ("PT-br"), а заголовочный — в нижнем
+        // регистре ("pt-br"), и одно и то же значение лежало в колонке в двух видах.
+        assertThat(authController.resolveEmailLocale("PT-br", null)).isEqualTo("pt-BR");
+        assertThat(authController.resolveEmailLocale(null, "PT-br")).isEqualTo("pt-BR");
     }
 
     @Test
@@ -507,10 +522,11 @@ class AuthControllerTest {
 
         ArgumentCaptor<UserDto> captor = ArgumentCaptor.forClass(UserDto.class);
         verify(userService).createUser(captor.capture());
-        // Побеждает первый из разобранных элементов: заголовок длиннее лимита разбора,
-        // и хвост в него не попадает. Значение обязано быть валидной локалью, а не срезом мусора.
+        // Побеждает первый из разобранных элементов ("qaa-x0"): заголовок длиннее лимита разбора,
+        // и хвост в него не попадает. Нормализатор оставляет от тега язык: "x0" не регион и не вариант.
+        // Значение обязано быть валидной локалью, а не срезом мусора.
         String locale = captor.getValue().getPreferredEmailLocale();
-        assertThat(locale).isEqualTo("qaa-x0")
+        assertThat(locale).isEqualTo("qaa")
                 .hasSizeLessThanOrEqualTo(LocaleValidation.MAX_LENGTH)
                 .matches(LocaleValidation.PATTERN);
     }
@@ -541,13 +557,14 @@ class AuthControllerTest {
         // и всё равно найти язык — а не просто не упасть.
         ArgumentCaptor<UserDto> captor = ArgumentCaptor.forClass(UserDto.class);
         verify(userService).createUser(captor.capture());
-        assertThat(captor.getValue().getPreferredEmailLocale()).isEqualTo("de-de");
+        assertThat(captor.getValue().getPreferredEmailLocale()).isEqualTo("de-DE");
     }
 
     @Test
-    void register_OverlongLanguageTag_FallsBackToPrimarySubtag() throws Exception {
+    void register_OverlongLanguageTag_ReducedToLanguageAndRegion() throws Exception {
         // "zh-Hant-TW" длиннее 8 символов: обрезка по символам давала "zh-Hant-" — тег,
-        // не проходящий LocaleValidation.PATTERN. Корректная деградация — primary subtag.
+        // не проходящий LocaleValidation.PATTERN. Script отбрасывается тем же нормализатором,
+        // что и у явного locale в теле запроса.
         RegisterRequest registerRequest = RegisterRequest.builder()
                 .email("overlong@example.com").name("user").password("password123")
                 .build();
@@ -563,7 +580,7 @@ class AuthControllerTest {
 
         ArgumentCaptor<UserDto> captor = ArgumentCaptor.forClass(UserDto.class);
         verify(userService).createUser(captor.capture());
-        assertThat(captor.getValue().getPreferredEmailLocale()).isEqualTo("zh");
+        assertThat(captor.getValue().getPreferredEmailLocale()).isEqualTo("zh-TW");
     }
 
     @Test
