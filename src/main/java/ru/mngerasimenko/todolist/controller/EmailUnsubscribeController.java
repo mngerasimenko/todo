@@ -14,8 +14,10 @@ import org.springframework.web.bind.annotation.RestController;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
 import ru.mngerasimenko.todolist.service.MessageService;
 import ru.mngerasimenko.todolist.service.UserService;
+import ru.mngerasimenko.todolist.util.AcceptLanguageParser;
 
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * Контроллер отписки от reminder-напоминаний по одноразовой email-ссылке.
@@ -44,6 +46,13 @@ public class EmailUnsubscribeController {
 
     /** Значение {@code scope}, отключающее todo-due согласие вместо reminderOptOut. */
     private static final String SCOPE_TODO_DUE = "todo_due";
+
+    /** Языки, на которых существуют HTML-страницы отписки (ключи в {@code messages*.properties}). */
+    private static final String EN = "en";
+    private static final String DEFAULT_PAGE_LANGUAGE = "ru";
+    private static final Set<String> SUPPORTED_PAGE_LANGUAGES = Set.of(DEFAULT_PAGE_LANGUAGE, EN);
+    private static final Locale EN_LOCALE = Locale.ENGLISH;
+    private static final Locale DEFAULT_PAGE_LOCALE = new Locale(DEFAULT_PAGE_LANGUAGE);
 
     /**
      * Отписка от reminder-напоминаний.
@@ -85,27 +94,41 @@ public class EmailUnsubscribeController {
     }
 
     /**
-     * Грубый парсинг первого языка из заголовка {@code Accept-Language} (берём язык
-     * с наивысшим приоритетом, отбрасываем q-значения). Поддерживаем только {@code ru}
-     * и {@code en} — всё остальное → fallback на {@code ru} (текущая основная аудитория
+     * Язык страницы из заголовка {@code Accept-Language}: берём самый приемлемый для клиента
+     * из поддерживаемых, всё остальное → fallback на {@code ru} (текущая основная аудитория
      * 79% RU по Firebase Analytics).
+     * <p>
+     * Разбор — общий с {@code AuthController}, в {@link AcceptLanguageParser}: заголовок на этом
+     * открытом эндпоинте приходит произвольный, а прежний разбор по первому элементу списка
+     * игнорировал q-веса и отдавал русскую страницу клиенту, прямо попросившему английскую.
+     * <p>
+     * Package-private для unit-тестирования.
      */
-    private Locale resolveLocaleFromHeader(String acceptLanguage) {
-        if (acceptLanguage == null || acceptLanguage.isBlank()) {
-            return new Locale("ru");
-        }
-        String lang = acceptLanguage.split(",")[0].split(";")[0].trim().toLowerCase();
-        if (lang.startsWith("en")) {
-            return Locale.ENGLISH;
-        }
-        return new Locale("ru");
+    Locale resolveLocaleFromHeader(String acceptLanguage) {
+        return supportedLocale(AcceptLanguageParser.bestSupportedLanguage(
+                acceptLanguage, SUPPORTED_PAGE_LANGUAGES, DEFAULT_PAGE_LANGUAGE));
     }
 
+    /**
+     * Локаль страницы по значению {@code preferred_email_locale} из БД. Значение сводится
+     * к тому же набору {@link #SUPPORTED_PAGE_LANGUAGES}, что и язык из заголовка: колонка
+     * принимает любой BCP-47 тег ({@code "eng"}, {@code "de"}), а страниц у нас две.
+     * Без этого сведения {@code "eng"} попадал в {@code Locale.forLanguageTag} как есть,
+     * бандла {@code messages_eng} не находилось, текст приходил русский — но атрибут
+     * {@code lang} объявлял страницу английской.
+     */
     private Locale toLocale(String tag) {
         if (tag == null || tag.isBlank()) {
-            return new Locale("ru");
+            return supportedLocale(null);
         }
-        return Locale.forLanguageTag(tag);
+        // Регистр в колонке произвольный: явный locale клиента сохраняется как прислан,
+        // поэтому там встречается и "EN".
+        return supportedLocale(AcceptLanguageParser.primarySubtagOf(tag.toLowerCase(Locale.ROOT)));
+    }
+
+    /** Единственное место, где язык превращается в локаль страницы. */
+    private Locale supportedLocale(String language) {
+        return EN.equals(language) ? EN_LOCALE : DEFAULT_PAGE_LOCALE;
     }
 
     private String successHtml(Locale locale) {
@@ -129,7 +152,10 @@ public class EmailUnsubscribeController {
 
     private String pageHtml(Locale locale, String title, String body, String note) {
         String cta = messageService.getMessage("unsubscribe.cta.open", locale);
-        String lang = locale.getLanguage().startsWith("en") ? "en" : "ru";
+        // Локаль сюда приходит только из supportedLocale, поэтому язык берётся из неё напрямую:
+        // прежний startsWith("en") считал английскими и "eng"/"enm", у которых нет ни бандла,
+        // ни отношения к английскому.
+        String lang = EN_LOCALE.equals(locale) ? EN : DEFAULT_PAGE_LANGUAGE;
         return """
                 <!DOCTYPE html>
                 <html lang="%s">

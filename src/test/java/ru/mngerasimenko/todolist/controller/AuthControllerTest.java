@@ -26,6 +26,7 @@ import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.dto.UserResponse;
 import ru.mngerasimenko.todolist.dto.auth.*;
 import ru.mngerasimenko.todolist.dto.validation.EmailValidation;
+import ru.mngerasimenko.todolist.dto.validation.LocaleValidation;
 import ru.mngerasimenko.todolist.exception.TokenExpiredException;
 import ru.mngerasimenko.todolist.mapper.UserMapper;
 import ru.mngerasimenko.todolist.security.ApiSecurityConfig;
@@ -60,6 +61,10 @@ class AuthControllerTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    /** Нужен для прямых вызовов package-private resolveEmailLocale в обход MockMvc. */
+    @Autowired
+    private AuthController authController;
 
     @MockitoBean
     private AuthenticationManager authenticationManager;
@@ -350,8 +355,8 @@ class AuthControllerTest {
 
         ArgumentCaptor<UserDto> captor = ArgumentCaptor.forClass(UserDto.class);
         verify(userService).createUser(captor.capture());
-        // LanguageRange.parse возвращает первый range; Accept-Language нормализуется в lowercase
-        assertThat(captor.getValue().getPreferredEmailLocale()).isEqualToIgnoringCase("en-US");
+        // Из заголовка берётся самый приемлемый тег, приведённый к нижнему регистру
+        assertThat(captor.getValue().getPreferredEmailLocale()).isEqualTo("en-us");
     }
 
     @Test
@@ -391,6 +396,174 @@ class AuthControllerTest {
         ArgumentCaptor<UserDto> captor = ArgumentCaptor.forClass(UserDto.class);
         verify(userService).createUser(captor.capture());
         assertThat(captor.getValue().getPreferredEmailLocale()).isEqualTo("ru");
+    }
+
+    /**
+     * Ill-formed language range в {@code Accept-Language} («-», «ru,-», «-;q=0.5») роняет
+     * {@code Locale.LanguageRange.parse} через {@code ArrayIndexOutOfBoundsException},
+     * а не через {@code IllegalArgumentException} — на публичном /api/auth/register это
+     * давало HTTP 500 вместо регистрации.
+     * <p>
+     * Тест бьёт по {@code resolveEmailLocale} напрямую, а не через MockMvc: тот же дефект JDK
+     * ломает и сам {@code MockHttpServletRequest.addHeader}, который парсит Accept-Language
+     * при построении запроса, — до контроллера такой заголовок в MockMvc просто не долетает.
+     */
+    @Test
+    void resolveEmailLocale_MalformedAcceptLanguage_DefaultsToRu() {
+        assertThat(authController.resolveEmailLocale(null, "-")).isEqualTo("ru");
+        assertThat(authController.resolveEmailLocale(null, "  -  ")).isEqualTo("ru");
+        assertThat(authController.resolveEmailLocale(null, "-;q=0.5")).isEqualTo("ru");
+        assertThat(authController.resolveEmailLocale(null, ",,,")).isEqualTo("ru");
+    }
+
+    @Test
+    void resolveEmailLocale_MalformedRangeAfterValidOne_UsesTheValidRange() {
+        // Битый элемент в середине списка не должен обесценивать читаемые языки рядом.
+        assertThat(authController.resolveEmailLocale(null, "en-GB,-")).isEqualToIgnoringCase("en-GB");
+        assertThat(authController.resolveEmailLocale(null, "-,en-GB")).isEqualToIgnoringCase("en-GB");
+    }
+
+    @Test
+    void resolveEmailLocale_HugeMalformedAcceptLanguage_DefaultsToRu() {
+        // 8 КБ (дефолтный потолок Tomcat) сплошного мусора: разбор обязан быть конечным и не бросать.
+        assertThat(authController.resolveEmailLocale(null, "-".repeat(8000))).isEqualTo("ru");
+        assertThat(authController.resolveEmailLocale(null, ";".repeat(8000))).isEqualTo("ru");
+    }
+
+    @Test
+    void resolveEmailLocale_ExplicitLocaleTooLong_FallsBackToDefault() {
+        // @Size(max = 8) на RegisterRequest.locale делает эту ветку недостижимой снаружи,
+        // но защита не должна сама производить мусор: срез "abcdefghij" по восьми символам
+        // дал бы "abcdefgh" — значение, не проходящее LocaleValidation.PATTERN.
+        assertThat(authController.resolveEmailLocale("abcdefghij", null)).isEqualTo("ru");
+        assertThat(authController.resolveEmailLocale("zh-Hant-TW", null)).isEqualTo("zh");
+    }
+
+    @Test
+    void resolveEmailLocale_AnyHeader_ProducesValueValidForTheColumn() {
+        // Что бы ни пришло в заголовке, в preferred_email_locale обязана уехать валидная локаль.
+        String[] headers = {
+                "-", "*", "zh-Hant-TW", "en-US,en;q=0.9", "ru-Cyrl-RU-x-private-use-and-more",
+                "en;q=0", "-".repeat(8000), "en;seq=0.1,ru;q=0.2", ",,,", "en_US"
+        };
+        for (String header : headers) {
+            String locale = authController.resolveEmailLocale(null, header);
+            assertThat(locale).as("locale from header %s", header)
+                    .isNotNull()
+                    .hasSizeLessThanOrEqualTo(LocaleValidation.MAX_LENGTH)
+                    .matches(LocaleValidation.PATTERN);
+        }
+    }
+
+    @Test
+    void resolveEmailLocale_AcceptLanguageByQuality_PicksHighestWeightedRange() {
+        // Выбор по q сам по себе не нов: LanguageRange.parse тоже отдавал ranges, отсортированные
+        // по весу. Ново здесь только q=0 — RFC 9110 считает его «неприемлемо», а прежний разбор
+        // всё равно сохранял такой язык в preferred_email_locale.
+        assertThat(authController.resolveEmailLocale(null, "ru;q=0.1,en;q=0.9")).isEqualTo("en");
+        assertThat(authController.resolveEmailLocale(null, "en;q=0")).isEqualTo("ru");
+    }
+
+    @Test
+    void resolveEmailLocale_BlankExplicitLocale_FallsThroughToTheHeader() {
+        // LocaleValidation.PATTERN_OPTIONAL разрешает пустую строку ради старых Android-клиентов
+        // (см. его javadoc) — значит пустой locale обязан не «побеждать» заголовок.
+        assertThat(authController.resolveEmailLocale("", "en-GB")).isEqualTo("en-gb");
+        assertThat(authController.resolveEmailLocale("   ", "en-GB")).isEqualTo("en-gb");
+        assertThat(authController.resolveEmailLocale("", null)).isEqualTo("ru");
+    }
+
+    @Test
+    void resolveEmailLocale_ExplicitLocale_IsStoredAsSent() {
+        // Явный locale клиента сохраняется как прислан, без нормализации регистра — в отличие
+        // от разобранного из заголовка ("en-US" → "en-us"). Пиннится, чтобы асимметрия
+        // не поменялась молча: сравнивать такие значения нужно регистронезависимо.
+        assertThat(authController.resolveEmailLocale("PT-br", null)).isEqualTo("PT-br");
+    }
+
+    @Test
+    void register_HugeAcceptLanguage_StoresValidLocaleWithoutFailing() throws Exception {
+        // Tomcat пропускает заголовок до 8 КБ. Что бы там ни лежало, в preferred_email_locale
+        // обязан попасть валидный BCP-47 тег не длиннее LocaleValidation.MAX_LENGTH —
+        // колонка в БД узкая, а обрезка длинного тега по символам давала мусор вроде "zh-Hant-".
+        StringBuilder header = new StringBuilder();
+        for (int i = 0; header.length() < 8000; i++) {
+            header.append("qa").append((char) ('a' + i % 26)).append("-x").append(i).append(";q=0.5,");
+        }
+        header.append("zz");
+
+        RegisterRequest registerRequest = RegisterRequest.builder()
+                .email("huge@example.com").name("user").password("password123")
+                .build();
+        UserDto stubDto = UserDto.builder().id(2L).email("huge@example.com").name("user").build();
+        when(userService.createUser(any(UserDto.class))).thenReturn(stubDto);
+        when(userMapper.toResponse(any(UserDto.class))).thenReturn(UserResponse.builder().id(2L).build());
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Accept-Language", header.toString())
+                        .content(objectMapper.writeValueAsString(registerRequest)))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<UserDto> captor = ArgumentCaptor.forClass(UserDto.class);
+        verify(userService).createUser(captor.capture());
+        // Побеждает первый из разобранных элементов: заголовок длиннее лимита разбора,
+        // и хвост в него не попадает. Значение обязано быть валидной локалью, а не срезом мусора.
+        String locale = captor.getValue().getPreferredEmailLocale();
+        assertThat(locale).isEqualTo("qaa-x0")
+                .hasSizeLessThanOrEqualTo(LocaleValidation.MAX_LENGTH)
+                .matches(LocaleValidation.PATTERN);
+    }
+
+    @Test
+    void register_HostileAcceptLanguageThroughTheServletStack_StillRegisters() throws Exception {
+        // Через MockMvc враждебный "-" в одиночку не пронести: MockHttpServletRequest.addHeader
+        // сам зовёт Locale.LanguageRange.parse и падает на нём. Но парсит он только ПЕРВОЕ
+        // значение заголовка, поэтому вторая строка Accept-Language доезжает до контроллера
+        // нетронутой, а склеит значения через запятую уже spring-web (RequestHeaderMethodArgument-
+        // Resolver отдаёт String[], ArrayToStringConverter соединяет). Так
+        // проверяется весь путь: DispatcherServlet → @RequestHeader → @Valid → resolveEmailLocale.
+        RegisterRequest registerRequest = RegisterRequest.builder()
+                .email("servlet@example.com").name("user").password("password123")
+                .build();
+        UserDto stubDto = UserDto.builder().id(2L).email("servlet@example.com").name("user").build();
+        when(userService.createUser(any(UserDto.class))).thenReturn(stubDto);
+        when(userMapper.toResponse(any(UserDto.class))).thenReturn(UserResponse.builder().id(2L).build());
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Accept-Language", "*")
+                        .header("Accept-Language", "-,de-DE")
+                        .content(objectMapper.writeValueAsString(registerRequest)))
+                .andExpect(status().isCreated());
+
+        // Заголовок доехал как "*,-,de-DE": разбор обязан пройти сквозь wildcard и битый элемент
+        // и всё равно найти язык — а не просто не упасть.
+        ArgumentCaptor<UserDto> captor = ArgumentCaptor.forClass(UserDto.class);
+        verify(userService).createUser(captor.capture());
+        assertThat(captor.getValue().getPreferredEmailLocale()).isEqualTo("de-de");
+    }
+
+    @Test
+    void register_OverlongLanguageTag_FallsBackToPrimarySubtag() throws Exception {
+        // "zh-Hant-TW" длиннее 8 символов: обрезка по символам давала "zh-Hant-" — тег,
+        // не проходящий LocaleValidation.PATTERN. Корректная деградация — primary subtag.
+        RegisterRequest registerRequest = RegisterRequest.builder()
+                .email("overlong@example.com").name("user").password("password123")
+                .build();
+        UserDto stubDto = UserDto.builder().id(2L).email("overlong@example.com").name("user").build();
+        when(userService.createUser(any(UserDto.class))).thenReturn(stubDto);
+        when(userMapper.toResponse(any(UserDto.class))).thenReturn(UserResponse.builder().id(2L).build());
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Accept-Language", "zh-Hant-TW")
+                        .content(objectMapper.writeValueAsString(registerRequest)))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<UserDto> captor = ArgumentCaptor.forClass(UserDto.class);
+        verify(userService).createUser(captor.capture());
+        assertThat(captor.getValue().getPreferredEmailLocale()).isEqualTo("zh");
     }
 
     @Test

@@ -20,6 +20,7 @@ import java.util.Map;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.dto.UserResponse;
 import ru.mngerasimenko.todolist.dto.auth.*;
+import ru.mngerasimenko.todolist.dto.validation.LocaleValidation;
 import ru.mngerasimenko.todolist.mapper.UserMapper;
 import ru.mngerasimenko.todolist.security.jwt.JwtProperties;
 import ru.mngerasimenko.todolist.security.jwt.JwtTokenProvider;
@@ -27,6 +28,7 @@ import ru.mngerasimenko.todolist.service.RefreshTokenService;
 import ru.mngerasimenko.todolist.service.RefreshTokenService.RefreshTokenRotationResult;
 import ru.mngerasimenko.todolist.service.TokenBlacklistService;
 import ru.mngerasimenko.todolist.service.UserService;
+import ru.mngerasimenko.todolist.util.AcceptLanguageParser;
 import static ru.mngerasimenko.todolist.util.LogUtils.maskEmail;
 
 /**
@@ -52,6 +54,9 @@ public class AuthController {
      */
     private static final String REFRESH_COOKIE = "refresh_token";
     private static final String REFRESH_COOKIE_PATH = "/api/auth";
+
+    /** Язык писем по умолчанию — 79% аудитории RU (Firebase Analytics), см. I18nConfig. */
+    private static final String DEFAULT_EMAIL_LOCALE = "ru";
 
     /**
      * Вход пользователя в систему
@@ -325,33 +330,42 @@ public class AuthController {
 
     /**
      * Резолв языка писем при регистрации:
-     *   1. Если клиент явно прислал {@code RegisterRequest.locale} (короче 8 символов) — берём его.
-     *   2. Иначе парсим первый язык из {@code Accept-Language} (e.g. "en-US,en;q=0.9,ru;q=0.8" → "en-US").
-     *      Обрезаем до 8 символов на случай длинных тэгов вроде "zh-Hant-TW".
-     *      Wildcard "*" игнорируется (бессмысленен как локаль).
-     *   3. Fallback "ru" — если ни клиент, ни header ничего не дали.
+     *   1. Если клиент явно прислал {@code RegisterRequest.locale} — берём его.
+     *   2. Иначе берём из {@code Accept-Language} самый приемлемый для клиента язык
+     *      (e.g. "en-US,en;q=0.9,ru;q=0.8" → "en-US"); мусор и wildcard "*" игнорируются.
+     *   3. Fallback {@link #DEFAULT_EMAIL_LOCALE} — если ни клиент, ни header ничего не дали.
+     * <p>
+     * Значение уходит в {@code User.preferredEmailLocale}, поэтому оно ограничено
+     * {@link LocaleValidation#MAX_LENGTH} — как и одноимённое поле DTO. Длинный тег
+     * ("zh-Hant-TW") сводится к primary subtag ("zh"), а не режется по символам:
+     * обрезка давала "zh-Hant-" — значение, не проходящее собственную же валидацию.
+     * <p>
+     * Разбор заголовка — в {@link AcceptLanguageParser}: эндпоинт публичный, а
+     * {@code Locale.LanguageRange.parse} на входе "-" бросает
+     * {@code ArrayIndexOutOfBoundsException} и отдавала клиенту HTTP 500.
      * <p>
      * Package-private для unit-тестирования.
      */
     String resolveEmailLocale(String requested, String acceptLanguage) {
         if (requested != null && !requested.isBlank()) {
-            return requested.length() > 8 ? requested.substring(0, 8) : requested;
+            return truncateToPrimarySubtag(requested);
         }
-        if (acceptLanguage != null && !acceptLanguage.isBlank()) {
-            try {
-                var ranges = java.util.Locale.LanguageRange.parse(acceptLanguage);
-                if (!ranges.isEmpty()) {
-                    String range = ranges.get(0).getRange();
-                    if ("*".equals(range)) {
-                        return "ru"; // Wildcard как локаль не имеет смысла
-                    }
-                    return range.length() > 8 ? range.substring(0, 8) : range;
-                }
-            } catch (IllegalArgumentException ignored) {
-                // Битый Accept-Language — fallback ниже
-            }
+        String tag = AcceptLanguageParser.bestLanguageTag(acceptLanguage);
+        return tag == null ? DEFAULT_EMAIL_LOCALE : truncateToPrimarySubtag(tag);
+    }
+
+    /**
+     * Укорачивает тег до {@link LocaleValidation#MAX_LENGTH}, сохраняя валидность BCP-47:
+     * {@code "zh-Hant-TW"} → {@code "zh"}. Если и primary subtag не влезает, локаль не
+     * восстановима — берём дефолт, а не срез: обрезка неизвестного тега по символам как раз
+     * и давала значения вроде {@code "zh-Hant-"}, не проходящие собственную же валидацию.
+     */
+    private String truncateToPrimarySubtag(String tag) {
+        if (tag.length() <= LocaleValidation.MAX_LENGTH) {
+            return tag;
         }
-        return "ru";
+        String primary = AcceptLanguageParser.primarySubtagOf(tag);
+        return primary.length() <= LocaleValidation.MAX_LENGTH ? primary : DEFAULT_EMAIL_LOCALE;
     }
 
     /**
