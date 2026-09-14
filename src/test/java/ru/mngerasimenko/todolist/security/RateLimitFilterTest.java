@@ -20,6 +20,9 @@ import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.service.RedisHealthService;
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
@@ -611,17 +614,26 @@ class RateLimitFilterTest {
                 filter.doFilterInternal(createRequest("POST", "/api/auth/login"),
                         new MockHttpServletResponse(), filterChain);
             }
-            // Заголовок отдаётся через переопределённый getHeader, а не addHeader: сам
-            // MockHttpServletRequest на addHeader("Accept-Language", ...) зовёт
+            // Заголовок отдаётся через переопределённые getHeader/getHeaders, а не addHeader:
+            // сам MockHttpServletRequest на addHeader("Accept-Language", ...) зовёт
             // HttpHeaders.getAcceptLanguageAsLocales(), а тот падает на враждебных значениях
-            // вроде "-" — ровно тот баг JDK, который обходит фильтр. Реальный Tomcat заголовок
-            // при getHeader() не разбирает, так что стенд ближе к проду, а не дальше.
+            // вроде "-" (JDK LanguageRange.parse бросает AIOOBE). Реальный Tomcat заголовок
+            // при чтении не разбирает, так что стенд ближе к проду, а не дальше.
             MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/auth/login") {
                 @Override
                 public String getHeader(String name) {
                     return HttpHeaders.ACCEPT_LANGUAGE.equalsIgnoreCase(name)
                             ? acceptLanguage
                             : super.getHeader(name);
+                }
+
+                @Override
+                public Enumeration<String> getHeaders(String name) {
+                    if (!HttpHeaders.ACCEPT_LANGUAGE.equalsIgnoreCase(name)) {
+                        return super.getHeaders(name);
+                    }
+                    return Collections.enumeration(
+                            acceptLanguage == null ? List.of() : List.of(acceptLanguage));
                 }
             };
             request.setRemoteAddr("192.168.1.1");
@@ -692,6 +704,28 @@ class RateLimitFilterTest {
             assertThat(parseBody(response).path("message").asText())
                     .startsWith("Слишком много запросов");
         }
+
+        @Test
+        @DisplayName("Несколько строк Accept-Language учитываются вместе — как у контроллеров")
+        void multipleAcceptLanguageLines_AreJoinedLikeInControllers() throws ServletException, IOException {
+            // По RFC 9110 несколько строк заголовка равны одной, склеенной через запятую, и так же
+            // их получают контроллеры через @RequestHeader String. Первая строка "de" не поддерживается,
+            // вторая "en" поддерживается: язык 429 обязан совпасть с языком страницы отписки.
+            for (int i = 0; i < 3; i++) {
+                filter.doFilterInternal(createRequest("POST", "/api/auth/login"),
+                        new MockHttpServletResponse(), filterChain);
+            }
+            MockHttpServletRequest request = createRequest("POST", "/api/auth/login");
+            request.addHeader(HttpHeaders.ACCEPT_LANGUAGE, "de");
+            request.addHeader(HttpHeaders.ACCEPT_LANGUAGE, "en");
+            MockHttpServletResponse response = new MockHttpServletResponse();
+
+            filter.doFilterInternal(request, response, filterChain);
+
+            assertThat(response.getStatus()).isEqualTo(429);
+            assertThat(parseBody(response).path("message").asText())
+                    .startsWith("Too many requests");
+        }
     }
 
     // --- Разбор Accept-Language (прямые вызовы resolveMessageLanguage) ---
@@ -712,8 +746,7 @@ class RateLimitFilterTest {
                 // Полные браузерные заголовки: первый range и q-веса согласованы
                 "'en-US,en;q=0.9,ru;q=0.8', en",
                 "'ru-RU,ru;q=0.9,en;q=0.8', ru",
-                // q-веса РАСХОДЯТСЯ с порядком — единственные кейсы, отличающие
-                // разбор весов от наивного "берём первый range"
+                // q-веса РАСХОДЯТСЯ с порядком: отличают разбор весов от наивного "берём первый range"
                 "'ru;q=0.3,en;q=0.9',       en",
                 "'en;q=0.3,ru;q=0.9',       ru",
                 // q=0 по RFC 9110 — "неприемлемо", такой язык не выбираем
@@ -726,6 +759,7 @@ class RateLimitFilterTest {
                 "'de-DE,de;q=0.9',          ru",
                 "'###',                     ru",
                 "'*',                       ru",
+                // "*" не язык и не выбирается, поэтому побеждает en (по RFC 9110 он покрывал бы и ru)
                 "'*;q=1,en;q=0.5',          en",
                 // Входы, на которых JDK LanguageRange.parse бросал AIOOBE
                 "'-',                       ru",
@@ -749,18 +783,23 @@ class RateLimitFilterTest {
         @Test
         @DisplayName("Заголовок 8 КБ разбирается за ограниченное время (DoS на ветке 429)")
         void hugeHostileHeader_IsResolvedInBoundedTime() {
-            // "de-*-*-*-…" на 8 КБ (дефолтный лимит размера заголовка в Tomcat).
-            // Через Locale.lookupTag такой вход стоил ~6 секунд CPU на КАЖДЫЙ 429-ответ —
-            // то есть уже отшитый лимитом клиент мог заказывать себе секунды процессора.
-            String hostile = "de" + "-*".repeat(4000);
+            // На ветку 429 отшитый лимитом клиент попадает намеренно, поэтому разбор его заголовка
+            // не должен стоить заметного CPU. 8 КБ — дефолтный лимит заголовков Tomcat. Сплошные пустые
+            // элементы — худший вход для текущего парсера (лимит в 16 элементов на них не расходуется,
+            // проход идёт до конца заголовка); длинный мусорный тег — вход, на котором разбор через
+            // JDK Locale.lookupTag уходил в секунды.
+            String commas = ",".repeat(8000) + "en";
+            String longTag = "de" + "-*".repeat(4000);
 
             long startNanos = System.nanoTime();
-            String lang = filter.resolveMessageLanguage(hostile);
+            String fromCommas = filter.resolveMessageLanguage(commas);
+            String fromLongTag = filter.resolveMessageLanguage(longTag);
             long elapsedMillis = (System.nanoTime() - startNanos) / 1_000_000;
 
-            assertThat(lang).isEqualTo("ru");
-            // Запас к реальному времени разбора — три порядка: порог ловит возврат
-            // к квадратичному regex-разбору, а не медленный CI.
+            assertThat(fromCommas).isEqualTo("en");
+            assertThat(fromLongTag).isEqualTo("ru");
+            // Порог ловит только грубую деградацию уровня Locale.lookupTag и не зависит от медленного CI;
+            // квадратичный разбор 8 КБ им не ловится.
             assertThat(elapsedMillis).isLessThan(500L);
         }
 
@@ -772,6 +811,26 @@ class RateLimitFilterTest {
             String flood = "de-de,".repeat(1300) + "en";
 
             assertThat(filter.resolveMessageLanguage(flood)).isEqualTo("ru");
+        }
+
+        /**
+         * Язык 429 выбирается общим {@code AcceptLanguageParser} — тем же, что выбирает язык
+         * страницы отписки. Кейсы — те, на которых отдельный разбор внутри фильтра легко
+         * разошёлся бы с общим: пустые элементы, чужие параметры, qvalue вне грамматики RFC 9110.
+         */
+        @ParameterizedTest(name = "[{index}] \"{0}\" -> {1}")
+        @CsvSource({
+                // Пустые элементы по RFC 9110 не language range и лимит разбора не расходуют
+                "',,,,,,,,,,,,,,,,en',      en",
+                // Вес задаёт только параметр с именем ровно q
+                "'en;seq=0.1,ru;q=0.2',     en",
+                // qvalue вне грамматики RFC 9110 делает элемент неприемлемым, а не тяжелее единицы
+                "'en;q=9',                  ru",
+                "'ru,en;q=1.0001',          ru",
+                "'en;q=1e-9',               ru"
+        })
+        void resolvesLanguageLikeSharedParser(String header, String expected) {
+            assertThat(filter.resolveMessageLanguage(header)).isEqualTo(expected);
         }
     }
 }

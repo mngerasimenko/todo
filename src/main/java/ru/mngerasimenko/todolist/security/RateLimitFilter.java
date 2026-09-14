@@ -19,9 +19,12 @@ import ru.mngerasimenko.todolist.config.RedisCacheConfig;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.service.RedisHealthService;
+import ru.mngerasimenko.todolist.util.AcceptLanguageParser;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.Collections;
+import java.util.Enumeration;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -39,8 +42,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     /**
      * Шаблоны человекочитаемого {@code message} в 429-ответе: язык → текст с {@code %d} секунд.
-     * Добавление языка сюда — единственное, что нужно для его поддержки: {@link #resolveMessageLanguage}
-     * выбирает язык из ключей этой карты, {@link #buildTooManyRequestsBody} берёт отсюда текст.
+     * {@link #resolveMessageLanguage} выбирает язык из ключей этой карты, {@link #buildTooManyRequestsBody}
+     * берёт отсюда текст. Набор языков и {@link #DEFAULT_MESSAGE_LANG} держать равными
+     * {@code SUPPORTED_PAGE_LANGUAGES} и {@code DEFAULT_PAGE_LANGUAGE} в {@code EmailUnsubscribeController}:
+     * иначе один и тот же заголовок даст 429 и страницу отписки на разных языках.
      * <p>
      * Осознанное исключение из политики {@code I18nConfig} («REST API не локализуется»): фильтр
      * отрабатывает до Spring MVC и отдаёт тело сам, минуя {@code GlobalExceptionHandler}, поэтому
@@ -53,17 +58,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     /** Язык 429-сообщения по умолчанию — дефолтная локаль сервера (см. {@code I18nConfig}). */
     private static final String DEFAULT_MESSAGE_LANG = "ru";
-
-    /**
-     * Максимум разбираемых элементов {@code Accept-Language}. Заголовок приходит от клиента
-     * и может быть до 8 КБ (дефолт Tomcat), а разбирается он на ветке 429 — ровно там, куда
-     * отшитый лимитом клиент попадает намеренно. Реальные клиенты присылают единицы языков;
-     * всё сверх лимита — признак атаки, а не браузера.
-     */
-    private static final int MAX_LANGUAGE_RANGES = 16;
-
-    /** Предельная длина primary language subtag по BCP 47 — всё длиннее заведомо ill-formed. */
-    private static final int MAX_PRIMARY_SUBTAG_LENGTH = 8;
 
     private final RateLimitProperties properties;
     private final BucketProvider bucketProvider;
@@ -144,15 +138,26 @@ public class RateLimitFilter extends OncePerRequestFilter {
             response.setCharacterEncoding("UTF-8");
             response.setHeader("Retry-After", String.valueOf(retryAfterSeconds));
             response.setHeader("X-Rate-Limit-Remaining", "0");
-            response.getWriter().write(buildTooManyRequestsBody(
-                    request.getHeader(HttpHeaders.ACCEPT_LANGUAGE), retryAfterSeconds));
+            response.getWriter().write(buildTooManyRequestsBody(acceptLanguage(request), retryAfterSeconds));
         }
     }
 
     /**
+     * Все строки {@code Accept-Language}, склеенные через запятую. По RFC 9110 несколько строк
+     * заголовка равны одной, и ровно так их получают контроллеры через {@code @RequestHeader String}:
+     * {@code getHeader} отдал бы только первую строку, и на запросе «de» + «en» язык 429 разошёлся бы
+     * со страницей отписки. Вызывается только на ветке 429.
+     */
+    private static String acceptLanguage(HttpServletRequest request) {
+        Enumeration<String> values = request.getHeaders(HttpHeaders.ACCEPT_LANGUAGE);
+        return values == null ? null : String.join(",", Collections.list(values));
+    }
+
+    /**
      * Собирает JSON-тело 429-ответа с локализованным {@code message}.
-     * Машиночитаемые поля ({@code error}, {@code retryAfter}) не локализуются — клиент матчит их,
-     * а не текст. В тело попадают только константы из {@link #MESSAGE_TEMPLATES} и число секунд;
+     * Машиночитаемые поля ({@code error}, {@code retryAfter}) не локализуются. Там, где клиенты
+     * показывают серверную ошибку, это {@code message}, поэтому текст тоже часть контракта.
+     * В тело попадают только константы из {@link #MESSAGE_TEMPLATES} и число секунд;
      * пользовательский ввод в JSON не течёт, поэтому экранирование не требуется.
      */
     String buildTooManyRequestsBody(String acceptLanguage, long retryAfterSeconds) {
@@ -163,101 +168,22 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     /**
-     * Выбирает язык сообщения по {@code Accept-Language}: берётся поддерживаемый язык
-     * с наибольшим q-весом ("ru;q=0.3,en;q=0.9" → "en"), региональные теги сводятся к языку
-     * ("en-GB" → "en"), {@code q=0} по RFC 9110 означает «неприемлемо» и язык не выбирается.
-     * Всё прочее — отсутствующий, битый, wildcard-заголовок или неподдерживаемый язык —
-     * даёт {@link #DEFAULT_MESSAGE_LANG}.
+     * Выбирает язык сообщения по {@code Accept-Language}: поддерживаемый язык с наибольшим
+     * q-весом ("ru;q=0.3,en;q=0.9" → "en", "en-GB" → "en"). {@link #DEFAULT_MESSAGE_LANG} —
+     * если ни один поддерживаемый язык не приемлем: заголовка нет, он битый, в нём только
+     * неподдерживаемые языки или {@code q=0}. Wildcard {@code *} языком не считается и не выбирается.
      * <p>
-     * Разбор ручной, а не через {@code Locale.LanguageRange.parse} + {@code Locale.lookupTag}:
-     * JDK-реализация компилирует regex на каждый subtag, из-за чего враждебный 8-килобайтный
-     * заголовок стоил порядка 6 секунд CPU на один ответ — и заказать их мог именно тот клиент,
-     * которого лимит уже отшил. Плюс {@code parse} бросает на входе "-" не {@code IllegalArgumentException},
-     * а {@code ArrayIndexOutOfBoundsException}, что превращало 429 в 500. Здесь разбор линейный,
-     * ограниченный {@link #MAX_LANGUAGE_RANGES} и не бросающий исключений вовсе.
+     * Разбор — общий {@link AcceptLanguageParser}, тот же, что выбирает язык страницы отписки:
+     * один заголовок не должен давать 429 и страницу на разных языках. Язык писем при регистрации
+     * берётся тем же разбором, но без сведения к поддерживаемым языкам.
+     * Заголовок читается только на ветке 429, куда отшитый лимитом клиент попадает намеренно, —
+     * поэтому разбор обязан быть линейным и не бросать исключений; парсер это гарантирует.
      * <p>
      * Package-private для unit-тестирования.
      */
     String resolveMessageLanguage(String acceptLanguage) {
-        if (acceptLanguage == null || acceptLanguage.isBlank()) {
-            return DEFAULT_MESSAGE_LANG;
-        }
-        String best = DEFAULT_MESSAGE_LANG;
-        double bestWeight = 0.0;
-        int from = 0;
-        for (int parsed = 0; parsed < MAX_LANGUAGE_RANGES && from < acceptLanguage.length(); parsed++) {
-            int comma = acceptLanguage.indexOf(',', from);
-            int end = (comma < 0) ? acceptLanguage.length() : comma;
-
-            String language = primarySubtag(acceptLanguage, from, end);
-            if (language != null && MESSAGE_TEMPLATES.containsKey(language)) {
-                double weight = parseQuality(acceptLanguage, from, end);
-                if (weight > bestWeight) {
-                    bestWeight = weight;
-                    best = language;
-                }
-            }
-
-            if (comma < 0) {
-                break;
-            }
-            from = comma + 1;
-        }
-        return best;
-    }
-
-    /**
-     * Достаёт primary language subtag элемента {@code Accept-Language} в нижнем регистре:
-     * " en-GB;q=0.9" → "en". Возвращает null, если subtag пустой ("-") или заведомо ill-formed
-     * (длиннее {@link #MAX_PRIMARY_SUBTAG_LENGTH}) — такой элемент просто пропускается.
-     */
-    private static String primarySubtag(String header, int from, int end) {
-        int tagEnd = from;
-        while (tagEnd < end && header.charAt(tagEnd) != ';') {
-            tagEnd++;
-        }
-        int start = from;
-        while (start < tagEnd && Character.isWhitespace(header.charAt(start))) {
-            start++;
-        }
-        int stop = tagEnd;
-        while (stop > start && Character.isWhitespace(header.charAt(stop - 1))) {
-            stop--;
-        }
-        int dash = start;
-        while (dash < stop && header.charAt(dash) != '-') {
-            dash++;
-        }
-        int length = dash - start;
-        if (length == 0 || length > MAX_PRIMARY_SUBTAG_LENGTH) {
-            return null;
-        }
-        return header.substring(start, dash).toLowerCase(Locale.ROOT);
-    }
-
-    /**
-     * Достаёт q-вес элемента {@code Accept-Language}; без параметров — 1.0 (RFC 9110).
-     * Битое значение ("q=abc") трактуется как 0.0 — такой элемент не выбирается, но и не роняет разбор.
-     */
-    private static double parseQuality(String header, int from, int end) {
-        for (int i = from; i < end - 1; i++) {
-            char c = header.charAt(i);
-            if ((c != 'q' && c != 'Q') || header.charAt(i + 1) != '=') {
-                continue;
-            }
-            int valueStart = i + 2;
-            int valueEnd = valueStart;
-            while (valueEnd < end
-                    && (Character.isDigit(header.charAt(valueEnd)) || header.charAt(valueEnd) == '.')) {
-                valueEnd++;
-            }
-            try {
-                return Double.parseDouble(header.substring(valueStart, valueEnd));
-            } catch (NumberFormatException ex) {
-                return 0.0;
-            }
-        }
-        return 1.0;
+        return AcceptLanguageParser.bestSupportedLanguage(
+                acceptLanguage, MESSAGE_TEMPLATES.keySet(), DEFAULT_MESSAGE_LANG);
     }
 
     /**
