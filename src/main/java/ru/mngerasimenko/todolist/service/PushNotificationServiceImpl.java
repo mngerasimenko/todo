@@ -205,18 +205,7 @@ public class PushNotificationServiceImpl implements PushNotificationService {
                     if (sendResponse.isSuccessful()) continue;
                     FirebaseMessagingException e = sendResponse.getException();
                     if (e != null && e.getMessagingErrorCode() == MessagingErrorCode.UNREGISTERED) {
-                        // Свой try: fcm_token в схеме НЕ уникален (уникален device_id), и дубль
-                        // уронил бы findByFcmToken — вместе с чисткой остальных токенов пачки.
-                        try {
-                            pushTokenRepository.findByFcmToken(batch.get(i).getFcmToken())
-                                    .ifPresent(deadToken -> {
-                                        pushTokenRepository.delete(deadToken);
-                                        log.info("Удалён невалидный push-токен для устройства: {}",
-                                                deadToken.getDeviceId());
-                                    });
-                        } catch (RuntimeException ex) {
-                            log.warn("Не удалось убрать невалидный токен: {}", ex.toString());
-                        }
+                        removeUnregisteredToken(batch.get(i));
                     } else {
                         log.warn("Ошибка отправки sync-push: {}", e != null ? e.toString() : "неизвестно");
                     }
@@ -266,7 +255,8 @@ public class PushNotificationServiceImpl implements PushNotificationService {
      * токена рендерятся через {@link MessageService} с использованием его персональной
      * {@code locale} (BCP-47, см. {@link PushToken#getLocale()}).
      * <p>
-     * Невалидные токены (UNREGISTERED) автоматически удаляются.
+     * Невалидные токены (UNREGISTERED) удаляются по ходу рассылки; сбой удаления её не
+     * прерывает — см. {@link #removeUnregisteredToken}.
      */
     private void sendLocalized(List<PushToken> tokens,
                                String pushType,
@@ -338,14 +328,35 @@ public class PushNotificationServiceImpl implements PushNotificationService {
             } catch (FirebaseMessagingException e) {
                 if (e.getMessagingErrorCode() == MessagingErrorCode.UNREGISTERED) {
                     // Токен невалиден — устройство удалило приложение или токен обновился
-                    pushTokenRepository.findByFcmToken(fcmToken).ifPresent(deadToken -> {
-                        pushTokenRepository.delete(deadToken);
-                        log.info("Удалён невалидный push-токен для устройства: {}", deadToken.getDeviceId());
-                    });
+                    removeUnregisteredToken(pt);
                 } else {
                     log.warn("Ошибка отправки push: {}", e.getMessage());
                 }
             }
+        }
+    }
+
+    /**
+     * Удалить токен, на который FCM ответил UNREGISTERED.
+     * <p>
+     * Зовётся из цикла по получателям, поэтому сбой чистки глотается. В {@link #sendLocalized}
+     * исключение отсюда оборвало бы отправку всем получателям после этого токена, в
+     * {@link #notifyTodoUpdated} — чистку остатка пачки, да ещё под ложным логом «не удалось
+     * отправить sync-push». Типовые причины: {@code fcm_token} в схеме НЕ уникален (уникален
+     * {@code device_id}), и на дубле {@code findByFcmToken} бросает
+     * {@code IncorrectResultSizeDataAccessException}; либо недоступна БД. Уже удалённая строка
+     * к ним не относится — её {@code delete} пропускает молча. Дубли при этом остаются в таблице —
+     * {@code device_id} в предупреждении нужен, чтобы их можно было найти.
+     */
+    private void removeUnregisteredToken(PushToken recipient) {
+        try {
+            pushTokenRepository.findByFcmToken(recipient.getFcmToken()).ifPresent(deadToken -> {
+                pushTokenRepository.delete(deadToken);
+                log.info("Удалён невалидный push-токен для устройства: {}", deadToken.getDeviceId());
+            });
+        } catch (RuntimeException e) {
+            log.warn("Не удалось убрать невалидный push-токен устройства {}: {}",
+                    recipient.getDeviceId(), e.toString());
         }
     }
 

@@ -15,6 +15,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.IncorrectResultSizeDataAccessException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.model.PushToken;
@@ -37,7 +39,7 @@ import static org.mockito.Mockito.*;
 
 /**
  * Unit-тесты для PushNotificationServiceImpl.
- * Тестирует только сценарии без обращения к Firebase (статический FirebaseMessaging).
+ * Firebase (статический {@code FirebaseMessaging.getInstance()}) подменяется через mockStatic.
  */
 @ExtendWith(MockitoExtension.class)
 class PushNotificationServiceImplTest {
@@ -162,6 +164,101 @@ class PushNotificationServiceImplTest {
             assertNotificationConfigured(captor.getValue());
             assertThat(extractNotificationTag(captor.getValue())).isNull();
         }
+    }
+
+    /**
+     * Сбой чистки невалидного токена не обрывает рассылку остальным.
+     *
+     * `fcm_token` в схеме НЕ уникален (уникален `device_id`), и дубль роняет `findByFcmToken`
+     * через `IncorrectResultSizeDataAccessException`. Без защиты исключение вылетало из цикла
+     * по токенам — и участники после «мёртвого» токена не получали видимое уведомление.
+     */
+    @Test
+    void notifyNewTodo_DeadTokenLookupFails_KeepsSendingToOthers() throws Exception {
+        when(pushTokenRepository.findByListIdExcludingUser(86L, 53L))
+                .thenReturn(List.of(tokenFor(11L, "ru"), tokenFor(12L, "ru")));
+        when(pushTokenRepository.findByFcmToken("fcm-token-11"))
+                .thenThrow(new IncorrectResultSizeDataAccessException(1, 2));
+        FirebaseMessagingException unregistered = mock(FirebaseMessagingException.class);
+        when(unregistered.getMessagingErrorCode()).thenReturn(MessagingErrorCode.UNREGISTERED);
+
+        try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+            when(firebaseMessaging.send(any(Message.class)))
+                    .thenThrow(unregistered)
+                    .thenReturn("projects/test/messages/1");
+
+            pushNotificationService.notifyNewTodo(86L, 53L, "Иван", "Хлеб");
+        }
+
+        ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
+        verify(firebaseMessaging, times(2)).send(captor.capture());
+        assertThat(captor.getAllValues()).extracting(m -> readField(m, "token"))
+                .containsExactly("fcm-token-11", "fcm-token-12");
+        // Взаимодействия проверяются явно, а не через strict stubs: catch в чистке глотает любое
+        // RuntimeException, включая PotentialStubbingProblem от Mockito, и лишний вызов
+        // репозитория (поиск чужого токена, массовое удаление) иначе прошёл бы незамеченным.
+        verify(pushTokenRepository).findByListIdExcludingUser(86L, 53L);
+        verify(pushTokenRepository).findByFcmToken("fcm-token-11");
+        verifyNoMoreInteractions(pushTokenRepository);
+    }
+
+    /**
+     * Защищён весь блок чистки, а не только поиск: удаление тоже падает — например, при
+     * недоступной БД или редкой гонке внутри самого {@code delete()}.
+     */
+    @Test
+    void notifyNewTodo_DeadTokenDeleteFails_KeepsSendingToOthers() throws Exception {
+        when(pushTokenRepository.findByListIdExcludingUser(86L, 53L))
+                .thenReturn(List.of(tokenFor(11L, "ru"), tokenFor(12L, "ru")));
+        // Отдельный экземпляр, а не получатель из списка: у PushToken нет equals, и так проверка
+        // ниже отличает удаление найденной строки от удаления объекта-получателя.
+        PushToken dead = tokenFor(11L, "ru");
+        when(pushTokenRepository.findByFcmToken("fcm-token-11")).thenReturn(Optional.of(dead));
+        doThrow(new ObjectOptimisticLockingFailureException(PushToken.class, 11L))
+                .when(pushTokenRepository).delete(dead);
+        FirebaseMessagingException unregistered = mock(FirebaseMessagingException.class);
+        when(unregistered.getMessagingErrorCode()).thenReturn(MessagingErrorCode.UNREGISTERED);
+
+        try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+            when(firebaseMessaging.send(any(Message.class)))
+                    .thenThrow(unregistered)
+                    .thenReturn("projects/test/messages/1");
+
+            pushNotificationService.notifyNewTodo(86L, 53L, "Иван", "Хлеб");
+        }
+
+        ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
+        verify(firebaseMessaging, times(2)).send(captor.capture());
+        assertThat(captor.getAllValues()).extracting(m -> readField(m, "token"))
+                .containsExactly("fcm-token-11", "fcm-token-12");
+        verify(pushTokenRepository).findByListIdExcludingUser(86L, 53L);
+        verify(pushTokenRepository).findByFcmToken("fcm-token-11");
+        verify(pushTokenRepository).delete(dead);
+        verifyNoMoreInteractions(pushTokenRepository);
+    }
+
+    /**
+     * Транзиентная ошибка FCM НЕ удаляет живой токен — тот же инвариант, что у тихой
+     * синхронизации (см. notifyTodoUpdated_TransientFailure_KeepsToken). Здесь цена выше:
+     * через этот путь идут видимые уведомления и напоминания о сроке.
+     */
+    @Test
+    void notifyNewTodo_TransientFailure_KeepsToken() throws Exception {
+        when(pushTokenRepository.findByListIdExcludingUser(86L, 53L))
+                .thenReturn(List.of(tokenFor(11L, "ru")));
+        FirebaseMessagingException transientError = mock(FirebaseMessagingException.class);
+        when(transientError.getMessagingErrorCode()).thenReturn(MessagingErrorCode.UNAVAILABLE);
+
+        try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+            when(firebaseMessaging.send(any(Message.class))).thenThrow(transientError);
+
+            pushNotificationService.notifyNewTodo(86L, 53L, "Иван", "Хлеб");
+        }
+
+        verify(pushTokenRepository, never()).findByFcmToken(any());
     }
 
     /**
