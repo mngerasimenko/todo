@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Заглушка docker для тестов certbot-renew.sh.
+#
+# Изображает две операции над контейнерами и маленькую файловую систему в
+# $STUB_STATE: маркер, метку и «архив» сертификатов.
+#
+#   STUB_RUNNING=true|false|absent   — состояние контейнера certbot
+#   STUB_RENEW_RC=<n>                — код возврата `certbot renew`
+#   STUB_RELOAD_RC=<n>               — код возврата `nginx -s reload`
+#   $STUB_STATE/fs/<путь>            — существование файла (маркер/метка)
+#   $STUB_STATE/archive_newer=1      — в архиве есть серт новее метки
+#
+# Всё, что заглушка получила, пишется в $STUB_STATE/docker.argv — на этом держится
+# тест «--deploy-hook действительно передаётся certbot'у».
+
+printf '%s\n' "$*" >> "${STUB_STATE}/docker.argv"
+
+fs_path() { printf '%s/fs%s' "$STUB_STATE" "$1"; }
+
+case "${1:-}" in
+  inspect)
+    case "${STUB_RUNNING:-true}" in
+      absent) echo "Error: No such object: certbot" >&2; exit 1 ;;
+      *) printf '%s\n' "${STUB_RUNNING:-true}" ;;
+    esac
+    ;;
+  exec)
+    shift
+    container="$1"; shift
+    case "$container:$1" in
+      certbot:certbot)
+        # certbot renew ...
+        exit "${STUB_RENEW_RC:-0}"
+        ;;
+      certbot:test)
+        # test -f <path>
+        [ -f "$(fs_path "$3")" ] && exit 0
+        exit 1
+        ;;
+      certbot:find)
+        # find <archive> -name cert*.pem -newer <stamp>
+        if [ "${STUB_ARCHIVE_NEWER:-0}" = "1" ]; then
+          echo "/etc/letsencrypt/archive/todo.keepware.ru/cert9.pem"
+        fi
+        exit 0
+        ;;
+      certbot:sh)
+        # sh -c "rm -f MARKER && touch STAMP"
+        cmd="$3"
+        marker="$(printf '%s' "$cmd" | sed -n "s/.*rm -f '\([^']*\)'.*/\1/p")"
+        stamp="$(printf '%s' "$cmd" | sed -n "s/.*touch '\([^']*\)'.*/\1/p")"
+        [ -n "$marker" ] && rm -f "$(fs_path "$marker")"
+        if [ -n "$stamp" ]; then
+          mkdir -p "$(dirname "$(fs_path "$stamp")")"
+          : > "$(fs_path "$stamp")"
+        fi
+        exit "${STUB_CLEANUP_RC:-0}"
+        ;;
+      nginx-proxy:nginx)
+        exit "${STUB_RELOAD_RC:-0}"
+        ;;
+      *)
+        exit 0
+        ;;
+    esac
+    ;;
+  *)
+    exit 0
+    ;;
+esac

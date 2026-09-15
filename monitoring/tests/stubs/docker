@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Заглушка docker: обслуживает только `docker exec certbot openssl x509 -noout -startdate -in ...`,
+# то есть чтение серта С ДИСКА для проверки расхождения «эфир против диска».
+#
+# STUB_DISK_AGE_DAYS[_<host>] — сколько дней назад выписан серт на диске (по умолчанию 0)
+# STUB_DISK=missing            — файла на диске нет (rc 1)
+
+[ -n "${STUB_STATE:-}" ] && printf '%s\n' "$*" >> "${STUB_STATE}/docker.argv"
+
+path=""
+prev=""
+for a in "$@"; do
+  [ "$prev" = "-in" ] && path="$a"
+  prev="$a"
+done
+
+if [ "${STUB_DISK:-ok}" = "missing" ] || [ -z "$path" ]; then
+  echo "Can't open $path for reading" >&2
+  exit 1
+fi
+
+# /etc/letsencrypt/live/<host>/cert.pem
+host="$(printf '%s' "$path" | awk -F/ '{print $(NF-1)}')"
+key="STUB_DISK_AGE_DAYS_${host//[.-]/_}"
+age="${!key:-${STUB_DISK_AGE_DAYS:-0}}"
+date -u -d "-${age} days" '+notBefore=%b %e %H:%M:%S %Y GMT'

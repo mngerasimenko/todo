@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Заглушка curl для тестов опрашивалки. Сценарий задаётся переменными STUB_*.
+#
+# Опрашивалка ходит только через конфиг на stdin (-K -), чтобы токен VK не светился
+# в argv. Заглушка поэтому разбирает stdin, а сам argv пишет в $STUB_STATE/curl.argv —
+# на нём держится тест «токен не попадает в командную строку».
+
+[ -n "${STUB_STATE:-}" ] && printf '%s\n' "$*" >> "${STUB_STATE}/curl.argv"
+
+url=""
+msg=""
+from_config=0
+for a in "$@"; do
+  case "$a" in
+    -K) from_config=1 ;;
+    https://*) url="$a" ;;
+  esac
+done
+
+if [ "$from_config" = "1" ]; then
+  cfg="$(cat)"
+  url="$(printf '%s\n' "$cfg" | sed -n 's/^url = "\(.*\)"$/\1/p' | head -1)"
+  msg_file="$(printf '%s\n' "$cfg" | sed -n 's/^data-urlencode = "message@\(.*\)"$/\1/p' | head -1)"
+  if [ -n "$msg_file" ] && [ -r "$msg_file" ]; then
+    msg="$(cat "$msg_file")"
+  fi
+fi
+
+# Счётчик вызовов на ключ — нужен сценариям "flap" (первый опрос падает, повтор проходит).
+bump() {
+  local key="$1" n=0 f="${STUB_STATE:-/tmp}/calls.$1"
+  [ -f "$f" ] && n=$(cat "$f")
+  n=$((n + 1))
+  echo "$n" > "$f"
+  echo "$n"
+}
+
+# Опрашивалка зовёт http_get с -w $'\n%{http_code} %{time_total}'.
+emit() { printf '%s\n%s %s' "$1" "$2" "${3:-0.120}"; }
+
+case "$url" in
+  *api.vk.com*)
+    # curlfail — сам curl не смог выполнить запрос, значит сообщение до VK не
+    # доехало и записывать его как отправленное нельзя.
+    [ "${STUB_VK:-ok}" = "curlfail" ] && exit 7
+    printf '%s\n---\n' "$msg" >> "${STUB_VK_OUT:-/dev/null}"
+    case "${STUB_VK:-ok}" in
+      ok)     echo '{"response":424242}' ;;
+      reject) echo '{"error":{"error_code":5,"error_msg":"User authorization failed"}}' ;;
+    esac
+    ;;
+  https://*)
+    host="$(printf '%s' "$url" | awk -F/ '{print $3}')"
+    key="STUB_HTTP_${host//[.-]/_}"
+    mode="${!key:-${STUB_HTTP:-ok}}"
+    case "$mode" in
+      ok)     emit '{"status":"UP"}' 200 ;;
+      down)   emit '' 000 15.001 ;;
+      500)    emit '{"status":"DOWN"}' 500 ;;
+      slow)   emit '{"status":"UP"}' 200 12.500 ;;
+      flap)   if [ "$(bump "http_$host")" = "1" ]; then emit '' 000 15.001; else emit '{"status":"UP"}' 200; fi ;;
+      *)      emit '' 000 15.001 ;;
+    esac
+    ;;
+  *)
+    emit '' 000 15.001
+    ;;
+esac
