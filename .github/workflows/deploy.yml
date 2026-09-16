@@ -42,6 +42,16 @@ jobs:
       - name: Run tests with JaCoCo coverage
         run: mvn clean test
 
+      # Скрипты мониторинга проверяются здесь, до сборки и деплоя: стейдж исполняет
+      # опрашивалку прямо из рабочей копии, и сломанный скрипт после `git reset --hard`
+      # начал бы работать с ближайшего прогона cron раньше, чем установщик на хосте
+      # успел бы прогнать тесты.
+      - name: Run monitoring script tests
+        run: |
+          bash monitoring/tests/portfolio-monitor.test.sh
+          bash monitoring/tests/certbot-renew.test.sh
+          bash monitoring/tests/install-portfolio-monitor.test.sh
+
       # Логин до Testcontainers: шаг ниже тянет postgres:15-alpine и ryuk с Docker Hub, а job
       # test гейтит build → deploy. Анонимные pull'ы делят квоту по IP раннера, поэтому 429 от
       # Hub заблокировал бы в том числе ручной прод-деплой — ровно тогда, когда он нужен срочно.
@@ -167,7 +177,12 @@ jobs:
             # Update repo
             git fetch origin master
             git reset --hard origin/master
-            
+
+            # Cron стейджа исполняет опрашивалку прямо из рабочей копии — права и
+            # CRLF чиним сразу после reset, чтобы не оставлять окна с неисполняемым файлом.
+            sed -i 's/\r$//' /root/todo/monitoring/*.sh 2>/dev/null || true
+            chmod +x /root/todo/monitoring/*.sh 2>/dev/null || true
+
             # Create volumes/network if not exist (idempotent)
             docker network create staging-network 2>/dev/null || true
             docker volume create staging-redis-data 2>/dev/null || true
@@ -182,6 +197,20 @@ jobs:
             # Cleanup: remove all unused images and build cache to prevent disk fill
             docker image prune -a -f 2>/dev/null || true
             docker builder prune -a -f 2>/dev/null || true
+
+            # Портфельная опрашивалка ставится ПОСЛЕ приложения: её сбой (упавшие
+            # тесты, нечитаемый crontab) не должен оставлять стейдж на старом образе.
+            # Установщик идемпотентен и сам гоняет тесты. ssh-action не останавливается
+            # на ненулевом коде (script_stop не включён, а set -e тут нельзя — выше есть
+            # команды, штатно возвращающие не 0), поэтому код установщика выносим наружу
+            # руками: молча зелёный деплой при неустановленной опрашивалке — тот же
+            # тихий отказ, который она чинит.
+            bash /root/todo/monitoring/install-portfolio-monitor.sh external
+            MONITOR_RC=$?
+            if [ "$MONITOR_RC" -ne 0 ]; then
+              echo "::error::install-portfolio-monitor failed (rc=$MONITOR_RC); the app itself is deployed"
+              exit "$MONITOR_RC"
+            fi
 
             echo "Staging deployed successfully"
 
@@ -229,6 +258,15 @@ jobs:
             # Update repo (nginx.conf, assetlinks.json, monitoring)
             git fetch origin master
             git reset --hard origin/master
+
+            # Права на скрипты мониторинга чиним СРАЗУ после reset, а не в конце джобы.
+            # Раньше между reset и chmod проходило несколько минут, и попавшие в это
+            # окно запуски cron падали с "Permission denied": так внутренний монитор
+            # прода молча простоял ~26 часов суммарно и никто не узнал — лог никто не
+            # читает, MTA на машине нет. Исполняемый бит теперь ещё и в git (100755),
+            # так что chmod здесь — страховка, а не единственная опора.
+            sed -i 's/\r$//' monitoring/*.sh 2>/dev/null || true
+            chmod +x monitoring/*.sh 2>/dev/null || true
 
             # Create network and volumes if not exist
             docker network create todo-network 2>/dev/null || true
@@ -413,9 +451,11 @@ jobs:
             docker image prune -a -f 2>/dev/null || true
             docker builder prune -a -f 2>/dev/null || true
 
-            # Fix monitoring scripts (CRLF → LF, +x)
-            sed -i 's/\r$//' /home/deploy/todo/monitoring/*.sh 2>/dev/null || true
-            chmod +x /home/deploy/todo/monitoring/*.sh 2>/dev/null || true
+            # Права на monitoring/*.sh выставлены выше, сразу после git reset.
+            # Установка портфельной опрашивалки на прод (роль peer) идёт отдельно,
+            # руками из-под root: пользователь deploy не имеет sudo, а установщику
+            # нужны root-crontab, /etc/logrotate.d и /var/lib.
+            # См. monitoring/README.md, раздел «Установка».
 
             echo "Production deployed successfully"
 

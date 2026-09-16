@@ -1,3 +1,12 @@
+# Канал алертов — VK. Одна копия токена на хост: отсюда его берут и
+# server-monitor.sh, и portfolio-monitor.sh (через VK_CONF_FILE), и соседняя
+# проба replyAI. При ротации менять одно место.
+VK_TOKEN="your-vk-group-token-here"
+VK_PEER_ID="your-vk-peer-id-here"
+VK_GROUP_ID="your-vk-group-id-here"
+VK_API_VERSION="5.199"
+
+# Legacy Telegram: с российских хостов заблокирован, не используется.
 TELEGRAM_BOT_TOKEN="your-bot-token-here"
 TELEGRAM_CHAT_ID="your-chat-id-here"
 

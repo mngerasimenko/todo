@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Заглушка ssh: подменяет обе операции взаимного дед-мэна — чтение маячка пира
+# и доставку своего маячка пиру. Сеть не трогается.
+#
+# STUB_PEER=unreachable        — соединение не встало (rc 255)
+# STUB_PEER=push_fails         — читать даёт, писать нет
+# STUB_PEER_BEACON=<строка>    — что отдаёт удалённый `cat`; пусто = файла нет (rc 1)
+# STUB_PEER_READS_OK=<n>       — первые n чтений удаются, следующие рвутся (rc 255):
+#                                соединение, моргнувшее посреди прогона
+# Доставленный маячок пишется в $STUB_STATE/ssh.push, порядок вызовов — в
+# $STUB_STATE/events (на нём держится тест «алерт уходит до операций с пиром»).
+
+if [ -n "${STUB_STATE:-}" ]; then
+  printf '%s\n' "$*" >> "${STUB_STATE}/ssh.argv"
+  echo ssh >> "${STUB_STATE}/events"
+fi
+
+# Удалённая команда — последний аргумент.
+remote="${!#}"
+
+if [ "${STUB_PEER:-ok}" = "unreachable" ]; then
+  echo "ssh: connect to host port 22: Connection timed out" >&2
+  exit 255
+fi
+
+case "$remote" in
+  *"cat >"*)
+    if [ "${STUB_PEER:-ok}" = "push_fails" ]; then
+      echo "bash: line 1: cannot create" >&2
+      exit 1
+    fi
+    cat >> "${STUB_STATE:-/tmp}/ssh.push"
+    ;;
+  *cat*)
+    if [ -n "${STUB_PEER_READS_OK:-}" ]; then
+      f="${STUB_STATE:-/tmp}/calls.ssh_read"
+      n=0
+      [ -f "$f" ] && n=$(cat "$f")
+      n=$((n + 1))
+      echo "$n" > "$f"
+      if [ "$n" -gt "$STUB_PEER_READS_OK" ]; then
+        echo "ssh: Connection reset by peer" >&2
+        exit 255
+      fi
+    fi
+    if [ -z "${STUB_PEER_BEACON:-}" ]; then
+      echo "cat: No such file or directory" >&2
+      exit 1
+    fi
+    printf '%s\n' "$STUB_PEER_BEACON"
+    ;;
+  *)
+    exit 0
+    ;;
+esac

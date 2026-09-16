@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Заглушка docker для тестов certbot-renew.sh.
+#
+# Контейнер certbot изображается каталогом $STUB_STATE/fs: пути /etc/letsencrypt в
+# аргументах подменяются на него, а test / find / cat / touch / sh исполняются
+# по-настоящему над этими файлами. Так тесты проверяют настоящую семантику
+# `find -newer` и времён файлов, а не флаг, который заглушка вернула бы по уговору.
+#
+#   STUB_RUNNING=true|false|absent — состояние контейнера certbot
+#   STUB_RENEW_RC=<n>              — код возврата `certbot renew`
+#   STUB_RENEW_WRITES=1            — `certbot renew` продлевает серт: пишет новый файл
+#                                    в archive и, как настоящий certbot, исполняет
+#                                    хуки из renewal-hooks/deploy
+#   STUB_RELOAD_RC=<n>             — код возврата `nginx -s reload`
+#   STUB_RENEW_DURING_RELOAD=1     — пока nginx перечитывает конфиг, продление ставит маркер
+#   STUB_MV_FAIL=1                 — перенос метки на место не проходит (том стал только для чтения)
+#   STUB_TOUCH_FAIL=1              — `touch` в контейнере не проходит (том только для чтения)
+#
+# Все вызовы пишутся в $STUB_STATE/docker.argv — на этом держится тест «флаг
+# --deploy-hook certbot'у не передаётся».
+
+printf '%s\n' "$*" >> "${STUB_STATE}/docker.argv"
+FS="${STUB_STATE}/fs"
+
+case "${1:-}" in
+  inspect)
+    case "${STUB_RUNNING:-true}" in
+      absent) echo "Error: No such object: certbot" >&2; exit 1 ;;
+      *) printf '%s\n' "${STUB_RUNNING:-true}" ;;
+    esac
+    ;;
+  exec)
+    shift
+    [ "${1:-}" = "-i" ] && shift
+    container="$1"; shift
+    case "$container" in
+      nginx-proxy)
+        if [ "${STUB_RENEW_DURING_RELOAD:-0}" = "1" ]; then
+          mkdir -p "$FS/etc/letsencrypt" && : > "$FS/etc/letsencrypt/.nginx-reload-needed"
+          # У busybox на проде время файлов — целые секунды. Округляем, иначе
+          # сценарий прошёл бы и без паузы перед reload в самом скрипте.
+          touch -d "@$(date +%s)" "$FS/etc/letsencrypt/.nginx-reload-needed"
+        fi
+        exit "${STUB_RELOAD_RC:-0}"
+        ;;
+      certbot)
+        if [ "${1:-}" = "certbot" ]; then
+          if [ "${STUB_RENEW_WRITES:-0}" = "1" ]; then
+            mkdir -p "$FS/etc/letsencrypt/archive/todo.keepware.ru"
+            : > "$FS/etc/letsencrypt/archive/todo.keepware.ru/cert2.pem"
+            touch -d "@$(date +%s)" "$FS/etc/letsencrypt/archive/todo.keepware.ru/cert2.pem"
+            for h in "$FS"/etc/letsencrypt/renewal-hooks/deploy/*; do
+              # Как настоящий certbot: неисполняемый файл хука пропускается молча.
+              [ -f "$h" ] && [ -x "$h" ] || continue
+              sed "s|/etc/letsencrypt|$FS/etc/letsencrypt|g" "$h" | sh
+            done
+            # Файлы, которые создал хук, — тоже с точностью до секунды.
+            [ -f "$FS/etc/letsencrypt/.nginx-reload-needed" ]               && touch -d "@$(date +%s)" "$FS/etc/letsencrypt/.nginx-reload-needed"
+          fi
+          exit "${STUB_RENEW_RC:-0}"
+        fi
+        if [ "${1:-}" = "touch" ]; then
+          if [ "${STUB_TOUCH_FAIL:-0}" = "1" ]; then
+            echo "touch: Read-only file system" >&2
+            exit 1
+          fi
+          args=()
+          for a in "$@"; do args+=("${a//\/etc\/letsencrypt/$FS/etc/letsencrypt}"); done
+          "${args[@]}" || exit $?
+          # Целые секунды, как busybox на проде.
+          for a in "${args[@]:1}"; do [ -e "$a" ] && touch -d "@$(date +%s)" "$a"; done
+          exit 0
+        fi
+        if [ "${1:-}" = "sh" ] && [ "${STUB_MV_FAIL:-0}" = "1" ]; then
+          case "$*" in *"mv -f"*) echo "mv: cannot rename: Read-only file system" >&2; exit 1 ;; esac
+        fi
+        args=()
+        for a in "$@"; do args+=("${a//\/etc\/letsencrypt/$FS/etc/letsencrypt}"); done
+        exec "${args[@]}"
+        ;;
+    esac
+    ;;
+esac
+exit 0

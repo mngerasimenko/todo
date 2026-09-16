@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Заглушка docker: обслуживает `docker exec certbot ...` опрашивалки на проде — чтение
+# серта С ДИСКА для сверки «эфир против диска» и список сертификатов certbot.
+#
+# STUB_DISK_AGE_DAYS[_<host>] — сколько дней назад выписан серт на диске (по умолчанию 0)
+# STUB_DISK_AGE_HOURS         — то же в часах: свежее продление, ждущее reload
+# STUB_DISK=missing           — файла на диске нет (rc 1)
+# STUB_LIVE_DOMAINS="a b"     — что лежит в /etc/letsencrypt/live; fail — каталог не читается
+# STUB_LIVE_FAIL_FIRST=1      — первое чтение каталога не удаётся (docker моргнул), следующие — да
+
+[ -n "${STUB_STATE:-}" ] && printf '%s\n' "$*" >> "${STUB_STATE}/docker.argv"
+
+for a in "$@"; do
+  if [ "$a" = "ls" ]; then
+    n=0
+    f="${STUB_STATE:-/tmp}/calls.docker_ls"
+    [ -f "$f" ] && n=$(cat "$f")
+    n=$((n + 1))
+    echo "$n" > "$f"
+    if [ "${STUB_LIVE_DOMAINS:-}" = "fail" ] || { [ "${STUB_LIVE_FAIL_FIRST:-0}" = "1" ] && [ "$n" = "1" ]; }; then
+      echo "ls: /etc/letsencrypt/live: No such file or directory" >&2
+      exit 1
+    fi
+    for d in ${STUB_LIVE_DOMAINS:-}; do echo "$d"; done
+    # Настоящий certbot кладёт в live/ ещё и README.
+    echo README
+    exit 0
+  fi
+done
+
+path=""
+prev=""
+for a in "$@"; do
+  [ "$prev" = "-in" ] && path="$a"
+  prev="$a"
+done
+
+if [ "${STUB_DISK:-ok}" = "missing" ] || [ -z "$path" ]; then
+  echo "Can't open $path for reading" >&2
+  exit 1
+fi
+
+if [ -n "${STUB_DISK_AGE_HOURS:-}" ]; then
+  date -u -d "-${STUB_DISK_AGE_HOURS} hours" '+notBefore=%b %e %H:%M:%S %Y GMT'
+  exit 0
+fi
+
+# /etc/letsencrypt/live/<host>/cert.pem
+host="$(printf '%s' "$path" | awk -F/ '{print $(NF-1)}')"
+key="STUB_DISK_AGE_DAYS_${host//[.-]/_}"
+age="${!key:-${STUB_DISK_AGE_DAYS:-0}}"
+date -u -d "-${age} days" '+notBefore=%b %e %H:%M:%S %Y GMT'
