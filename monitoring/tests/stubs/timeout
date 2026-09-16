@@ -1,4 +1,14 @@
 #!/usr/bin/env bash
-# Заглушка timeout: отбрасывает длительность и запускает команду как есть.
+# Заглушка timeout: записывает аргументы, отбрасывает опции и длительность и
+# запускает команду как есть. Запись нужна тесту «таймаут ssh урезан по бюджету
+# прогона и идёт с --foreground».
+[ -n "${STUB_STATE:-}" ] && printf '%s\n' "$*" >> "${STUB_STATE}/timeout.argv"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -s|-k|--signal|--kill-after) shift 2 ;;
+    -*) shift ;;
+    *) break ;;
+  esac
+done
 shift
 exec "$@"

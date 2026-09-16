@@ -40,11 +40,17 @@ emit() { printf '%s\n%s %s' "$1" "$2" "${3:-0.120}"; }
 
 case "$url" in
   *api.vk.com*)
+    [ -n "${STUB_STATE:-}" ] && echo vk >> "${STUB_STATE}/events"
     # curlfail — сам curl не смог выполнить запрос, значит сообщение до VK не
     # доехало и записывать его как отправленное нельзя.
     [ "${STUB_VK:-ok}" = "curlfail" ] && exit 7
     printf '%s\n---\n' "$msg" >> "${STUB_VK_OUT:-/dev/null}"
-    case "${STUB_VK:-ok}" in
+    vk_mode="${STUB_VK:-ok}"
+    # reject_first — первая отправка сценария отвергнута, следующие проходят.
+    if [ "$vk_mode" = "reject_first" ]; then
+      if [ "$(bump vk)" = "1" ]; then vk_mode=reject; else vk_mode=ok; fi
+    fi
+    case "$vk_mode" in
       ok)     echo '{"response":424242}' ;;
       reject) echo '{"error":{"error_code":5,"error_msg":"User authorization failed"}}' ;;
     esac

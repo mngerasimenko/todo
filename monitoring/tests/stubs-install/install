@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Заглушка install: копирует файл, отбрасывая режим и владельца (-o/-g требуют root).
+args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -m|-o|-g) shift 2 ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+cp "${args[0]}" "${args[1]}"

@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Заглушка crontab: таблица живёт в $STUB_STATE/crontab, каждая запись отмечается
+# строкой в $STUB_STATE/crontab.writes.
+#   STUB_CRONTAB=read_error  — `crontab -l` не смог прочитать таблицу (и это не «нет crontab»)
+#   STUB_CRONTAB=write_error — `crontab -` отверг таблицу и ничего не записал
+#   STUB_CRONTAB=write_garbled — `crontab -` принял таблицу, а записал другое
+f="${STUB_STATE}/crontab"
+case "${1:-}" in
+  -l)
+    if [ "${STUB_CRONTAB:-}" = "read_error" ]; then
+      echo "crontab: cannot open your crontab: Permission denied" >&2
+      exit 1
+    fi
+    if [ ! -f "$f" ]; then
+      echo "no crontab for root" >&2
+      exit 1
+    fi
+    cat "$f"
+    ;;
+  -)
+    if [ "${STUB_CRONTAB:-}" = "write_error" ]; then
+      cat > /dev/null
+      echo "\"-\":0: bad minute" >&2
+      echo "errors in crontab file, can't install." >&2
+      exit 1
+    fi
+    if [ "${STUB_CRONTAB:-}" = "write_garbled" ]; then
+      cat > /dev/null
+      echo "# garbled" > "$f"
+      echo write >> "${STUB_STATE}/crontab.writes"
+      exit 0
+    fi
+    cat > "$f"
+    echo write >> "${STUB_STATE}/crontab.writes"
+    ;;
+  *)
+    exit 1
+    ;;
+esac

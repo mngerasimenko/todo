@@ -4,6 +4,7 @@
 # Срок до конца задаётся STUB_CERT_DAYS (общий) или STUB_CERT_DAYS_<host с _ вместо . и ->.
 # Возраст серта в эфире (для проверки расхождения «эфир против диска») —
 # STUB_WIRE_AGE_DAYS[_<host>], по умолчанию 0 дней назад.
+# Серт не на то имя — STUB_CERT_NAME[_<host>]=mismatch (ответ на -checkhost).
 case "${1:-}" in
   s_client)
     host=""
@@ -17,20 +18,28 @@ case "${1:-}" in
     [ "$days" = "none" ] && exit 1
     akey="STUB_WIRE_AGE_DAYS_${host//[.-]/_}"
     age="${!akey:-${STUB_WIRE_AGE_DAYS:-0}}"
-    echo "STUBCERT $days $age"
+    echo "STUBCERT $days $age $host"
     ;;
   x509)
-    want_start=0
-    for a in "$@"; do
-      [ "$a" = "-startdate" ] && want_start=1
-    done
-    read -r marker days age || exit 1
+    read -r marker days age host || exit 1
     [ "$marker" = "STUBCERT" ] || exit 1
-    if [ "$want_start" = "1" ]; then
-      date -u -d "-${age} days" '+notBefore=%b %e %H:%M:%S %Y GMT'
-    else
-      date -u -d "+${days} days" '+notAfter=%b %e %H:%M:%S %Y GMT'
-    fi
+    prev=""
+    # Порядок вывода — порядок опций, как у настоящего openssl.
+    for a in "$@"; do
+      case "$a" in
+        -startdate) date -u -d "-${age} days" '+notBefore=%b %e %H:%M:%S %Y GMT' ;;
+        -enddate)   date -u -d "+${days} days" '+notAfter=%b %e %H:%M:%S %Y GMT' ;;
+      esac
+      if [ "$prev" = "-checkhost" ]; then
+        nkey="STUB_CERT_NAME_${host//[.-]/_}"
+        if [ "${!nkey:-${STUB_CERT_NAME:-match}}" = "mismatch" ]; then
+          echo "Hostname $a does NOT match certificate"
+        else
+          echo "Hostname $a does match certificate"
+        fi
+      fi
+      prev="$a"
+    done
     ;;
   *)
     exit 1
