@@ -104,12 +104,14 @@ public class EmailServiceImpl implements EmailService {
                                           String localeTag, String unsubscribeToken) {
         Locale locale = resolveLocale(localeTag);
         String fallback = messageService.getMessage("email.inactive.fallback_name", locale);
-        String safeName = HtmlUtils.htmlEscape(userName != null ? userName : fallback);
+        // Имя не экранируется: приветствие во всех reminder-шаблонах идёт через th:text, который
+        // экранирует сам. Повторное экранирование получатель видел буквально — «Ann &amp; Kate», «Jos&eacute;».
+        String displayName = userName != null ? userName : fallback;
         String rustoreLink = "https://www.rustore.ru/catalog/app/ru.mngerasimenko.todolist";
         String trackClickLink = buildTrackLink("click", userId);
         String trackOpenLink = buildTrackLink("open", userId);
         java.util.HashMap<String, Object> vars = new java.util.HashMap<>();
-        vars.put("userName", safeName);
+        vars.put("userName", displayName);
         vars.put("rustoreLink", rustoreLink);
         vars.put("trackClickLink", trackClickLink);
         vars.put("trackOpenLink", trackOpenLink);
@@ -125,11 +127,12 @@ public class EmailServiceImpl implements EmailService {
         Locale locale = resolveLocale(localeTag);
         // Используем тот же fallback name что и inactive-reminder — единый messages key.
         String fallback = messageService.getMessage("email.inactive.fallback_name", locale);
-        String safeName = HtmlUtils.htmlEscape(userName != null ? userName : fallback);
+        // Без экранирования — th:text в шаблоне (см. sendInactiveReminderEmail).
+        String displayName = userName != null ? userName : fallback;
         String trackClickLink = buildTrackLink("click", userId);
         String trackOpenLink = buildTrackLink("open", userId);
         java.util.HashMap<String, Object> vars = new java.util.HashMap<>();
-        vars.put("userName", safeName);
+        vars.put("userName", displayName);
         vars.put("trackClickLink", trackClickLink);
         vars.put("trackOpenLink", trackOpenLink);
         vars.put("unsubscribeUrl", buildUnsubscribeUrl(unsubscribeToken));
@@ -144,12 +147,14 @@ public class EmailServiceImpl implements EmailService {
         Locale locale = resolveLocale(localeTag);
         // Тот же fallback name, что и у inactive/onboarding — единый messages key.
         String fallback = messageService.getMessage("email.inactive.fallback_name", locale);
-        String safeName = HtmlUtils.htmlEscape(userName != null ? userName : fallback);
+        // Имя — без экранирования (th:text в приветствии, см. sendInactiveReminderEmail). Название
+        // задачи и списка — с экранированием: тело письма собирается через th:utext.
+        String displayName = userName != null ? userName : fallback;
         String safeTodoName = HtmlUtils.htmlEscape(todoName);
         String safeListName = HtmlUtils.htmlEscape(listName);
         String trackOpenLink = buildTrackLink("open", userId);
         java.util.HashMap<String, Object> vars = new java.util.HashMap<>();
-        vars.put("userName", safeName);
+        vars.put("userName", displayName);
         vars.put("todoName", safeTodoName);
         vars.put("listName", safeListName);
         // dueAt собран в TodoServiceImpl из даты/времени entity, не пользовательский ввод — экранирование не нужно.

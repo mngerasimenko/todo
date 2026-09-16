@@ -366,10 +366,9 @@ class EmailTemplateRenderingTest {
     @ValueSource(strings = {"onboarding-reminder", "inactive-reminder", "todo-reminder"})
     void reminderTemplates_EscapeUserNameInGreeting(String template) {
         // Проверяется шаблонный слой: приветствие во всех reminder-письмах идёт через th:text,
-        // поэтому сырое имя обязано экранироваться самим шаблоном. EmailServiceImpl вдобавок
-        // прогоняет имя через HtmlUtils.htmlEscape до подстановки — вместе это даёт двойное
-        // экранирование: в письмо уходит «Ann &amp;amp; Kate», получатель видит буквальное
-        // «Ann &amp; Kate» вместо «Ann & Kate». Это дефект сервиса, не шаблона.
+        // поэтому сырое имя обязано экранироваться самим шаблоном. EmailServiceImpl кладёт имя
+        // без экранирования, так что это экранирование единственное — стык сервиса и шаблона
+        // («Ann & Kate», «José» без двойного экранирования) проверяет EmailServiceImplTest.
         String html = render(template, RU, reminderVars(template, "<script>alert('xss')</script>", null));
 
         assertThat(html)
