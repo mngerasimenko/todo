@@ -18,11 +18,11 @@ import ru.mngerasimenko.todolist.util.LocaleNormalizer;
 @AllArgsConstructor
 public class RegisterPushTokenRequest {
 
-    @NotBlank(message = "FCM token is required")
+    @NotBlank(message = "{validation.push.fcm-token.required}")
     @JsonProperty("fcm_token")
     private String fcmToken;
 
-    @NotBlank(message = "Device ID is required")
+    @NotBlank(message = "{validation.push.device-id.required}")
     @JsonProperty("device_id")
     private String deviceId;
 

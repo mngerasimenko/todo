@@ -19,8 +19,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ChangeNameRequest {
 
-    @NotBlank(message = "Name is required")
-    @Size(min = 2, max = 128, message = "Name must be between 2 and 128 characters")
-    @Pattern(regexp = "^[^<>]*$", message = "Name contains invalid characters")
+    @NotBlank(message = "{validation.name.required}")
+    @Size(min = 2, max = 128, message = "{validation.name.size}")
+    @Pattern(regexp = "^[^<>]*$", message = "{validation.name.invalid-characters}")
     private String name;
 }

@@ -44,9 +44,9 @@ public final class LocaleValidation {
      */
     public static final String PATTERN_OPTIONAL = "^$|^[a-zA-Z]{2,3}(-[a-zA-Z0-9]+)*$";
 
-    public static final String PATTERN_MESSAGE = "Locale must be a valid BCP-47 tag";
+    public static final String PATTERN_MESSAGE = "{validation.locale.format}";
 
-    public static final String MAX_LENGTH_MESSAGE = "Locale must not exceed {max} characters";
+    public static final String MAX_LENGTH_MESSAGE = "{validation.locale.max-length}";
 
     private LocaleValidation() {
     }

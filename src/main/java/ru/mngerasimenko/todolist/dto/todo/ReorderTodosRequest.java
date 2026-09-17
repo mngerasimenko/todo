@@ -17,18 +17,18 @@ import java.util.List;
 @NoArgsConstructor
 public class ReorderTodosRequest {
 
-    @NotEmpty(message = "Items list must not be empty")
+    @NotEmpty(message = "{validation.reorder.items.required}")
     @Valid
     private List<Item> items;
 
     @Data
     @NoArgsConstructor
     public static class Item {
-        @NotNull(message = "id is required")
+        @NotNull(message = "{validation.reorder.id.required}")
         private Long id;
 
-        @PositiveOrZero(message = "position must be >= 0")
-        @NotNull(message = "position is required")
+        @PositiveOrZero(message = "{validation.reorder.position.non-negative}")
+        @NotNull(message = "{validation.reorder.position.required}")
         private Integer position;
     }
 }
