@@ -1071,6 +1071,61 @@ public class TodoServiceImplTest {
     }
 
     @Test
+    void markAsDone_PublicTodoByOtherMember_NotifiesListMembersAboutCompletion() {
+        // Все id различны: у notifyTodoCompleted и notifyNewTodo порядок (userId, listId)
+        // противоположный, и перепутанные аргументы должны ронять тест, а не проходить.
+        testTaskList.setId(10L);
+        User completor = new User();
+        completor.setId(2L);
+        completor.setName("completor");
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 2L))
+                .thenReturn(Optional.of(new TaskListUser(testTaskList, completor, TaskListRole.USER)));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(completor));
+        when(todoRepository.save(testTodo)).thenReturn(testTodo);
+
+        todoService.markAsDone(1L, 2L);
+
+        verify(pushNotificationService).notifyTodoCompleted(2L, 10L, "completor", "Test Todo");
+    }
+
+    @Test
+    void markAsDone_PrivateTodoByNonAuthor_ThrowsAndSendsNoPush() {
+        // Чужую приватную задачу отметить нельзя, и ни один пуш о ней не уходит.
+        testTodo.setIsPrivate(true);
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 2L))
+                .thenReturn(Optional.of(new TaskListUser(testTaskList, new User(), TaskListRole.ADMIN)));
+
+        assertThatThrownBy(() -> todoService.markAsDone(1L, 2L))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Приватные задачи доступны только их создателю");
+
+        verify(todoRepository, never()).save(any(Todo.class));
+        verifyNoInteractions(pushNotificationService);
+    }
+
+    @Test
+    void markAsDone_PrivateTodo_DoesNotNotifyListMembers() {
+        // Приватную задачу видит только автор: видимый пуш «<Имя> выполнил(а) <название>»
+        // раскрыл бы её остальным участникам списка.
+        testTodo.setIsPrivate(true);
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 1L))
+                .thenReturn(Optional.of(new TaskListUser(testTaskList, testUser, TaskListRole.USER)));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+        when(todoRepository.save(testTodo)).thenReturn(testTodo);
+
+        todoService.markAsDone(1L, 1L);
+
+        // Сама отметка при этом проходит — молчит только рассылка.
+        verify(todoRepository).save(testTodo);
+        assertThat(testTodo.isDone()).isTrue();
+        assertThat(testTodo.getCompletorUser()).isEqualTo(testUser);
+        verifyNoInteractions(pushNotificationService);
+    }
+
+    @Test
     void markAsUndone_WithValidId_MarksTodoAsUndone() {
         Todo todoToMark = new Todo();
         todoToMark.setId(1L);
@@ -1162,12 +1217,19 @@ public class TodoServiceImplTest {
 
         when(todoRepository.findById(1L)).thenReturn(Optional.of(todoToMark));
         when(taskListUserRepository.findByIdListIdAndIdUserId(1L, 99L)).thenReturn(Optional.empty());
+        // Пуш уходит @Async и откатом транзакции не отменяется: проверка прав обязана стоять
+        // раньше рассылки. Стаб нужен, чтобы рассылка, перенесённая выше проверки, реально ушла.
+        User outsider = new User();
+        outsider.setId(99L);
+        outsider.setName("outsider");
+        lenient().when(userRepository.findById(99L)).thenReturn(Optional.of(outsider));
 
         assertThatThrownBy(() -> todoService.markAsDone(1L, 99L))
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("не является участником");
 
         verify(todoRepository, never()).save(any(Todo.class));
+        verifyNoInteractions(pushNotificationService);
     }
 
     @Test

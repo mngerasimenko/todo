@@ -471,8 +471,9 @@ public class TodoServiceImpl implements TodoService {
         }
         Todo updatedTodo = todoRepository.save(todo);
 
-        // Push-уведомление всем участникам списка (кроме того, кто выполнил)
-        if (completor != null) {
+        // Push-уведомление всем участникам списка (кроме того, кто выполнил).
+        // Не для приватных задач: видимый пуш с названием раскрыл бы задачу остальным.
+        if (completor != null && !todo.getIsPrivate()) {
             pushNotificationService.notifyTodoCompleted(
                     completorUserId, todo.getTaskList().getId(), completor.getName(), todo.getName());
         }
