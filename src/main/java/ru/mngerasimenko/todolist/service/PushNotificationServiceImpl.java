@@ -337,14 +337,30 @@ public class PushNotificationServiceImpl implements PushNotificationService {
                 FirebaseMessaging.getInstance().send(message);
             } catch (FirebaseMessagingException e) {
                 if (e.getMessagingErrorCode() == MessagingErrorCode.UNREGISTERED) {
-                    // Токен невалиден — устройство удалило приложение или токен обновился
-                    pushTokenRepository.findByFcmToken(fcmToken).ifPresent(deadToken -> {
-                        pushTokenRepository.delete(deadToken);
-                        log.info("Удалён невалидный push-токен для устройства: {}", deadToken.getDeviceId());
-                    });
+                    // Токен невалиден — устройство удалило приложение или токен обновился.
+                    // Свой try, как в notifyTodoUpdated: fcm_token в схеме НЕ уникален (уникален
+                    // device_id), и дубль уронил бы findByFcmToken — а вместе с ним рассылку
+                    // всем, кто стоит в списке после мёртвого токена.
+                    try {
+                        pushTokenRepository.findByFcmToken(fcmToken).ifPresent(deadToken -> {
+                            pushTokenRepository.delete(deadToken);
+                            log.info("Удалён невалидный push-токен для устройства: {}", deadToken.getDeviceId());
+                        });
+                    } catch (RuntimeException ex) {
+                        // deviceId — чтобы по логу можно было найти дубль и убрать его руками.
+                        log.warn("Не удалось убрать невалидный токен устройства {}: {}",
+                                pt.getDeviceId(), ex.toString());
+                    }
                 } else {
                     log.warn("Ошибка отправки push: {}", e.getMessage());
                 }
+            } catch (RuntimeException e) {
+                // Неподнятый Firebase (IllegalStateException из getInstance) и сбои сборки
+                // сообщения. Без этого catch исключение обрывало цикл и уходило в обработчик
+                // необработанных исключений @Async, мимо нашего лога. Токен при этом не трогаем:
+                // удаляем только по UNREGISTERED.
+                log.warn("Не удалось отправить push {} на устройство {}: {}",
+                        pushType, pt.getDeviceId(), e.toString());
             }
         }
     }
