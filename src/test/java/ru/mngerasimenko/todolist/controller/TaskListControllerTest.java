@@ -7,10 +7,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+import ru.mngerasimenko.todolist.config.I18nConfig;
 import ru.mngerasimenko.todolist.config.TestSecurityConfig;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.dto.TodoResponse;
@@ -34,7 +36,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(TaskListController.class)
-@Import({ApiSecurityConfig.class, TestSecurityConfig.class})
+@Import({ApiSecurityConfig.class, TestSecurityConfig.class, I18nConfig.class})
 class TaskListControllerTest {
 
     @Autowired
@@ -667,7 +669,10 @@ class TaskListControllerTest {
                 .build();
 
         // Act & Assert
+        // Язык сообщения задан явно: с прод-конфигурацией (I18nConfig) запрос без
+        // Accept-Language получил бы русский текст — заголовок здесь и фиксирует английский.
         mockMvc.perform(post("/api/lists/1/invite")
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "en")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())

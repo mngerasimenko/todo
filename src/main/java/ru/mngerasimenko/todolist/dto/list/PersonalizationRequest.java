@@ -18,7 +18,7 @@ public class PersonalizationRequest {
 
     @Pattern(
             regexp = "^#[0-9a-fA-F]{6}$",
-            message = "Color must be in #RRGGBB format"
+            message = "{validation.color.format}"
     )
     private String color;
 }

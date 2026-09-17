@@ -29,9 +29,9 @@ public class TodoRequest {
     @JsonProperty("id")
     private Long id;
 
-    @NotBlank(message = "Todo name is required")
-    @Size(min = 1, max = 120, message = "Todo name must be between 1 and 120 characters")
-    @Pattern(regexp = "^[^<>]*$", message = "Name contains invalid characters")
+    @NotBlank(message = "{validation.todo-name.required}")
+    @Size(min = 1, max = 120, message = "{validation.todo-name.size}")
+    @Pattern(regexp = "^[^<>]*$", message = "{validation.todo-name.invalid-characters}")
     private String name;
 
     @JsonProperty("date_time")
@@ -41,11 +41,11 @@ public class TodoRequest {
     private Boolean done;
 
     @JsonProperty("user_id")
-    @NotNull(message = "User ID is required")
+    @NotNull(message = "{validation.todo.user-id.required}")
     private Long userId;
 
     @JsonProperty("list_id")
-    @NotNull(message = "List ID is required")
+    @NotNull(message = "{validation.todo.list-id.required}")
     private Long listId;
 
     @JsonProperty("is_private")
@@ -59,7 +59,7 @@ public class TodoRequest {
      * Используется только при создании; в PUT игнорируется.
      */
     @JsonProperty("client_request_id")
-    @Size(max = 36, message = "client_request_id must not exceed 36 characters")
+    @Size(max = 36, message = "{validation.todo.client-request-id.max-length}")
     private String clientRequestId;
 
     @JsonProperty("due_date")

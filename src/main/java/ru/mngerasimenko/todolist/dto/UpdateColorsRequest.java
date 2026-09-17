@@ -18,12 +18,12 @@ import lombok.NoArgsConstructor;
 public class UpdateColorsRequest {
 
     @JsonProperty("created_task_color")
-    @NotBlank(message = "Created task color is required")
-    @Pattern(regexp = "^#[0-9A-Fa-f]{6}$", message = "Color must be in HEX format (#RRGGBB)")
+    @NotBlank(message = "{validation.color.created-task.required}")
+    @Pattern(regexp = "^#[0-9A-Fa-f]{6}$", message = "{validation.color.format}")
     private String createdTaskColor;
 
     @JsonProperty("completed_task_color")
-    @NotBlank(message = "Completed task color is required")
-    @Pattern(regexp = "^#[0-9A-Fa-f]{6}$", message = "Color must be in HEX format (#RRGGBB)")
+    @NotBlank(message = "{validation.color.completed-task.required}")
+    @Pattern(regexp = "^#[0-9A-Fa-f]{6}$", message = "{validation.color.format}")
     private String completedTaskColor;
 }

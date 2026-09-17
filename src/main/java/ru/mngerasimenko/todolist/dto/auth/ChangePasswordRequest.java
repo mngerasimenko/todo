@@ -17,10 +17,10 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ChangePasswordRequest {
 
-    @NotBlank(message = "Current password is required")
+    @NotBlank(message = "{validation.current-password.required}")
     private String currentPassword;
 
-    @NotBlank(message = "Password is required")
-    @Size(min = 5, max = 128, message = "Password must be between 5 and 128 characters")
+    @NotBlank(message = "{validation.new-password.required}")
+    @Size(min = 5, max = 128, message = "{validation.password.size}")
     private String newPassword;
 }
