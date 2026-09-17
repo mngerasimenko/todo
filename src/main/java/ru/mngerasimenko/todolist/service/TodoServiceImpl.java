@@ -124,10 +124,16 @@ public class TodoServiceImpl implements TodoService {
         log.info("Создана задача: id={}, name='{}', userId={}, listId={}, private={}",
                 savedTodo.getId(), savedTodo.getName(), user.getId(), taskList.getId(), savedTodo.getIsPrivate());
 
-        // Push-уведомление участникам списка (не для приватных задач)
+        // Push-уведомление участникам списка (не для приватных задач). Строго после коммита —
+        // причина и устройство в runAfterCommit. Значения снимаем здесь: к моменту afterCommit
+        // транзакция уже закрыта, и ленивое чтение из entity ушло бы запросом вне транзакции.
         if (!savedTodo.getIsPrivate()) {
-            pushNotificationService.notifyNewTodo(
-                    taskList.getId(), user.getId(), user.getName(), savedTodo.getName());
+            final Long pushListId = taskList.getId();
+            final Long pushAuthorId = user.getId();
+            final String pushAuthorName = user.getName();
+            final String pushTodoName = savedTodo.getName();
+            runAfterCommit("new-todo-push", () -> pushNotificationService.notifyNewTodo(
+                    pushListId, pushAuthorId, pushAuthorName, pushTodoName));
         }
 
         // Пополнение глобального словаря подсказок (Server R-6). Делаем строго в afterCommit,
@@ -138,26 +144,7 @@ public class TodoServiceImpl implements TodoService {
         // userId нужен для distinct-учёта (k-анонимность): строка всплывает только при N разных
         // авторах, поэтому track считает именно РАЗНЫХ пользователей (gate-чейн /ideas 2026-06-23).
         final Long trackUserId = user.getId();
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    try {
-                        suggestionService.track(trackText, trackPrivate, trackUserId);
-                    } catch (RuntimeException ex) {
-                        log.warn("[suggestions] afterCommit track failed: {}", ex.toString());
-                    }
-                }
-            });
-        } else {
-            // Без активной TX (теоретически — если кто-то позовёт createTodo вне @Transactional):
-            // tracking сразу же, в обычном потоке.
-            try {
-                suggestionService.track(trackText, trackPrivate, trackUserId);
-            } catch (RuntimeException ex) {
-                log.warn("[suggestions] inline track failed: {}", ex.toString());
-            }
-        }
+        runAfterCommit("suggestions", () -> suggestionService.track(trackText, trackPrivate, trackUserId));
 
         return todoMapper.toDto(savedTodo);
     }
@@ -473,9 +460,15 @@ public class TodoServiceImpl implements TodoService {
 
         // Push-уведомление всем участникам списка (кроме того, кто выполнил).
         // Не для приватных задач: видимый пуш с названием раскрыл бы задачу остальным.
+        // Строго после коммита: одновременный тап по галочке двумя участниками штатен,
+        // проигравший на @Version получает 409 и откат — а пуш «Вася выполнил «Молоко»»
+        // к тому моменту уже улетел бы. Подробнее — в runAfterCommit.
         if (completor != null && !todo.getIsPrivate()) {
-            pushNotificationService.notifyTodoCompleted(
-                    completorUserId, todo.getTaskList().getId(), completor.getName(), todo.getName());
+            final Long pushListId = todo.getTaskList().getId();
+            final String pushCompletorName = completor.getName();
+            final String pushTodoName = todo.getName();
+            runAfterCommit("done-push", () -> pushNotificationService.notifyTodoCompleted(
+                    completorUserId, pushListId, pushCompletorName, pushTodoName));
         }
 
         return todoMapper.toDto(updatedTodo);
@@ -492,6 +485,67 @@ public class TodoServiceImpl implements TodoService {
         todo.setCompletorUser(null);
         Todo updatedTodo = todoRepository.save(todo);
         return todoMapper.toDto(updatedTodo);
+    }
+
+    /**
+     * Откладывает побочный эффект до фиксации транзакции.
+     *
+     * <p>Причина: отправка помечена {@code @Async} и уходит в пул НЕМЕДЛЕННО, то есть до
+     * коммита, а отозвать отправленный пуш нельзя. Достижимых драйверов отката как минимум три.
+     * Первый — {@code @Version} у управляемой entity: UPDATE и проверка версии выполняются
+     * на коммитном flush, то есть ПОСЛЕ отправки (ровно случай {@code markAsDone}: одновременный
+     * тап по галочке двумя участниками штатен, проигравший получает 409 и откат). Второй —
+     * обычный сбой самого коммита (таймаут, дедлок, обрыв соединения), он возможен везде.
+     * Третий — любое исключение между регистрацией и коммитом, включая маппинг ответа ниже
+     * по методу и откат транзакции ВЫЗЫВАЮЩЕГО, если метод позовут из другого
+     * {@code @Transactional}. Список открытый: «мой сценарий сюда не попал» — не повод
+     * отправлять инлайново.
+     * А вот уникальный индекс {@code uq_todo_user_client_request_id} драйвером НЕ является:
+     * у {@code Todo} стратегия {@code IDENTITY}, поэтому {@code save()} выполняет INSERT сразу
+     * и 409 прилетает выше по методу, ещё до отправки.
+     *
+     * <p>Второй, более мягкий промах опаснее тем, что тише: получатель успевает перечитать
+     * ДОкоммитный снимок, то есть остаётся с устаревшими данными, ради обновления которых пуш
+     * и слался, — а второго пуша не будет.
+     *
+     * <p>{@code try/catch} обязателен: Spring зовёт {@code afterCommit} УЖЕ после коммита и
+     * пробрасывает исключение вызывающему, оставляя транзакцию зафиксированной. Без перехвата
+     * отказ постановки в пул (TaskRejectedException при shutdown) стал бы пятисоткой на
+     * успешно применённой правке, и клиент повторил бы запрос. Второе назначение перехвата —
+     * изоляция: {@code TransactionSynchronizationUtils.invokeAfterCommit} своего try/catch не
+     * имеет, и упавший колбэк отменил бы все зарегистрированные после него. Изоляция ровно
+     * до {@code RuntimeException}: {@code Error} проходит насквозь и колбэки после себя всё
+     * же отменит — сознательно, ловить {@code Throwable} здесь смысла нет.
+     *
+     * @param tag метка для логов, она же различает источники сбоя
+     */
+    private void runAfterCommit(String tag, Runnable action) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    try {
+                        action.run();
+                    } catch (RuntimeException ex) {
+                        // Со стектрейсом, а не ex.toString(): здесь ловится обёртка
+                        // (TaskRejectedException и подобные), и весь смысл — в её причине.
+                        log.warn("[{}] afterCommit failed", tag, ex);
+                    }
+                }
+            });
+        } else {
+            // Без активной TX (теоретически — если кто-то позовёт метод вне @Transactional):
+            // эффект применяем сразу, в этом же потоке. Это единственная ветка, возвращающая
+            // ДОкоммитную семантику отправки, поэтому она WARN, а не DEBUG: в production-профиле
+            // пакет прибит к INFO (logback-spring.xml), и DEBUG-трипвайр был бы виден только
+            // на машине разработчика — то есть ровно там, где он не нужен.
+            log.warn("[{}] активной транзакции нет, выполняем сразу — отправка идёт ДО коммита", tag);
+            try {
+                action.run();
+            } catch (RuntimeException ex) {
+                log.warn("[{}] inline run failed", tag, ex);
+            }
+        }
     }
 
     /**
