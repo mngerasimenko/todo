@@ -1,11 +1,24 @@
 [Unit]
-Description=Telegram Server Monitor Bot
+Description=VK Server Monitor Bot
 After=network-online.target docker.service
 Wants=network-online.target
+# Потолок рестартов — в [Unit], иначе systemd его не читает. Без него бот,
+# которому нечем отправлять (нет vk-send.sh или конфига), крутился бы раз в
+# 10 секунд вечно и выглядел бы в systemctl живым. Пять неудач за пять минут —
+# и юнит переходит в failed, то есть отказ видно.
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
+# Юнит на проде запускает именно этот файл (сверено 21.09.2026 по systemctl cat).
+# В репозитории до сих пор стоял telegram-bot.sh — Telegram с российских хостов
+# заблокирован, и пересборка хоста по git подняла бы мёртвый бот, молчащий ровно
+# так же, как исправный.
+#
+# Каталог важен: рядом с vk-bot.sh должны лежать monitor.conf и vk-send.sh —
+# бот сорсит оба и без них выходит с 1.
 Type=simple
-ExecStart=/bin/bash /root/monitoring/telegram-bot.sh
+ExecStart=/bin/bash /home/deploy/todo/monitoring/vk-bot.sh
 Restart=always
 RestartSec=10
 

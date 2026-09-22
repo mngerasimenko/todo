@@ -1,20 +1,58 @@
 #!/bin/bash
-# Скрипт мониторинга сервера — отправляет алерты в Telegram
-# Устанавливается через cron: */5 * * * * /root/monitoring/server-monitor.sh
+# Скрипт мониторинга сервера — отправляет алерты в VK (Telegram с российских
+# хостов заблокирован и не используется).
+#
+# Строка cron на проде (с редиректом обоих потоков в файл — MTA на машине нет,
+# и без редиректа причина несостоявшейся отправки уходила бы в никуда):
+#   */5 * * * * /home/deploy/todo/monitoring/server-monitor.sh >> /var/log/server-monitor.log 2>&1
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/monitor.conf"
-ALERT_STATE_FILE="/tmp/server-monitor-alert-state"
+# Отправка — общая с stats-report.sh и vk-bot.sh (токен мимо argv, ответ VK
+# проверяется). Без неё алерты уходить не могут: выходим громко, а не молча —
+# тихий отказ мониторинга и есть та беда, от которой он поставлен.
+if [ ! -r "${SCRIPT_DIR}/vk-send.sh" ]; then
+    echo "server-monitor: нет ${SCRIPT_DIR}/vk-send.sh — отправлять алерты нечем" >&2
+    exit 1
+fi
+# shellcheck source=monitoring/vk-send.sh
+source "${SCRIPT_DIR}/vk-send.sh"
+# Читаемость файла — ещё не пригодность: пустой или недописанный файл
+# сорсится успешно, а отправка падает с «command not found» на первом же
+# алерте. Требуем саму функцию.
+if ! declare -F vk_send_message >/dev/null; then
+    echo "server-monitor: ${SCRIPT_DIR}/vk-send.sh не дал vk_send_message — отправлять нечем" >&2
+    exit 1
+fi
+# Состояние кулдауна переопределяется конфигом (им пользуются тесты). По
+# умолчанию — каталог, куда пишет только root: в общем /tmp любой локальный
+# пользователь с shell'ом мог заранее положить отметку с датой из будущего и
+# навсегда заглушить алерт, а на симлинке — заставить root обрезать чужой файл.
+# После этого изменения отметки ещё и несут доставку (недоставленный алерт их
+# снимает), так что чужая запись сюда тем более не годится.
+ALERT_STATE_FILE="${ALERT_STATE_FILE:-/var/lib/server-monitor/alert-state}"
+ALERT_STATE_DIR="$(dirname "$ALERT_STATE_FILE")"
+if [ ! -d "$ALERT_STATE_DIR" ]; then
+    # Не создался — говорим и работаем дальше без кулдауна: повторяющийся алерт
+    # шумен, но виден, а тихо пропущенный — нет.
+    mkdir -p "$ALERT_STATE_DIR" 2>/dev/null \
+        && chmod 700 "$ALERT_STATE_DIR" 2>/dev/null \
+        || echo "server-monitor: нет каталога состояния ${ALERT_STATE_DIR} — кулдаун алертов не работает" >&2
+fi
+
+# Ключи алертов, попавшие в это сообщение: если отправка не дойдёт, их отметки
+# кулдауна снимаются — иначе недоставленный алерт молча пропадал бы на полчаса.
+ALERTED_KEYS=()
 
 send_alert() {
-    local message="$1"
-    local random_id=$((RANDOM * RANDOM))
-    curl -s --max-time 15 -X POST "https://api.vk.com/method/messages.send" \
-        -d "access_token=${VK_TOKEN}" \
-        -d "peer_id=${VK_PEER_ID}" \
-        -d "random_id=${random_id}" \
-        --data-urlencode "message=${message}" \
-        -d "v=${VK_API_VERSION}" > /dev/null 2>&1
+    local message="$1" k
+    if vk_send_message "$message"; then
+        return 0
+    fi
+    for k in "${ALERTED_KEYS[@]}"; do
+        rm -f "${ALERT_STATE_FILE}_${k}"
+    done
+    return 1
 }
 
 # Не спамить одинаковыми алертами.
@@ -35,6 +73,7 @@ should_alert() {
         fi
     fi
     echo "$now" > "$state_file"
+    ALERTED_KEYS+=("$alert_key")
     return 0
 }
 

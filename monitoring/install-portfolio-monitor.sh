@@ -38,7 +38,13 @@
 # и не возвращает её — иначе выключенную руками опрашивалку вернул бы первый же
 # деплой стейджа. Продление сертификатов выключатель не трогает: старая строка
 # reload'а уже снята, и без certbot-renew.sh nginx перестал бы перечитывать
-# продлённые сертификаты.
+# продлённые сертификаты. Локальный прогон vpscan (роль peer) он не трогает по той
+# же причине: выключают здесь наблюдение, а не чужую ежедневную задачу.
+#
+# Роль peer ведёт в crontab три строки: опрашивалку, продление сертификатов и
+# локальный прогон сборщика тарифов vpscan. Последняя запускает чужой контейнер,
+# но живёт в root-crontab прода, куда деплой vpscan не ходит, — без установщика
+# её нечем восстановить после пересборки хоста.
 
 set -uo pipefail
 
@@ -204,6 +210,39 @@ if [ ! -r "$VK_CONF" ] || ! grep -q '^VK_TOKEN=' "$VK_CONF" 2>/dev/null; then
   echo "          но сообщить владельцу сможет только соседняя сторона." >&2
 fi
 
+# Права на файлы с токеном сужаем здесь, а не только руками на хосте: руками
+# поставленные 600 не переживут пересборку машины, и общий токен канала алертов
+# снова прочитают все, у кого есть путь в каталог (на проде это deploy и vpscan,
+# сверено 21.09.2026). У владельца файла chmod 600 ничего не отнимает — доступ
+# теряют только группа и остальные, ради чего всё и делается. Если на каком-то
+# хосте конфиг читает не владелец и не root, строка в выводе — то место, куда
+# смотреть. Симлинк не трогаем: цель может лежать где угодно, и сузить права
+# чужому файлу через подставленную ссылку мы не хотим.
+tighten_conf() {
+  local f="$1" mode
+  [ -e "$f" ] || return 0
+  if [ -L "$f" ]; then
+    echo "ВНИМАНИЕ: ${f} — симлинк, права не трогаю; проверь руками, там токен VK" >&2
+    return 0
+  fi
+  mode="$(stat -c '%a' "$f" 2>/dev/null)"
+  case "$mode" in
+    600|400) return 0 ;;
+    '') echo "ВНИМАНИЕ: не прочитал права ${f} — проверь руками, там токен VK" >&2; return 0 ;;
+  esac
+  if chmod 600 "$f" 2>/dev/null; then
+    echo "--- права сужены до 600: ${f} ---"
+  else
+    echo "ВНИМАНИЕ: не сузил права ${f} (${mode}) — секрет читают лишние" >&2
+  fi
+}
+
+# Две копии: та, на которую смотрит опрашивалка (VK_CONF_FILE), и та, что лежит
+# рядом с самими скриптами, — на проде это разные файлы, и вторую не ведёт никто
+# и ничто, хотя из неё читают server-monitor.sh, stats-report.sh и бот.
+[ -r "$VK_CONF" ] && tighten_conf "$VK_CONF"
+[ "${SRC}/monitor.conf" = "$VK_CONF" ] || tighten_conf "${SRC}/monitor.conf"
+
 TAG="# portfolio-monitor:managed"
 # timeout 280 — потолок меньше окна cron. Зависший прогон иначе держал бы flock
 # и отбивал все следующие запуски навсегда: опрашивалка выключилась бы молча.
@@ -220,6 +259,16 @@ CRON_CERT=""
 # должно держаться на совпадении значений по умолчанию.
 [ "$ROLE" = "peer" ] && CRON_CERT="17 * * * * RENEW_OK_FILE=${STATE_DIR}/certbot-renew.ok ${RUN_DIR}/certbot-renew.sh >> /var/log/certbot-renew.log 2>&1 ${TAG}"
 
+# Локальный прогон сборщика тарифов vpscan. Задача чужая (контейнер и код —
+# у vpscan), но строка живёт в root-crontab прода, куда деплой vpscan не ходит:
+# он поднимает контейнер из-под своей учётки и crontab'ом не управляет вовсе.
+# Значит, кроме этого установщика, восстановить её после пересборки хоста нечем,
+# а молча пропавший ежедневный прогон — ровно тот тихий отказ, от которого тут
+# всё остальное. Контейнера на машине может не быть: тогда строка будет писать
+# ошибку docker в свой лог — это видно, в отличие от её отсутствия.
+CRON_VPSCAN=""
+[ "$ROLE" = "peer" ] && CRON_VPSCAN="0 12 * * * docker exec vpscan-app tsx /app/src/scraper/run-local.ts >> /var/log/vpscan-scrape-local.log 2>&1 ${TAG}"
+
 # Строка cron зовёт скрипт напрямую: без бита исполнения cron падает с «Permission
 # denied», а лог этого никто не читает — так внутренний монитор прода однажды молча
 # простоял ~26 часов. Проверяем только те скрипты, чьи строки сейчас ставятся: иначе
@@ -228,9 +277,11 @@ CRON_CERT=""
 [ -z "$CRON_CERT" ] || [ -x "${RUN_DIR}/certbot-renew.sh" ]     || die "${RUN_DIR}/certbot-renew.sh не исполняемый"
 
 # Прежние строки, которые заменяет эта установка, — как они стоят на хостах
-# (сверено 15.09.2026); пробелы и табы при сравнении схлопываются.
+# (сверено 15.09.2026, строка vpscan — 21.09.2026); пробелы и табы при сравнении
+# схлопываются.
 LEGACY_MON='*/5 * * * * /root/monitoring/external-monitor.sh'
 LEGACY_CERT='0 */12 * * * docker exec certbot certbot renew --quiet && docker exec nginx-proxy nginx -s reload'
+LEGACY_VPSCAN='0 12 * * * docker exec vpscan-app tsx /app/src/scraper/run-local.ts >> /var/log/vpscan-scrape-local.log 2>&1'
 
 # crontab -l возвращает 1 и когда crontab пуст, и когда прочитать его не удалось
 # (права, обновление пакета cron, SELinux). Если не различить, второй случай
@@ -258,12 +309,17 @@ fi
 # закомментированные строки опрашивалки (их не трогаем, но говорим о них).
 filter_crontab() {
   printf '%s\n' "$EXISTING" | awk -v mode="$1" -v tag=" ${TAG}" \
-      -v mon="${CRON_MON:+$LEGACY_MON}" -v cert="${CRON_CERT:+$LEGACY_CERT}" '
+      -v mon="${CRON_MON:+$LEGACY_MON}" -v cert="${CRON_CERT:+$LEGACY_CERT}" \
+      -v vps="${CRON_VPSCAN:+$LEGACY_VPSCAN}" '
     { line = $0; sub(/[ \t\r]+$/, "", line)
-      norm = line; gsub(/[ \t]+/, " ", norm)
+      # Ведущие пробелы снимаем тоже: cron такую строку принимает, а сравнение
+      # с ожидаемым текстом на ней не сходилось — и вместо замены рядом вставала
+      # вторая строка, то есть задвоенная задача.
+      norm = line; sub(/^[ \t]+/, "", norm); gsub(/[ \t]+/, " ", norm)
       tagged = length(line) >= length(tag) && substr(line, length(line) - length(tag) + 1) == tag
       commented = line ~ /^[ \t]*#/
-      managed = (tagged && !commented) || (mon != "" && norm == mon) || (cert != "" && norm == cert) }
+      managed = (tagged && !commented) || (mon != "" && norm == mon) || (cert != "" && norm == cert) \
+                || (vps != "" && norm == vps) }
     (mode == "keep" && !managed) || (mode == "drop" && managed) || (mode == "commented" && tagged && commented) { print }'
 }
 
@@ -272,6 +328,7 @@ DESIRED="$(
   [ -n "$KEPT" ] && printf '%s\n' "$KEPT"
   [ -n "$CRON_MON" ] && printf '%s\n' "$CRON_MON"
   [ -n "$CRON_CERT" ] && printf '%s\n' "$CRON_CERT"
+  [ -n "$CRON_VPSCAN" ] && printf '%s\n' "$CRON_VPSCAN"
 )"
 
 # Строку выключают флагом, а не комментарием: закомментированную установщик не
@@ -282,9 +339,10 @@ if [ -n "$COMMENTED" ]; then
 ' "$COMMENTED" | while IFS= read -r line; do
     case "$line" in
       *certbot-renew.sh*) what="строка продления сертификатов" ;;
+      *run-local.ts*) what="строка локального прогона vpscan" ;;
       *) what="строка опрашивалки" ;;
     esac
-    if [ -n "$CRON_MON" ] || [ -n "$CRON_CERT" ]; then
+    if [ -n "$CRON_MON" ] || [ -n "$CRON_CERT" ] || [ -n "$CRON_VPSCAN" ]; then
       echo "ВНИМАНИЕ: в crontab закомментирована ${what} — установщик её не трогает и ставит свою рядом. Выключать надо файлом ${DISABLED_FLAG}: ${line}" >&2
     else
       echo "ВНИМАНИЕ: в crontab закомментирована ${what} — установщик её не трогает. Выключать надо файлом ${DISABLED_FLAG}: ${line}" >&2
@@ -312,6 +370,11 @@ if [ -n "$CRON_CERT" ]; then
     echo "ВНИМАНИЕ: в crontab осталась строка reload'а certbot, не совпавшая с ожидаемой текстом — проверь руками" >&2 ;;
   esac
 fi
+if [ -n "$CRON_VPSCAN" ]; then
+  case "$KEPT" in *"run-local.ts"*)
+    echo "ВНИМАНИЕ: в crontab осталась строка локального прогона vpscan, не совпавшая с ожидаемой текстом — проверь руками, иначе прогон задвоится" >&2 ;;
+  esac
+fi
 
 # Таблица уже в нужном виде — не трогаем её и не плодим бэкапов: самый ранний бэкап
 # тогда и есть таблица до первой установки.
@@ -328,11 +391,13 @@ else
   # же ставится обратно.
   CRON_MON_NORM="$(printf '%s' "$CRON_MON" | tr -s '[:space:]' ' ')"
   CRON_CERT_NORM="$(printf '%s' "$CRON_CERT" | tr -s '[:space:]' ' ')"
+  CRON_VPSCAN_NORM="$(printf '%s' "$CRON_VPSCAN" | tr -s '[:space:]' ' ')"
   filter_crontab drop | while IFS= read -r line; do
     [ -n "$line" ] || continue
     line_norm="$(printf '%s' "$line" | tr -s '[:space:]' ' ')"
     [ -n "$CRON_MON_NORM" ] && [ "$line_norm" = "$CRON_MON_NORM" ] && continue
     [ -n "$CRON_CERT_NORM" ] && [ "$line_norm" = "$CRON_CERT_NORM" ] && continue
+    [ -n "$CRON_VPSCAN_NORM" ] && [ "$line_norm" = "$CRON_VPSCAN_NORM" ] && continue
     echo "  снимаю строку crontab: ${line}"
   done
   printf '%s\n' "$DESIRED" | crontab - || die "crontab отверг новую таблицу, прежняя осталась на месте"

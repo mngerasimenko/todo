@@ -1,26 +1,35 @@
 #!/bin/bash
-# Автоматическая отправка статистики использования в VK
-# Cron: 0 4 * * * /root/monitoring/stats-report.sh  (daily at 04:00)
+# Автоматическая отправка статистики использования в VK.
+#
+# Строка cron на проде (редирект обоих потоков в файл обязателен: MTA на машине
+# нет, и причина несостоявшейся отправки уходила бы в никуда):
+#   0 4 * * * /home/deploy/todo/monitoring/stats-report.sh >> /var/log/stats-report.log 2>&1
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/monitor.conf"
-
-send_vk_message() {
-    local text="$1"
-    local random_id=$((RANDOM * RANDOM))
-    curl -s --max-time 15 -X POST "https://api.vk.com/method/messages.send" \
-        -d "access_token=${VK_TOKEN}" \
-        -d "peer_id=${VK_PEER_ID}" \
-        -d "random_id=${random_id}" \
-        --data-urlencode "message=${text}" \
-        -d "v=${VK_API_VERSION}" > /dev/null 2>&1
-}
+# Отправка — общая с server-monitor.sh и vk-bot.sh: токен мимо argv, ответ VK
+# проверяется. Без неё сводку отправлять нечем, и молчать об этом нельзя.
+if [ ! -r "${SCRIPT_DIR}/vk-send.sh" ]; then
+    echo "stats-report: нет ${SCRIPT_DIR}/vk-send.sh — отправлять сводку нечем" >&2
+    exit 1
+fi
+# shellcheck source=monitoring/vk-send.sh
+source "${SCRIPT_DIR}/vk-send.sh"
+# Читаемость файла — ещё не пригодность: пустой или недописанный файл
+# сорсится успешно, а отправка падает с «command not found» на первом же
+# алерте. Требуем саму функцию.
+if ! declare -F vk_send_message >/dev/null; then
+    echo "stats-report: ${SCRIPT_DIR}/vk-send.sh не дал vk_send_message — отправлять нечем" >&2
+    exit 1
+fi
 
 # Получаем статистику из Actuator
 stats_json=$(docker exec todo-app wget -qO- "http://localhost:8091/actuator/usagestats/24" 2>/dev/null)
 
 if [ -z "$stats_json" ]; then
-    exit 0
+    # Молча выйти нельзя: не пришедшая сводка неотличима от исправной тишины.
+    echo "stats-report: actuator не ответил — сводка не построена и не отправлена" >&2
+    exit 1
 fi
 
 msg=$(echo "$stats_json" | python3 -c "
@@ -56,6 +65,10 @@ print(f'''📈 Статистика (за {period}ч)
 🔗 Приглашения: {a.get('active_invite_tokens', '?')} активных''')
 " 2>/dev/null)
 
-if [ -n "$msg" ]; then
-    send_vk_message "$msg"
+if [ -z "$msg" ]; then
+    # Actuator ответил, а текст не собрался — сломался разбор. Тоже отказ.
+    echo "stats-report: сводка не собралась из ответа actuator — не отправлено" >&2
+    exit 1
 fi
+
+vk_send_message "$msg"

@@ -2,8 +2,25 @@
 # VK-бот для управления сервером
 # Замена telegram-bot.sh — Telegram заблокирован с серверов в РФ
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# BASH_SOURCE, а не $0: тесты подгружают файл через source, и с $0 путь указывал
+# бы на каталог вызывающего, а конфиг искался бы не там.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/monitor.conf"
+# Отправка — общая с server-monitor.sh и stats-report.sh: токен мимо argv, ответ
+# VK проверяется. Без неё бот отвечать не может, и падение видно в journal.
+if [ ! -r "${SCRIPT_DIR}/vk-send.sh" ]; then
+    echo "vk-bot: нет ${SCRIPT_DIR}/vk-send.sh — отвечать нечем" >&2
+    exit 1
+fi
+# shellcheck source=monitoring/vk-send.sh
+source "${SCRIPT_DIR}/vk-send.sh"
+# Читаемость файла — ещё не пригодность: пустой или недописанный файл
+# сорсится успешно, а отправка падает с «command not found» на первом же
+# алерте. Требуем саму функцию.
+if ! declare -F vk_send_message >/dev/null; then
+    echo "vk-bot: ${SCRIPT_DIR}/vk-send.sh не дал vk_send_message — отправлять нечем" >&2
+    exit 1
+fi
 
 reload_config() {
     source "${SCRIPT_DIR}/monitor.conf"
@@ -12,13 +29,38 @@ reload_config() {
 send_message() {
     local peer_id="$1"
     local text="$2"
-    local random_id=$((RANDOM * RANDOM))
-    curl -s --max-time 15 -X POST "https://api.vk.com/method/messages.send" \
-        -d "access_token=${VK_TOKEN}" \
-        -d "peer_id=${peer_id}" \
-        -d "random_id=${random_id}" \
-        --data-urlencode "message=${text}" \
-        -d "v=${VK_API_VERSION}" > /dev/null 2>&1
+    vk_send_message "$text" "$peer_id"
+}
+
+# Long Poll сервер группы: кладёт адрес, сессионный ключ и метку в LP_SERVER,
+# LP_KEY и LP_TS. Пусто в LP_SERVER или LP_KEY — выдачи не было.
+fetch_longpoll_server() {
+    local resp rc
+    resp="$(vk_api_post groups.getLongPollServer "group_id=${VK_GROUP_ID}")"
+    rc=$?
+    LP_SERVER=""; LP_KEY=""; LP_TS=""
+    # Сеть легла и VK отверг запрос — разные причины: первая проходит сама,
+    # вторая требует человека. Одинаковая строка в журнале про каждые 10 секунд
+    # превращает и то, и другое в шум.
+    if [ "$rc" -ne 0 ]; then
+        vk_log "curl упал (rc=${rc}) — Long Poll сервер не получен"
+        return 1
+    fi
+    if ! vk_response_ok "$resp"; then
+        vk_log "VK отверг выдачу Long Poll сервера: $(printf '%s' "$resp" | head -c 200)"
+        return 1
+    fi
+    LP_SERVER=$(echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',{}).get('server',''))" 2>/dev/null)
+    LP_KEY=$(echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',{}).get('key',''))" 2>/dev/null)
+    LP_TS=$(echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',{}).get('ts',''))" 2>/dev/null)
+    [ -n "$LP_SERVER" ] && [ -n "$LP_KEY" ]
+}
+
+# Один опрос Long Poll. Сессионный ключ уходит в URL, а URL — конфигом curl:
+# в argv он виден в `ps` всякому локальному пользователю, как и токен.
+poll_longpoll() {
+    local server="$1" key="$2" ts="$3"
+    vk_get_url "${server}?act=a_check&key=${key}&ts=${ts}&wait=25" 35
 }
 
 cmd_status() {
@@ -116,8 +158,12 @@ cmd_restart() {
     fi
 
     send_message "$peer_id" "🔄 Перезапуск ${container}..."
-    local result=$(docker restart "$container" 2>&1)
-    local exit_code=$?
+    # Объявление отдельно от присваивания: у `local result=$(…)` код возврата —
+    # это код самой команды `local`, то есть всегда 0, и ветка ошибки ниже была
+    # недостижима. Контейнер не поднялся, а владелец видел «✅ перезапущен».
+    local result exit_code
+    result=$(docker restart "$container" 2>&1)
+    exit_code=$?
 
     if [ "$exit_code" -eq 0 ]; then
         send_message "$peer_id" "✅ ${container} перезапущен"
@@ -165,7 +211,7 @@ Disk: ${DISK_WARN:-85}%
 Cooldown: $((${ALERT_COOLDOWN:-1800} / 60)) мин
 Контейнеры: ${MONITOR_CONTAINERS:-todo-app postgres-db nginx-proxy todo-web}
 
-Файл: /root/monitoring/monitor.conf"
+Файл: ${SCRIPT_DIR}/monitor.conf"
 }
 
 cmd_jvm() {
@@ -306,26 +352,32 @@ process_message() {
     esac
 }
 
+# Тело отделено от определений: набор тестов подгружает файл через `source` и
+# проверяет отправку, не поднимая вечный цикл опроса. Признак — сам факт
+# сорсинга, а не переменная окружения: переменную можно унаследовать (профиль
+# root, Environment= в юните), и тогда бот под Restart=always выходил бы с нулём
+# каждые 10 секунд, выглядя в systemctl живым.
+if [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    return 0
+fi
+
 # Main loop — VK Bots Long Poll
 echo "VK-бот запущен. Слушаю команды..."
 
 while true; do
-    lp_response=$(curl -s --max-time 15 "https://api.vk.com/method/groups.getLongPollServer?access_token=${VK_TOKEN}&group_id=${VK_GROUP_ID}&v=${VK_API_VERSION}" 2>/dev/null)
-
-    lp_server=$(echo "$lp_response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',{}).get('server',''))" 2>/dev/null)
-    lp_key=$(echo "$lp_response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',{}).get('key',''))" 2>/dev/null)
-    lp_ts=$(echo "$lp_response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',{}).get('ts',''))" 2>/dev/null)
-
-    if [ -z "$lp_server" ] || [ -z "$lp_key" ]; then
+    if ! fetch_longpoll_server; then
         echo "Ошибка получения Long Poll сервера, повтор через 10 сек..."
         sleep 10
         continue
     fi
+    lp_server="$LP_SERVER"
+    lp_key="$LP_KEY"
+    lp_ts="$LP_TS"
 
     echo "Long Poll подключён: ts=${lp_ts}"
 
     while true; do
-        response=$(curl -s --max-time 35 "${lp_server}?act=a_check&key=${lp_key}&ts=${lp_ts}&wait=25" 2>/dev/null)
+        response=$(poll_longpoll "$lp_server" "$lp_key" "$lp_ts")
 
         if [ -z "$response" ]; then
             sleep 2

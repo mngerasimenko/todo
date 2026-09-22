@@ -1,6 +1,9 @@
-# Канал алертов — VK. Одна копия токена на хост: отсюда его берут и
-# server-monitor.sh, и portfolio-monitor.sh (через VK_CONF_FILE), и соседняя
-# проба replyAI. При ротации менять одно место.
+# Канал алертов — VK. Отсюда токен берут server-monitor.sh, stats-report.sh и
+# vk-bot.sh (сорсят этот файл рядом с собой), portfolio-monitor.sh и соседняя
+# проба replyAI (через VK_CONF_FILE). Копий этого файла на проде две — рядом со
+# скриптами в /home/deploy/todo/monitoring и в /root/monitoring; полный список
+# мест, где лежит токен, и порядок ротации — в README, раздел «Обращение с
+# секретами». Файл держим в правах 600: в нём секрет.
 VK_TOKEN="your-vk-group-token-here"
 VK_PEER_ID="your-vk-peer-id-here"
 VK_GROUP_ID="your-vk-group-id-here"
@@ -18,6 +21,15 @@ JVM_HEAP_WARN=85   # % JVM Heap usage (via Actuator)
 
 # Alert cooldown (seconds) - don't repeat same alert within this period
 ALERT_COOLDOWN=1800
+
+# Где server-monitor.sh держит отметки кулдауна. По умолчанию
+# /var/lib/server-monitor/alert-state — каталог, куда пишет только root:
+# в общем /tmp чужой пользователь мог бы заглушить алерт заранее положенной
+# отметкой. Переопределять стоит только в тестах.
+#ALERT_STATE_FILE=/var/lib/server-monitor/alert-state
+
+# Таймаут запроса к VK в секундах (vk-send.sh), по умолчанию 15.
+#VK_TIMEOUT=15
 
 # Containers to monitor
 MONITOR_CONTAINERS="todo-app postgres-db nginx-proxy todo-web"
