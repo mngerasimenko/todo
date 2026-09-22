@@ -811,6 +811,7 @@ t_vk_timeout_garbage_falls_back() {
   setup "VK_TIMEOUT: нечисловое значение заменяется умолчанием"
   conf_set 'VK_TIMEOUT=abc'
   run_bot_func send_message "$PEER" "проверка"
+  assert_curl_was_called || { teardown; return; }
   grep -q -- "-m 15" "$TMP/curl.argv" 2>/dev/null \
     || { fail "нечисловой VK_TIMEOUT ушёл в curl как есть — <<$(head -1 "$TMP/curl.argv")>>"; teardown; return; }
   pass
@@ -821,6 +822,7 @@ t_vk_timeout_is_capped() {
   setup "VK_TIMEOUT: слишком большое значение обрезается потолком"
   conf_set 'VK_TIMEOUT=300'
   run_bot_func send_message "$PEER" "проверка"
+  assert_curl_was_called || { teardown; return; }
   grep -q -- "-m 20" "$TMP/curl.argv" 2>/dev/null \
     || { fail "VK_TIMEOUT=300 ушёл в curl как есть — окно юнита тогда не сходится: <<$(head -1 "$TMP/curl.argv")>>"; teardown; return; }
   pass
@@ -841,7 +843,10 @@ t_zero_pause_is_lifted_to_one_second() {
   # Считать обращения бессмысленно: под Windows каждый вызов заглушки стоит
   # полторы секунды, и разницу между нулём и секундой так не увидеть. Проверяем
   # то, что действительно решает, — что значение поправлено и сказано вслух.
-  assert_err_contains "меньше 1 с — беру 1" || { teardown; return; }
+  # Две границы — две проверки: общая подстрока оставляла набор зелёным при
+  # откате любой одной из них, то есть закрепляла починку наполовину.
+  assert_err_contains "VK_LP_RETRY_SLEEP=0 меньше 1 с" || { teardown; return; }
+  assert_err_contains "VK_LP_POLL_SLEEP=0 меньше 1 с" || { teardown; return; }
   local lp
   lp=$(grep -c '^lp$' "$TMP/events" 2>/dev/null) || lp=0
   [ "$lp" -ge 1 ] || { fail "выдачу Long Poll не запрашивали ни разу — сценарий вырожден"; teardown; return; }
