@@ -71,7 +71,15 @@ case "$url" in
     esac
     ;;
   *lp.vk.com*)
-    echo '{"ts":"176","updates":[]}'
+    # Опрос Long Poll умеет отвечать не только делом: 502 от провайдера и капча
+    # приходят текстом, а лёгший канал — пустотой. И то и другое для бота
+    # неотличимо от «обновлений нет», если он не считает неудачи.
+    case "${STUB_LPPOLL:-ok}" in
+      ok)      echo '{"ts":"176","updates":[]}' ;;
+      garbage) echo '<html><head><title>502 Bad Gateway</title></head></html>' ;;
+      empty)   : ;;
+      fail)    exit 7 ;;
+    esac
     ;;
   *api/status*)
     api_json="${STUB_API_JSON:-}"

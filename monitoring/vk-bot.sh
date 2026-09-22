@@ -5,6 +5,14 @@
 # BASH_SOURCE, а не $0: тесты подгружают файл через source, и с $0 путь указывал
 # бы на каталог вызывающего, а конфиг искался бы не там.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Без конфига бот не мёртв, а хуже: `source` несуществующего файла не прерывает
+# скрипт, дальше пусты и токен, и группа, и опрос Long Poll вечно возвращается с
+# ошибкой — процесс не выходит, Restart=always не срабатывает, StartLimitBurst
+# не считает ничего, и юнит остаётся active (running).
+if [ ! -r "${SCRIPT_DIR}/monitor.conf" ]; then
+    echo "vk-bot: нет ${SCRIPT_DIR}/monitor.conf — ни учётки VK, ни адресата" >&2
+    exit 1
+fi
 source "${SCRIPT_DIR}/monitor.conf"
 # Отправка — общая с server-monitor.sh и stats-report.sh: токен мимо argv, ответ
 # VK проверяется. Без неё бот отвечать не может, и падение видно в journal.
@@ -364,10 +372,27 @@ fi
 # Main loop — VK Bots Long Poll
 echo "VK-бот запущен. Слушаю команды..."
 
+# Потолок неудач подряд. Без него отказ, который сам не пройдёт — отозванный
+# токен, забаненное сообщество, подменённый адрес Long Poll, — давал вечный
+# цикл: процесс жив, значит Restart=always не срабатывает, значит и
+# StartLimitBurst в юните не считает ничего, и `systemctl status` зелёный. Выход
+# с ненулевым кодом — единственный способ довести отказ до failed, то есть до
+# того места, где его видно. Паузы вынесены в переменные, чтобы набор тестов не
+# ждал реального времени; в бою их не трогают.
+LP_MAX_FAILURES="${VK_LP_MAX_FAILURES:-5}"
+LP_RETRY_SLEEP="${VK_LP_RETRY_SLEEP:-10}"
+LP_POLL_SLEEP="${VK_LP_POLL_SLEEP:-2}"
+lp_cycle_fail=0
+
 while true; do
     if ! fetch_longpoll_server; then
-        echo "Ошибка получения Long Poll сервера, повтор через 10 сек..."
-        sleep 10
+        lp_cycle_fail=$((lp_cycle_fail + 1))
+        if [ "$lp_cycle_fail" -ge "$LP_MAX_FAILURES" ]; then
+            vk_log "Long Poll не поднимается ${lp_cycle_fail} раз подряд — выхожу, чтобы юнит перешёл в failed"
+            exit 1
+        fi
+        echo "Ошибка получения Long Poll сервера, повтор через ${LP_RETRY_SLEEP} с..."
+        sleep "$LP_RETRY_SLEEP"
         continue
     fi
     lp_server="$LP_SERVER"
@@ -376,11 +401,27 @@ while true; do
 
     echo "Long Poll подключён: ts=${lp_ts}"
 
+    # Успел ли хоть один опрос этой сессии: по нему решаем, сбрасывать ли счётчик
+    # неудачных подключений. Сессия, в которой не удалось ничего, — это отказ, а
+    # не «поработали и переподключились».
+    lp_session_ok=0
+    lp_fail=0
+
     while true; do
         response=$(poll_longpoll "$lp_server" "$lp_key" "$lp_ts")
+        poll_rc=$?
 
-        if [ -z "$response" ]; then
-            sleep 2
+        # Пустой ответ и упавший curl — не «обновлений нет»: при лёгшей сети или
+        # заблокированном адресе прежний код крутил этот цикл вечно, ни разу не
+        # переобновив сессионный ключ и не сказав ни слова в journal.
+        if [ "$poll_rc" -ne 0 ] || [ -z "$response" ]; then
+            lp_fail=$((lp_fail + 1))
+            [ "$lp_fail" = 1 ] && vk_log "Long Poll: опрос не удался (rc=${poll_rc}, ответ пуст) — повторяю"
+            if [ "$lp_fail" -ge "$LP_MAX_FAILURES" ]; then
+                vk_log "Long Poll: ${lp_fail} неудачных опросов подряд — переподключаюсь"
+                break
+            fi
+            sleep "$LP_POLL_SLEEP"
             continue
         fi
 
@@ -391,11 +432,30 @@ while true; do
         fi
 
         new_ts=$(echo "$response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ts',''))" 2>/dev/null)
+        count=$(echo "$response" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('updates', [])))" 2>/dev/null)
+
+        # Ответ пришёл, но это не JSON Long Poll: страница 502 от провайдера,
+        # капча, заглушка хостера. Раньше такой ответ проваливался сквозь все три
+        # проверки и возвращал управление на опрос НЕМЕДЛЕННО — бот молотил VK без
+        # единой паузы и без строки в journal, съедая ядро машины, которую сторожит.
+        if [ -z "$new_ts" ] && [ -z "$count" ]; then
+            lp_fail=$((lp_fail + 1))
+            [ "$lp_fail" = 1 ] && vk_log "Long Poll: ответ не разобран (не JSON) — <<$(printf '%s' "$response" | head -c 120)>>"
+            if [ "$lp_fail" -ge "$LP_MAX_FAILURES" ]; then
+                vk_log "Long Poll: ${lp_fail} неразобранных ответов подряд — переподключаюсь"
+                break
+            fi
+            sleep "$LP_POLL_SLEEP"
+            continue
+        fi
+
+        # Опрос состоялся — значит и сессия, и подключение рабочие.
+        lp_session_ok=1
+        lp_fail=0
+
         if [ -n "$new_ts" ]; then
             lp_ts="$new_ts"
         fi
-
-        count=$(echo "$response" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('updates', [])))" 2>/dev/null)
 
         if [ "$count" -gt 0 ] 2>/dev/null; then
             for i in $(seq 0 $((count - 1))); do
@@ -412,4 +472,18 @@ while true; do
             done
         fi
     done
+
+    # Сессия, в которой не удалось ни одного опроса, — это отказ, а не штатное
+    # переподключение: считаем её вместе с неудачными подключениями, иначе бот
+    # вечно ходил бы по кругу «подключился — ничего не смог — переподключился».
+    if [ "$lp_session_ok" = "1" ]; then
+        lp_cycle_fail=0
+    else
+        lp_cycle_fail=$((lp_cycle_fail + 1))
+        if [ "$lp_cycle_fail" -ge "$LP_MAX_FAILURES" ]; then
+            vk_log "Long Poll: ${lp_cycle_fail} сессий подряд без единого удачного опроса — выхожу, чтобы юнит перешёл в failed"
+            exit 1
+        fi
+        sleep "$LP_RETRY_SLEEP"
+    fi
 done

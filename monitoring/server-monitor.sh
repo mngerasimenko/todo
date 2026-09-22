@@ -7,6 +7,14 @@
 #   */5 * * * * /home/deploy/todo/monitoring/server-monitor.sh >> /var/log/server-monitor.log 2>&1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Конфига нет в git: на пересобранном хосте его кладут руками, и забыть это
+# легко. Без него пусты и учётка VK, и пороги: каждое сравнение падает в лог
+# «integer expression expected», ни один алерт не срабатывает, а прогон выходит
+# с нулём — то есть мониторинг выключен и молчит об этом ровно как исправный.
+if [ ! -r "${SCRIPT_DIR}/monitor.conf" ]; then
+    echo "server-monitor: нет ${SCRIPT_DIR}/monitor.conf — ни порогов, ни учётки VK" >&2
+    exit 1
+fi
 source "${SCRIPT_DIR}/monitor.conf"
 # Отправка — общая с stats-report.sh и vk-bot.sh (токен мимо argv, ответ VK
 # проверяется). Без неё алерты уходить не могут: выходим громко, а не молча —

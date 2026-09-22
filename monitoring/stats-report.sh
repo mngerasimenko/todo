@@ -6,6 +6,13 @@
 #   0 4 * * * /home/deploy/todo/monitoring/stats-report.sh >> /var/log/stats-report.log 2>&1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Конфиг не в git и на пересобранном хосте кладётся руками: без него нет учётки
+# VK, и сводка просто не уйдёт. Отказ должен быть сказан вслух — не пришедшая
+# сводка иначе неотличима от исправной тишины.
+if [ ! -r "${SCRIPT_DIR}/monitor.conf" ]; then
+    echo "stats-report: нет ${SCRIPT_DIR}/monitor.conf — учётки VK нет, сводку слать нечем" >&2
+    exit 1
+fi
 source "${SCRIPT_DIR}/monitor.conf"
 # Отправка — общая с server-monitor.sh и vk-bot.sh: токен мимо argv, ответ VK
 # проверяется. Без неё сводку отправлять нечем, и молчать об этом нельзя.

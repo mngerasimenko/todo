@@ -15,6 +15,18 @@ done
 
 input="$(cat)"
 
+# Настоящий python3 на не-JSON падает: трассировка в stderr, stdout пуст, код 1.
+# Без этого заглушка отвечала «0» и на страницу 502 от провайдера, то есть
+# делала слепым любой тест про неразобранный ответ Long Poll.
+case "$prog" in
+  *json*)
+    case "$(printf '%s' "$input" | head -c 1)" in
+      '{'|'[') ;;
+      *) echo "json.decoder.JSONDecodeError: Expecting value" >&2; exit 1 ;;
+    esac
+    ;;
+esac
+
 # JSON-поле верхнего уровня или внутри "response" — строкой, без вложенности.
 field() {
   printf '%s' "$input" | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\{0,1\}\([^\",}]*\)\"\{0,1\}.*/\1/p" | head -1

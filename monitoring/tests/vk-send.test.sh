@@ -108,8 +108,13 @@ run_bot_func() {
 
 # Запуск бота как программы — с коротким сторожем: тело обязано подняться, и
 # единственный его признак снаружи — что он не завершается сам.
+# Сторож по умолчанию короткий — теста «тело поднялось» хватает и восьми секунд.
+# Сценариям, которые ждут выхода бота по потолку неудач, нужен запас: каждый
+# вызов заглушки в Git Bash под Windows стоит около полутора секунд, и на
+# Linux-раннере те же шаги проходят за доли секунды.
 run_bot_body() {
-  PATH="$STUBS:$PATH" timeout 8 bash "$MON/vk-bot.sh" > "$TMP/run.out" 2> "$TMP/run.err"
+  local secs="${1:-8}"
+  PATH="$STUBS:$PATH" timeout "$secs" bash "$MON/vk-bot.sh" > "$TMP/run.out" 2> "$TMP/run.err"
   RC=$?
 }
 
@@ -242,10 +247,14 @@ t_stats_report_reject_is_loud() {
 }
 
 t_stats_report_no_actuator_sends_nothing() {
-  setup "stats-report: actuator промолчал — сводка не шлётся"
+  setup "stats-report: actuator промолчал — сводка не шлётся, и это слышно"
   export STUB_ACTUATOR=down
   run_script stats-report.sh
-  assert_vk_count 0 && pass
+  assert_vk_count 0 || { teardown; return; }
+  # Без этих двух проверок сценарий переживал бы возврат к прежнему молчаливому
+  # `exit 0`: не пришедшая сводка неотличима от исправной тишины.
+  assert_rc 1 || { teardown; return; }
+  assert_err_contains "actuator" && pass
   teardown
 }
 
@@ -363,7 +372,10 @@ t_long_message_is_truncated_not_lost() {
   assert_vk_count 1 || { teardown; return; }
   grep -qF "обрезано" "$STUB_VK_OUT" || fail "длинный текст ушёл без пометки об обрезке — <<$(head -c 200 "$STUB_VK_OUT")>>"
   [ "$(wc -c < "$STUB_VK_OUT")" -lt 12000 ] || fail "текст не обрезан: $(wc -c < "$STUB_VK_OUT") байт"
-  assert_err_contains "обрезано, полностью" && pass
+  assert_err_contains "обрезано до 3400" || { teardown; return; }
+  # Полный текст в лог не льём намеренно: в суточной сводке это имена
+  # пользователей, а /var/log читают все локальные учётки хоста.
+  assert_err_lacks "строка 900" && pass
   teardown
 }
 
@@ -400,6 +412,154 @@ t_no_account_is_loud() {
   run_script server-monitor.sh
   assert_vk_count 0 || { teardown; return; }
   assert_err_contains "УЧЁТКИ" && pass
+  teardown
+}
+
+# ------------------------------------------------- пропавший monitor.conf ---
+
+# Конфига нет в git: на пересобранном хосте его кладут руками, и забыть это
+# легко. Без него пусты и токен, и пороги — сравнения падают на «integer
+# expression expected» в лог, который никто не читает, а прогон выходит с нулём.
+# То есть мониторинг выключен и молчит об этом ровно так же, как исправный.
+t_server_monitor_missing_conf_is_loud() {
+  setup "server-monitor: пропавший monitor.conf валит прогон, а не гасит пороги молча"
+  rm -f "$CONF"
+  run_script server-monitor.sh
+  [ "$RC" = "0" ] && fail "прогон без конфига отработал с нулём — мониторинг выключен молча"
+  assert_vk_count 0 || { teardown; return; }
+  assert_err_contains "monitor.conf" && pass
+  teardown
+}
+
+t_stats_report_missing_conf_is_loud() {
+  setup "stats-report: пропавший monitor.conf валит прогон"
+  rm -f "$CONF"
+  run_script stats-report.sh
+  [ "$RC" = "0" ] && fail "прогон без конфига отработал с нулём"
+  assert_err_contains "monitor.conf" && pass
+  teardown
+}
+
+t_vk_bot_missing_conf_exits() {
+  setup "vk-bot: без monitor.conf бот выходит, а не остаётся живым в systemctl"
+  rm -f "$CONF"
+  run_bot_body
+  [ "$RC" = "124" ] && { fail "бот не завершился: под Restart=always юнит выглядел бы работающим"; teardown; return; }
+  assert_rc 1 || { teardown; return; }
+  assert_err_contains "monitor.conf" && pass
+  teardown
+}
+
+# ----------------------------------------------------- отказы Long Poll ---
+
+# Протухший или отозванный токен — самый вероятный боевой отказ бота, и он же
+# самый тихий: процесс не падает, `systemctl status` зелёный, команды владельца
+# просто не доходят. Потолок неудач нужен, чтобы юнит дошёл до failed, как и
+# обещает StartLimitBurst в его файле.
+t_vk_bot_longpoll_rejected_gives_up() {
+  setup "vk-bot: VK отвергает выдачу Long Poll — бот сдаётся, а не крутится живым"
+  export STUB_LP=reject
+  conf_set 'VK_LP_RETRY_SLEEP=0'
+  conf_set 'VK_LP_MAX_FAILURES=2'
+  conf_set 'VK_LP_POLL_SLEEP=0'
+  run_bot_body 60
+  [ "$RC" = "124" ] && { fail "бот крутится вечно: юнит остаётся active, отказ не виден"; teardown; return; }
+  assert_rc 1 || { teardown; return; }
+  assert_err_contains "VK отверг" && pass
+  teardown
+}
+
+# Не-JSON в ответе опроса (502 от lp.vk.com, капча, страница провайдера) раньше
+# не тормозил цикл вовсе: ни sleep, ни строки в journal — бот молотил VK
+# непрерывно, съедая ядро машины, которую и сторожит.
+t_vk_bot_longpoll_garbage_is_loud() {
+  setup "vk-bot: неразбираемый ответ Long Poll слышен и не крутит горячий цикл"
+  export STUB_LPPOLL=garbage
+  conf_set 'VK_LP_RETRY_SLEEP=0'
+  conf_set 'VK_LP_MAX_FAILURES=2'
+  conf_set 'VK_LP_POLL_SLEEP=0'
+  run_bot_body 60
+  [ "$RC" = "124" ] && { fail "бот не завершился на мусорном ответе — горячий цикл без задержки"; teardown; return; }
+  assert_err_contains "Long Poll" && pass
+  teardown
+}
+
+# ---------------------------------------------------- обрезка сообщения ---
+
+# Обрезка идёт по границам строк, и на тексте без переводов строки прежняя
+# версия отдавала заголовок и «(обрезано)»: /logs с одной длинной строкой лога
+# приходил владельцу пустым, а отправка при этом считалась успешной.
+t_long_single_line_message_keeps_body() {
+  setup "длинная одна строка: в ВК уходит тело, а не заголовок с «(обрезано)»"
+  local long got
+  long="$(printf 'x%.0s' $(seq 1 5000))"
+  run_bot_func send_message "$PEER" "ЗАГОЛОВОК
+${long}"
+  assert_vk_count 1 || { teardown; return; }
+  got=$(vk_text | wc -c)
+  [ "$got" -ge 3000 ] || { fail "в ВК ушло $got байт при бюджете 3400 — тело потерялось"; teardown; return; }
+  pass
+  teardown
+}
+
+# Под cron локаль C, и bash режет байты, а не символы: хвост обрезанной
+# кириллицы оставался недописанной последовательностью, а битый UTF-8 VK
+# отвергает целиком — сообщение пропадало.
+t_truncated_cyrillic_stays_valid_utf8() {
+  setup "обрезка кириллицы не рвёт символ: битый UTF-8 VK отверг бы целиком"
+  local long
+  long="$(printf 'я%.0s' $(seq 1 4000))"
+  # Локаль cron — C, и в ней bash режет байты, а не символы: под UTF-8-локалью
+  # разработчика этот дефект не воспроизводится вовсе.
+  export LC_ALL=C
+  run_bot_func send_message "$PEER" "$long"
+  unset LC_ALL
+  assert_vk_count 1 || { teardown; return; }
+  if ! vk_text | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1; then
+    fail "в ВК ушёл битый UTF-8 — VK отвергнет сообщение целиком"
+    teardown; return
+  fi
+  pass
+  teardown
+}
+
+# ------------------------------------------------- редакция и границы ---
+
+# Вырезание токена из текста — половина инварианта «секрет не в логе», и до
+# этого теста она не была закреплена ничем: выродив vk_redact в printf, набор
+# по-прежнему был бы зелёным. Путь живой: /logs и /errors шлют владельцу сырой
+# вывод docker logs.
+t_token_in_message_is_redacted() {
+  setup "токен в тексте сообщения вырезается, а не уезжает в диалог"
+  run_bot_func send_message "$PEER" "в логе мелькнул ${TOKEN} — посмотри"
+  assert_vk_count 1 || { teardown; return; }
+  if vk_text | grep -qF -- "$TOKEN"; then
+    fail "токен ушёл в ВК открытым текстом"
+    teardown; return
+  fi
+  vk_text | grep -qF -- "<VK_TOKEN>" || { fail "нет метки редакции — вырезано не то"; teardown; return; }
+  pass
+  teardown
+}
+
+# Единственная граница доступа у бота, который исполняет docker restart от root.
+t_vk_bot_ignores_foreign_peer() {
+  setup "vk-bot: команда с чужого peer_id не исполняется"
+  run_bot_func process_message 999 "/restart todo-app"
+  assert_vk_count 0 || { teardown; return; }
+  [ -s "$TMP/docker.argv" ] && { fail "чужая команда дошла до docker"; teardown; return; }
+  pass
+  teardown
+}
+
+# Не-JSON от api.vk.com (страница провайдера, 502) — это отказ: раньше ветка
+# «ответ не разобран» не проверялась ни одним сценарием.
+t_vk_garbage_response_is_rejected() {
+  setup "нераспознанный ответ VK — отказ, а не успех"
+  arm_ram_alert
+  export STUB_VK=garbage
+  run_script server-monitor.sh
+  assert_err_contains "VK отверг" && pass
   teardown
 }
 
