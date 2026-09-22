@@ -781,15 +781,21 @@ t_role_match_reinstall_is_allowed() {
 # ------------------------------------------------------------------ run ---
 
 echo "Тесты установщика опрашивалки"
-for t in $(declare -F | awk '{print $3}' | grep '^t_'); do "$t"; done
+# PM_TEST_FILTER гоняет подмножество по куску имени — так закрепляют починку
+# откатом, не дожидаясь всего набора. Пустой фильтр = весь набор, как и раньше.
+for t in $(declare -F | awk '{print $3}' | grep '^t_' | grep -- "${PM_TEST_FILTER:-}"); do "$t"; done
 
 echo
 printf 'Пройдено: %d, провалено: %d, пропущено: %d\n' "$PASSED" "$FAILED" "$SKIPPED"
 
-DECLARED=$(declare -F | awk '{print $3}' | grep -c '^t_')
-if [ $((PASSED + FAILED + SKIPPED)) -lt "$DECLARED" ]; then
-  printf 'ОШИБКА: объявлено сценариев %d, отчиталось %d — какой-то не запустился\n' "$DECLARED" "$((PASSED + FAILED + SKIPPED))"
-  exit 1
+# Сценарий, потерянный опечаткой в имени, иначе исчезает бесшумно, а набор
+# рапортует «провалено: 0». При фильтре счёт не сходится по построению.
+if [ -z "${PM_TEST_FILTER:-}" ]; then
+  DECLARED=$(declare -F | awk '{print $3}' | grep -c '^t_')
+  if [ $((PASSED + FAILED + SKIPPED)) -lt "$DECLARED" ]; then
+    printf 'ОШИБКА: объявлено сценариев %d, отчиталось %d — какой-то не запустился\n' "$DECLARED" "$((PASSED + FAILED + SKIPPED))"
+    exit 1
+  fi
 fi
 
 [ "$FAILED" -eq 0 ] || exit 1
