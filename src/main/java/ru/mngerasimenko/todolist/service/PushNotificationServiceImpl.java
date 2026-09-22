@@ -205,18 +205,7 @@ public class PushNotificationServiceImpl implements PushNotificationService {
                     if (sendResponse.isSuccessful()) continue;
                     FirebaseMessagingException e = sendResponse.getException();
                     if (e != null && e.getMessagingErrorCode() == MessagingErrorCode.UNREGISTERED) {
-                        // Свой try: fcm_token в схеме НЕ уникален (уникален device_id), и дубль
-                        // уронил бы findByFcmToken — вместе с чисткой остальных токенов пачки.
-                        try {
-                            pushTokenRepository.findByFcmToken(batch.get(i).getFcmToken())
-                                    .ifPresent(deadToken -> {
-                                        pushTokenRepository.delete(deadToken);
-                                        log.info("Удалён невалидный push-токен для устройства: {}",
-                                                deadToken.getDeviceId());
-                                    });
-                        } catch (RuntimeException ex) {
-                            log.warn("Не удалось убрать невалидный токен: {}", ex.toString());
-                        }
+                        removeUnregisteredToken(batch.get(i));
                     } else {
                         log.warn("Ошибка отправки sync-push: {}", e != null ? e.toString() : "неизвестно");
                     }
@@ -338,19 +327,7 @@ public class PushNotificationServiceImpl implements PushNotificationService {
             } catch (FirebaseMessagingException e) {
                 if (e.getMessagingErrorCode() == MessagingErrorCode.UNREGISTERED) {
                     // Токен невалиден — устройство удалило приложение или токен обновился.
-                    // Свой try, как в notifyTodoUpdated: fcm_token в схеме НЕ уникален (уникален
-                    // device_id), и дубль уронил бы findByFcmToken — а вместе с ним рассылку
-                    // всем, кто стоит в списке после мёртвого токена.
-                    try {
-                        pushTokenRepository.findByFcmToken(fcmToken).ifPresent(deadToken -> {
-                            pushTokenRepository.delete(deadToken);
-                            log.info("Удалён невалидный push-токен для устройства: {}", deadToken.getDeviceId());
-                        });
-                    } catch (RuntimeException ex) {
-                        // deviceId — чтобы по логу можно было найти дубль и убрать его руками.
-                        log.warn("Не удалось убрать невалидный токен устройства {}: {}",
-                                pt.getDeviceId(), ex.toString());
-                    }
+                    removeUnregisteredToken(pt);
                 } else {
                     log.warn("Ошибка отправки push: {}", e.getMessage());
                 }
@@ -362,6 +339,31 @@ public class PushNotificationServiceImpl implements PushNotificationService {
                 log.warn("Не удалось отправить push {} на устройство {}: {}",
                         pushType, pt.getDeviceId(), e.toString());
             }
+        }
+    }
+
+    /**
+     * Удалить токен, на который FCM ответил UNREGISTERED.
+     * <p>
+     * Зовётся из цикла по получателям, поэтому сбой чистки глотается: в {@link #sendLocalized}
+     * исключение отсюда оборвало бы отправку всем, кто стоит после этого токена, а в
+     * {@link #notifyTodoUpdated} — чистку остатка пачки, да ещё под ложным логом «не удалось
+     * отправить sync-push». Типовая причина: {@code fcm_token} в схеме НЕ уникален (уникален
+     * {@code device_id}), и на дубле {@code findByFcmToken} бросает
+     * {@code IncorrectResultSizeDataAccessException}; сюда же попадают недоступная БД и гонка
+     * внутри самого {@code delete}. Уже удалённая строка к ним не относится — её {@code delete}
+     * пропускает молча. {@code device_id} в предупреждении нужен, чтобы дубль можно было найти
+     * руками: сама чистка его не разрешает.
+     */
+    private void removeUnregisteredToken(PushToken recipient) {
+        try {
+            pushTokenRepository.findByFcmToken(recipient.getFcmToken()).ifPresent(deadToken -> {
+                pushTokenRepository.delete(deadToken);
+                log.info("Удалён невалидный push-токен для устройства: {}", deadToken.getDeviceId());
+            });
+        } catch (RuntimeException e) {
+            log.warn("Не удалось убрать невалидный токен устройства {}: {}",
+                    recipient.getDeviceId(), e.toString());
         }
     }
 

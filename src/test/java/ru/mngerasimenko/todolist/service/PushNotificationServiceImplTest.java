@@ -19,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.IncorrectResultSizeDataAccessException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import ru.mngerasimenko.todolist.config.I18nConfig;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
@@ -202,6 +203,37 @@ class PushNotificationServiceImplTest {
             // эффекте strict stubs.
             verify(pushTokenRepository).findByFcmToken("fcm-token-11");
             verify(pushTokenRepository, never()).delete(any());
+        }
+    }
+
+    /**
+     * Защищён весь блок чистки, а не только поиск: падение самого delete (недоступная БД,
+     * гонка с параллельной перерегистрацией токена) тоже не должно обрывать рассылку.
+     */
+    @Test
+    void notifyNewTodo_DeadTokenDeleteFails_StillSendsToOthers() throws Exception {
+        when(pushTokenRepository.findByListIdExcludingUser(86L, 53L))
+                .thenReturn(List.of(tokenFor(11L, "ru"), tokenFor(12L, "ru")));
+        // Отдельный экземпляр, а не получатель из списка: у PushToken нет equals, и так проверка
+        // ниже отличает удаление найденной строки от удаления объекта-получателя.
+        PushToken dead = tokenFor(11L, "ru");
+        when(pushTokenRepository.findByFcmToken("fcm-token-11")).thenReturn(Optional.of(dead));
+        doThrow(new ObjectOptimisticLockingFailureException(PushToken.class, 11L))
+                .when(pushTokenRepository).delete(dead);
+        FirebaseMessagingException unregistered = mock(FirebaseMessagingException.class);
+        when(unregistered.getMessagingErrorCode()).thenReturn(MessagingErrorCode.UNREGISTERED);
+
+        try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+            when(firebaseMessaging.send(any(Message.class))).thenThrow(unregistered).thenReturn("ok");
+
+            assertThatCode(() -> pushNotificationService.notifyNewTodo(86L, 53L, "Иван", "Хлеб"))
+                    .doesNotThrowAnyException();
+
+            ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
+            verify(firebaseMessaging, times(2)).send(captor.capture());
+            assertThat(readField(captor.getAllValues().get(1), "token")).isEqualTo("fcm-token-12");
+            verify(pushTokenRepository).delete(dead);
         }
     }
 

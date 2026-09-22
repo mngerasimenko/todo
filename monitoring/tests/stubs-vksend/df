@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Заглушка df: занятость диска задаётся STUB_DISK_PERCENT, иначе тест зависел бы
+# от свободного места на машине, где его гоняют.
+
+pct="${STUB_DISK_PERCENT:-10}"
+printf '%s\n' "Filesystem     1K-blocks      Used Available Use% Mounted on"
+if [ "${1:-}" = "-h" ]; then
+  printf '/dev/vda1            40G       %sG       30G  %s%% /\n' "$(( 40 * pct / 100 ))" "$pct"
+else
+  printf '/dev/vda1       41943040  %s  30000000  %s%% /\n' "$(( 41943040 * pct / 100 ))" "$pct"
+fi

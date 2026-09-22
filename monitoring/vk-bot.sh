@@ -2,8 +2,42 @@
 # VK-бот для управления сервером
 # Замена telegram-bot.sh — Telegram заблокирован с серверов в РФ
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# BASH_SOURCE, а не $0: тесты подгружают файл через source, и с $0 путь указывал
+# бы на каталог вызывающего, а конфиг искался бы не там.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Без конфига бот не мёртв, а хуже: `source` несуществующего файла не прерывает
+# скрипт, дальше пусты и токен, и группа, и опрос Long Poll вечно возвращается с
+# ошибкой — процесс не выходит, Restart=always не срабатывает, StartLimitBurst
+# не считает ничего, и юнит остаётся active (running).
+if [ ! -r "${SCRIPT_DIR}/monitor.conf" ]; then
+    echo "vk-bot: нет ${SCRIPT_DIR}/monitor.conf — ни учётки VK, ни адресата" >&2
+    exit 1
+fi
 source "${SCRIPT_DIR}/monitor.conf"
+# Отправка — общая с server-monitor.sh и stats-report.sh: токен мимо argv, ответ
+# VK проверяется. Без неё бот отвечать не может, и падение видно в journal.
+if [ ! -r "${SCRIPT_DIR}/vk-send.sh" ]; then
+    echo "vk-bot: нет ${SCRIPT_DIR}/vk-send.sh — отвечать нечем" >&2
+    exit 1
+fi
+# shellcheck source=monitoring/vk-send.sh
+source "${SCRIPT_DIR}/vk-send.sh"
+# Читаемость файла — ещё не пригодность: пустой или недописанный файл
+# сорсится успешно, а отправка падает с «command not found» на первом же
+# алерте. Требуем саму функцию.
+if ! declare -F vk_send_message >/dev/null; then
+    echo "vk-bot: ${SCRIPT_DIR}/vk-send.sh не дал vk_send_message — отправлять нечем" >&2
+    exit 1
+fi
+
+# Файл на месте — это ещё не конфиг: пустой или недописанный сорсится успешно,
+# и дальше пусты токен, группа и адресат. Опрос Long Poll тогда вечно
+# возвращается с ошибкой, а процесс при этом не выходит — поэтому проверяем не
+# читаемость файла, а сами значения.
+if [ -z "${VK_TOKEN:-}" ] || [ -z "${VK_PEER_ID:-}" ] || [ -z "${VK_GROUP_ID:-}" ]; then
+    echo "vk-bot: в ${SCRIPT_DIR}/monitor.conf нет учётки VK, группы или адресата" >&2
+    exit 1
+fi
 
 reload_config() {
     source "${SCRIPT_DIR}/monitor.conf"
@@ -12,13 +46,38 @@ reload_config() {
 send_message() {
     local peer_id="$1"
     local text="$2"
-    local random_id=$((RANDOM * RANDOM))
-    curl -s --max-time 15 -X POST "https://api.vk.com/method/messages.send" \
-        -d "access_token=${VK_TOKEN}" \
-        -d "peer_id=${peer_id}" \
-        -d "random_id=${random_id}" \
-        --data-urlencode "message=${text}" \
-        -d "v=${VK_API_VERSION}" > /dev/null 2>&1
+    vk_send_message "$text" "$peer_id"
+}
+
+# Long Poll сервер группы: кладёт адрес, сессионный ключ и метку в LP_SERVER,
+# LP_KEY и LP_TS. Пусто в LP_SERVER или LP_KEY — выдачи не было.
+fetch_longpoll_server() {
+    local resp rc
+    resp="$(vk_api_post groups.getLongPollServer "group_id=${VK_GROUP_ID}")"
+    rc=$?
+    LP_SERVER=""; LP_KEY=""; LP_TS=""
+    # Сеть легла и VK отверг запрос — разные причины: первая проходит сама,
+    # вторая требует человека. Одинаковая строка в журнале про каждые 10 секунд
+    # превращает и то, и другое в шум.
+    if [ "$rc" -ne 0 ]; then
+        vk_log "curl упал (rc=${rc}) — Long Poll сервер не получен"
+        return 1
+    fi
+    if ! vk_response_ok "$resp"; then
+        vk_log "VK отверг выдачу Long Poll сервера: $(printf '%s' "$resp" | head -c 200)"
+        return 1
+    fi
+    LP_SERVER=$(echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',{}).get('server',''))" 2>/dev/null)
+    LP_KEY=$(echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',{}).get('key',''))" 2>/dev/null)
+    LP_TS=$(echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',{}).get('ts',''))" 2>/dev/null)
+    [ -n "$LP_SERVER" ] && [ -n "$LP_KEY" ]
+}
+
+# Один опрос Long Poll. Сессионный ключ уходит в URL, а URL — конфигом curl:
+# в argv он виден в `ps` всякому локальному пользователю, как и токен.
+poll_longpoll() {
+    local server="$1" key="$2" ts="$3"
+    vk_get_url "${server}?act=a_check&key=${key}&ts=${ts}&wait=25" 35
 }
 
 cmd_status() {
@@ -116,8 +175,12 @@ cmd_restart() {
     fi
 
     send_message "$peer_id" "🔄 Перезапуск ${container}..."
-    local result=$(docker restart "$container" 2>&1)
-    local exit_code=$?
+    # Объявление отдельно от присваивания: у `local result=$(…)` код возврата —
+    # это код самой команды `local`, то есть всегда 0, и ветка ошибки ниже была
+    # недостижима. Контейнер не поднялся, а владелец видел «✅ перезапущен».
+    local result exit_code
+    result=$(docker restart "$container" 2>&1)
+    exit_code=$?
 
     if [ "$exit_code" -eq 0 ]; then
         send_message "$peer_id" "✅ ${container} перезапущен"
@@ -136,7 +199,9 @@ cmd_logs() {
         send_message "$peer_id" "📋 Логи пусты"
         return
     fi
-    logs=$(echo "$logs" | head -c 3500)
+    # Граница символа, а не байта: битый UTF-8 VK отвергает целиком, и ответ
+    # на /logs пропал бы вместо того, чтобы прийти обрезанным.
+    logs=$(vk_utf8_cut "$logs" 3500)
     send_message "$peer_id" "📋 Логи todo-app (последние ${lines}):
 
 ${logs}"
@@ -149,7 +214,7 @@ cmd_errors() {
         send_message "$peer_id" "✅ Ошибок не найдено (последние 200 строк)"
         return
     fi
-    errors=$(echo "$errors" | head -c 3500)
+    errors=$(vk_utf8_cut "$errors" 3500)
     send_message "$peer_id" "⚠️ Ошибки todo-app:
 
 ${errors}"
@@ -165,7 +230,7 @@ Disk: ${DISK_WARN:-85}%
 Cooldown: $((${ALERT_COOLDOWN:-1800} / 60)) мин
 Контейнеры: ${MONITOR_CONTAINERS:-todo-app postgres-db nginx-proxy todo-web}
 
-Файл: /root/monitoring/monitor.conf"
+Файл: ${SCRIPT_DIR}/monitor.conf"
 }
 
 cmd_jvm() {
@@ -306,44 +371,187 @@ process_message() {
     esac
 }
 
+# Тело отделено от определений: набор тестов подгружает файл через `source` и
+# проверяет отправку, не поднимая вечный цикл опроса. Признак — сам факт
+# сорсинга, а не переменная окружения: переменную можно унаследовать (профиль
+# root, Environment= в юните), и тогда бот под Restart=always выходил бы с нулём
+# каждые 10 секунд, выглядя в systemctl живым.
+if [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    return 0
+fi
+
 # Main loop — VK Bots Long Poll
 echo "VK-бот запущен. Слушаю команды..."
 
+# Отказ, который сам не пройдёт — отозванный токен, забаненное сообщество,
+# заблокированный адрес Long Poll, — давал вечный цикл: процесс жив, значит
+# Restart=always не срабатывает, значит и StartLimitBurst в юните не считает
+# ничего, и `systemctl status` зелёный. Выход с ненулевым кодом — единственный
+# способ довести отказ до failed, то есть до того места, где его видно.
+#
+# Меряем ВРЕМЯ без единого удачного опроса, а не число попыток: цена попытки —
+# таймаут curl (15 с у вызова метода, 35 с у опроса), поэтому при заблокированном
+# адресе пять попыток растягиваются на минуты, один процесс живёт дольше окна
+# StartLimitIntervalSec, и пять стартов в него не помещаются никогда. По времени
+# задержка выхода предсказуема, и окно юнита можно посчитать.
+#
+# Ручки читаются из конфига хоста и потому проверяются: нечисловое значение
+# превращало бы сравнение в «integer expression expected», то есть молча
+# выключало бы сам потолок. Пустое значение безопасно — его перекроет умолчание.
+LP_MAX_FAILURES="${VK_LP_MAX_FAILURES:-5}"
+LP_RETRY_SLEEP="${VK_LP_RETRY_SLEEP:-10}"
+LP_POLL_SLEEP="${VK_LP_POLL_SLEEP:-2}"
+LP_DEAD_AFTER="${VK_LP_DEAD_AFTER:-120}"
+case "$LP_MAX_FAILURES" in ''|*[!0-9]*|0|0*) LP_MAX_FAILURES=5 ;; esac
+case "$LP_RETRY_SLEEP"  in ''|*[!0-9]*) LP_RETRY_SLEEP=10 ;; esac
+case "$LP_POLL_SLEEP"   in ''|*[!0-9]*) LP_POLL_SLEEP=2 ;; esac
+case "$LP_DEAD_AFTER"   in ''|*[!0-9]*) LP_DEAD_AFTER=120 ;; esac
+# Цифры — ещё не число: значение длиннее шести знаков (промах по клавише,
+# вставленный таймстамп) переполняет сравнение, `[ … -gt … ]` падает с «integer
+# expression expected», ветка не берётся — и потолок оказывается выключен ровно
+# так же, как без валидации.
+[ "${#LP_MAX_FAILURES}" -gt 6 ] && LP_MAX_FAILURES=5
+[ "${#LP_RETRY_SLEEP}"  -gt 6 ] && LP_RETRY_SLEEP=10
+[ "${#LP_POLL_SLEEP}"   -gt 6 ] && LP_POLL_SLEEP=2
+[ "${#LP_DEAD_AFTER}"   -gt 6 ] && LP_DEAD_AFTER=120
+# Верхние границы не косметические: под них посчитано окно StartLimitIntervalSec
+# в юните. Живость проверяется ПОСЛЕ возврата запроса, поэтому худший разрыв
+# между проверками — это пауза переподключения плюс два таймаута curl (до 20 с у
+# вызова метода — потолок VK_TIMEOUT в vk-send.sh — и 35 с у опроса). Отсюда
+# худшая жизнь процесса: LP_DEAD_AFTER + (LP_RETRY_SLEEP + 55) + RestartSec.
+# При потолках ниже это 150 + 85 + 10 = 245 с, пять таких попыток — 1225 с,
+# окно в юните 1500 с.
+# Не ограничить паузы — и «разумная» настройка VK_LP_RETRY_SLEEP=300 (не долбить
+# общий токен) снова вывела бы юнит из окна, то есть выключила бы обнаружение.
+if [ "$LP_DEAD_AFTER" -gt 150 ]; then
+    vk_log "VK_LP_DEAD_AFTER=${LP_DEAD_AFTER} больше 150 с — беру 150: иначе юнит не успевает дойти до failed в своём окне"
+    LP_DEAD_AFTER=150
+fi
+if [ "$LP_RETRY_SLEEP" -gt 30 ]; then
+    vk_log "VK_LP_RETRY_SLEEP=${LP_RETRY_SLEEP} больше 30 с — беру 30: под эту границу посчитано окно юнита"
+    LP_RETRY_SLEEP=30
+fi
+if [ "$LP_POLL_SLEEP" -gt 10 ]; then
+    vk_log "VK_LP_POLL_SLEEP=${LP_POLL_SLEEP} больше 10 с — беру 10: под эту границу посчитано окно юнита"
+    LP_POLL_SLEEP=10
+fi
+# Нижние границы нужны по той же причине, что и верхние, только с другой
+# стороны: ноль возвращает переподключение и опрос со скоростью сети, то есть
+# долбёж api.vk.com токеном, общим на пять отправителей портфеля. Ноль стоит в
+# тестовых сценариях этого набора — он и будет первым, что скопируют в конфиг.
+if [ "$LP_RETRY_SLEEP" -lt 1 ]; then
+    vk_log "VK_LP_RETRY_SLEEP=${LP_RETRY_SLEEP} меньше 1 с — беру 1: нулевая пауза возвращает долбёж общего токена"
+    LP_RETRY_SLEEP=1
+fi
+if [ "$LP_POLL_SLEEP" -lt 1 ]; then
+    vk_log "VK_LP_POLL_SLEEP=${LP_POLL_SLEEP} меньше 1 с — беру 1: нулевая пауза возвращает горячий цикл опроса"
+    LP_POLL_SLEEP=1
+fi
+
+lp_last_ok="$(date +%s)"
+
+# Вызывается на каждой неудаче: и при неподнявшемся подключении, и при
+# неудавшемся опросе. Пока хоть один опрос проходит, счётчик времени сбрасывается
+# и бот работает сколько угодно долго.
+lp_give_up_if_dead() {
+    local now
+    now="$(date +%s)"
+    # Часы немонотонны: шаг NTP назад, восстановление снапшота, миграция ВМ. При
+    # отрицательной разнице потолок молча выключался бы на всю длину сдвига,
+    # поэтому отметку подтягиваем к текущему времени. Соседний сторож ловит этот
+    # же класс на маячках пира («маячок из будущего»). Шаг вперёд отдельно не
+    # ловим: он даёт один лишний выход, который под Restart=always безвреден.
+    [ "$now" -lt "$lp_last_ok" ] && lp_last_ok="$now"
+    if [ $(( now - lp_last_ok )) -gt "$LP_DEAD_AFTER" ]; then
+        vk_log "Long Poll не отвечает дольше ${LP_DEAD_AFTER} с — выхожу, чтобы юнит перешёл в failed"
+        exit 1
+    fi
+}
+
 while true; do
-    lp_response=$(curl -s --max-time 15 "https://api.vk.com/method/groups.getLongPollServer?access_token=${VK_TOKEN}&group_id=${VK_GROUP_ID}&v=${VK_API_VERSION}" 2>/dev/null)
-
-    lp_server=$(echo "$lp_response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',{}).get('server',''))" 2>/dev/null)
-    lp_key=$(echo "$lp_response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',{}).get('key',''))" 2>/dev/null)
-    lp_ts=$(echo "$lp_response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('response',{}).get('ts',''))" 2>/dev/null)
-
-    if [ -z "$lp_server" ] || [ -z "$lp_key" ]; then
-        echo "Ошибка получения Long Poll сервера, повтор через 10 сек..."
-        sleep 10
+    if ! fetch_longpoll_server; then
+        lp_give_up_if_dead
+        echo "Ошибка получения Long Poll сервера, повтор через ${LP_RETRY_SLEEP} с..."
+        sleep "$LP_RETRY_SLEEP"
         continue
     fi
+    lp_server="$LP_SERVER"
+    lp_key="$LP_KEY"
+    lp_ts="$LP_TS"
 
     echo "Long Poll подключён: ts=${lp_ts}"
 
-    while true; do
-        response=$(curl -s --max-time 35 "${lp_server}?act=a_check&key=${lp_key}&ts=${lp_ts}&wait=25" 2>/dev/null)
+    # Счётчик неудач подряд решает только одно — когда перевыпустить сессионный
+    # ключ. Жив ли бот вообще, решает время с последнего удачного опроса.
+    lp_fail=0
+    # Был ли в ЭТОЙ сессии хоть один опрос с ts. От этого зависит, считать ли
+    # ответ `failed` признаком живого канала: при нормальном перевыпуске ключа
+    # опросы до него шли, а при систематически не принимаемом ключе сессия
+    # обрывается сразу — и тогда отметка живости сделала бы отказ бессмертным.
+    lp_had_ok_poll=0
 
-        if [ -z "$response" ]; then
-            sleep 2
+    while true; do
+        response=$(poll_longpoll "$lp_server" "$lp_key" "$lp_ts")
+        poll_rc=$?
+
+        # Пустой ответ и упавший curl — не «обновлений нет»: при лёгшей сети или
+        # заблокированном адресе прежний код крутил этот цикл вечно, ни разу не
+        # переобновив сессионный ключ и не сказав ни слова в journal.
+        if [ "$poll_rc" -ne 0 ] || [ -z "$response" ]; then
+            lp_fail=$((lp_fail + 1))
+            [ "$lp_fail" = 1 ] && vk_log "Long Poll: опрос не удался (rc=${poll_rc}, ответ пуст) — повторяю"
+            lp_give_up_if_dead
+            if [ "$lp_fail" -ge "$LP_MAX_FAILURES" ]; then
+                vk_log "Long Poll: ${lp_fail} неудачных опросов подряд — переподключаюсь"
+                break
+            fi
+            sleep "$LP_POLL_SLEEP"
             continue
         fi
 
         failed=$(echo "$response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('failed',0))" 2>/dev/null)
         if [ "$failed" -gt 1 ] 2>/dev/null; then
-            echo "Long Poll требует переподключения (failed=${failed})"
+            # Это СОСТОЯВШИЙСЯ опрос: VK ответил штатным телом Long Poll, просто
+            # просит перевыпустить сессию, — но живость отмечаем, только если в
+            # этой сессии уже был удачный опрос. Иначе связка «выдали ключ →
+            # сразу failed=2 → перевыпуск» крутилась бы вечно с отметкой живости
+            # на каждом круге: юнит зелёный, команды не доходят, потолок не
+            # срабатывает никогда.
+            [ "$lp_had_ok_poll" = "1" ] && lp_last_ok="$(date +%s)"
+            vk_log "Long Poll требует переподключения (failed=${failed})"
             break
         fi
 
         new_ts=$(echo "$response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ts',''))" 2>/dev/null)
+        count=$(echo "$response" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('updates', [])))" 2>/dev/null)
+
+        # Ответ пришёл, но это не ответ Long Poll: страница 502 от провайдера,
+        # капча, заглушка хостера — или разбираемый JSON с ошибкой VK. Признак
+        # один: у настоящего ответа ВСЕГДА есть ts. Судить по `updates` нельзя —
+        # для любого разобранного JSON их длина равна нулю, то есть непуста, и
+        # такой ответ проваливался сквозь все проверки, возвращая управление на
+        # опрос немедленно: бот молотил VK без пауз и без строки в journal,
+        # съедая ядро машины, которую сторожит. Ответы `failed` перехвачены выше.
+        if [ -z "$new_ts" ]; then
+            lp_fail=$((lp_fail + 1))
+            [ "$lp_fail" = 1 ] && vk_log "Long Poll: в ответе нет ts — <<$(printf '%s' "$response" | head -c 120)>>"
+            lp_give_up_if_dead
+            if [ "$lp_fail" -ge "$LP_MAX_FAILURES" ]; then
+                vk_log "Long Poll: ${lp_fail} ответов подряд без ts — переподключаюсь"
+                break
+            fi
+            sleep "$LP_POLL_SLEEP"
+            continue
+        fi
+
+        # Опрос состоялся — значит и сессия, и подключение рабочие.
+        lp_last_ok="$(date +%s)"
+        lp_had_ok_poll=1
+        lp_fail=0
+
         if [ -n "$new_ts" ]; then
             lp_ts="$new_ts"
         fi
-
-        count=$(echo "$response" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('updates', [])))" 2>/dev/null)
 
         if [ "$count" -gt 0 ] 2>/dev/null; then
             for i in $(seq 0 $((count - 1))); do
@@ -358,6 +566,22 @@ while true; do
                     fi
                 fi
             done
+            # Команда владельца — это минуты работы без опросов: /status ходит в
+            # docker и psql, а зовут его как раз тогда, когда там всё висит.
+            # Без этой отметки время исполнения команды засчитывалось бы каналу
+            # в простой, и бот выходил бы посреди инцидента.
+            lp_last_ok="$(date +%s)"
         fi
     done
+
+    # Сессия кончилась переподключением. Если при этом ни один опрос так и не
+    # прошёл, время без удачи продолжает идти — выход решает оно.
+    lp_give_up_if_dead
+    # Пауза обязательна ИМЕННО здесь. Ответ `failed: 2/3` (протухший ключ,
+    # рассинхрон ts) приходит от VK мгновенно, и выдача нового сервера — тоже:
+    # без этой строки переподключение крутилось бы со скоростью сети, долбя
+    # api.vk.com токеном, общим на пять отправителей портфеля. Ответ VK на такое
+    # — rate-limit на сам токен, то есть падение единственного канала
+    # оповещений целиком.
+    sleep "$LP_RETRY_SLEEP"
 done

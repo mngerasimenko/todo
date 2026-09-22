@@ -1,13 +1,22 @@
 package ru.mngerasimenko.todolist.service;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
+import org.springframework.transaction.interceptor.TransactionAttribute;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import ru.mngerasimenko.todolist.dto.DueTodosResponse;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.dto.TodoResponse;
@@ -37,6 +46,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -1472,5 +1482,266 @@ public class TodoServiceImplTest {
         assertThat(result.getToday()).containsExactly(farEastResponse);
         assertThat(result.getUpcoming()).containsExactly(farWestResponse);
         assertThat(result.getOverdue()).isEmpty();
+    }
+
+    // ===== Пуш не раньше коммита (панель-ревью 09.09.2026, находка 2) =====
+    //
+    // Остальные тесты этого класса транзакцию не поднимают и потому идут по ветке else,
+    // где отправка законно инлайновая. Боевой путь исполняется только здесь — без этих
+    // тестов забытый registerSynchronization остался бы зелёным.
+
+    /**
+     * Страховка на весь класс: TransactionSynchronizationManager держит состояние в статическом
+     * ThreadLocal, тесты идут последовательно в одном потоке. Забытый clearSynchronization в
+     * одном тесте сделал бы негативные проверки всех последующих вакуумно-зелёными — пуш не
+     * ушёл бы просто потому, что afterCommit никто не позвал.
+     */
+    @AfterEach
+    void clearTxSynchronization() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    /**
+     * Стабы пути создания для тестов этой секции. Списку даём id 10, отличный от id автора:
+     * у notifyNewTodo порядок (listId, authorUserId), и перепутанные аргументы обязаны ронять
+     * тест, а не проходить.
+     */
+    private TodoDto stubCreatePathInList10() {
+        testTaskList.setId(10L);
+        TodoDto dto = new TodoDto();
+        dto.setName("Молоко");
+        dto.setUserId(1L);
+        dto.setListId(10L);
+
+        Todo savedTodo = new Todo();
+        savedTodo.setId(5L);
+        savedTodo.setName("Молоко");
+        savedTodo.setUser(testUser);
+        savedTodo.setTaskList(testTaskList);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+        when(taskListRepository.findById(10L)).thenReturn(Optional.of(testTaskList));
+        when(taskListUserRepository.existsByIdListIdAndIdUserId(10L, 1L)).thenReturn(true);
+        when(todoMapper.toEntity(any(TodoDto.class))).thenReturn(new Todo());
+        when(todoRepository.save(any(Todo.class))).thenReturn(savedTodo);
+        when(todoMapper.toDto(any(Todo.class))).thenReturn(new TodoDto());
+        return dto;
+    }
+
+    /** Стабы пути markAsDone для тестов этой секции; id списка и исполнителя различны. */
+    private void stubMarkAsDonePathInList10() {
+        testTaskList.setId(10L);
+        // Todo денормализует listId внутрь себя в setTaskList, а setUp() связал их при id=1.
+        // Без повторной привязки фикстура осталась бы в состоянии, которого БД не создаёт:
+        // getListId()==1 при getTaskList().getId()==10.
+        testTodo.setTaskList(testTaskList);
+        User completor = new User();
+        completor.setId(2L);
+        completor.setName("completor");
+
+        when(todoRepository.findById(1L)).thenReturn(Optional.of(testTodo));
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 2L))
+                .thenReturn(Optional.of(new TaskListUser(testTaskList, completor, TaskListRole.USER)));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(completor));
+        when(todoRepository.save(testTodo)).thenReturn(testTodo);
+    }
+
+    /**
+     * Прогоняет колбэки так, как их зовёт Spring при УСПЕШНОМ коммите:
+     * {@code beforeCommit} → {@code beforeCompletion} → flush и проверка версии внутри
+     * {@code doCommit} → {@code afterCommit} → {@code afterCompletion(STATUS_COMMITTED)}.
+     * Гоняем всю последовательность, а не только afterCommit: иначе реализация,
+     * продублировавшая отправку в любой из трёх остальных фаз, осталась бы зелёной.
+     */
+    private void driveCommit() {
+        // Пофазно, а не по одной синхронизации целиком: именно так это делает
+        // TransactionSynchronizationUtils. Порядок важен для фаз beforeCommit и afterCommit —
+        // у них в Spring нет перхолбэчного try/catch, поэтому упавший колбэк обрывает фазу;
+        // beforeCompletion и afterCompletion, наоборот, ловят Throwable и продолжают. Тут
+        // forEach без перехвата, то есть драйвер строже Spring'а в двух последних фазах —
+        // намеренно: отправка не должна падать ни в одной из них.
+        List<TransactionSynchronization> syncs = TransactionSynchronizationManager.getSynchronizations();
+        syncs.forEach(s -> s.beforeCommit(false));
+        syncs.forEach(TransactionSynchronization::beforeCompletion);
+        syncs.forEach(TransactionSynchronization::afterCommit);
+        syncs.forEach(s -> s.afterCompletion(TransactionSynchronization.STATUS_COMMITTED));
+    }
+
+    /**
+     * Та же последовательность для НЕуспешного завершения. {@code beforeCommit} успевает
+     * отработать и на проигравшей гонку транзакции — проверка {@code @Version} идёт позже,
+     * внутри {@code doCommit}, — поэтому отправка из {@code beforeCommit} нарушала бы инвариант
+     * ровно так же, как прямой вызов. Драйвер обязан звать её, иначе такой мутант выживает.
+     *
+     * <p>Статус — параметр, потому что Spring использует два разных: {@code STATUS_ROLLED_BACK}
+     * на обычном откате и {@code STATUS_UNKNOWN}, когда исход коммита неизвестен —
+     * {@code rollbackOnCommitFailure} по умолчанию {@code false}, поэтому
+     * {@code TransactionException} из {@code doCommit}/{@code doRollback} (например
+     * {@code TransactionSystemException} при обрыве соединения) приходит с UNKNOWN, тогда как
+     * проигранная гонка {@code @Version} ({@code ObjectOptimisticLockingFailureException} —
+     * это {@code DataAccessException}, не {@code TransactionException}) даёт ROLLED_BACK.
+     * Инвариант требует молчания в обоих, и проверять надо оба: реализация с условием
+     * {@code status != STATUS_ROLLED_BACK} прошла бы проверку одного только ROLLED_BACK.
+     */
+    private void driveRollback(int status) {
+        List<TransactionSynchronization> syncs = TransactionSynchronizationManager.getSynchronizations();
+        syncs.forEach(s -> s.beforeCommit(false));
+        syncs.forEach(TransactionSynchronization::beforeCompletion);
+        syncs.forEach(s -> s.afterCompletion(status));
+    }
+
+    @Test
+    void createTodo_WithActiveTransaction_SendsNewTodoPushOnlyAfterCommit() {
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            TodoDto dto = stubCreatePathInList10();
+
+            todoService.createTodo(dto);
+
+            // До коммита участники о задаче знать не должны: коммит ещё может не состояться,
+            // а отозвать уже отправленный пуш нельзя. verifyNoInteractions, а не never() с
+            // anyString(): anyString() не матчит null, и регрессия с null-именем прошла бы мимо.
+            verifyNoInteractions(pushNotificationService);
+
+            driveCommit();
+
+            // Ровно один раз: driveCommit гоняет все четыре фазы, поэтому отправка,
+            // продублированная в beforeCommit или afterCompletion, роняет этот verify.
+            verify(pushNotificationService, times(1)).notifyNewTodo(10L, 1L, "testuser", "Молоко");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void markAsDone_WithActiveTransaction_SendsCompletionPushOnlyAfterCommit() {
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            stubMarkAsDonePathInList10();
+
+            todoService.markAsDone(1L, 2L);
+
+            // Одновременный тап по галочке двумя участниками штатен: проигравший получает 409
+            // и откат, и пуш «выполнил» о неприменённой правке уйти не должен.
+            verifyNoInteractions(pushNotificationService);
+
+            driveCommit();
+
+            verify(pushNotificationService, times(1))
+                    .notifyTodoCompleted(2L, 10L, "completor", "Test Todo");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    /**
+     * Собственно критерий приёмки, а не «ещё не отправлено»: при ОТКАТЕ пуш не уходит никогда.
+     * Тест закрепляет все точки SPI, кроме afterCommit, — именно за них взялся бы будущий
+     * рефакторинг «упростим, тут же одно и то же». Из них самая опасная beforeCommit: она
+     * успевает отработать и на проигравшей транзакции, потому что проверка @Version идёт
+     * позже, внутри doCommit.
+     */
+    @ParameterizedTest
+    @ValueSource(ints = {TransactionSynchronization.STATUS_ROLLED_BACK,
+            TransactionSynchronization.STATUS_UNKNOWN})
+    void createTodo_TransactionNotCommitted_SendsNoPushAndTracksNothing(int status) {
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            TodoDto dto = stubCreatePathInList10();
+
+            todoService.createTodo(dto);
+            driveRollback(status);
+
+            verifyNoInteractions(pushNotificationService);
+            // Словарь подсказок на откате тоже обязан остаться без «фантомной» записи.
+            verifyNoInteractions(suggestionService);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {TransactionSynchronization.STATUS_ROLLED_BACK,
+            TransactionSynchronization.STATUS_UNKNOWN})
+    void markAsDone_TransactionNotCommitted_SendsNoPush(int status) {
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            stubMarkAsDonePathInList10();
+
+            todoService.markAsDone(1L, 2L);
+            driveRollback(status);
+
+            verifyNoInteractions(pushNotificationService);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    /**
+     * Вся корректность правки держится на том, что метод реально идёт через прокси
+     * {@code @Transactional} — только тогда {@code isSynchronizationActive()} истинно и работает
+     * боевая ветка. Снятая аннотация не роняет ни один тест выше (они поднимают синхронизацию
+     * руками), а в проде тихо возвращает ДОкоммитную отправку. Закрепляем предусловие.
+     */
+    @Test
+    void createTodoAndMarkAsDone_RunInTransactionWithSynchronization() throws NoSuchMethodException {
+        // Спрашиваем ровно то, что спросит Spring, а не getAnnotation() на методе реализации:
+        // аннотация законно может переехать на интерфейс или на класс, и тогда прямая проверка
+        // метода вернула бы null при полностью рабочем прокси — ложная тревога вместо гейта.
+        AnnotationTransactionAttributeSource source = new AnnotationTransactionAttributeSource();
+        TransactionAttribute create = source.getTransactionAttribute(
+                TodoServiceImpl.class.getMethod("createTodo", TodoDto.class), TodoServiceImpl.class);
+        TransactionAttribute markDone = source.getTransactionAttribute(
+                TodoServiceImpl.class.getMethod("markAsDone", Long.class, Long.class), TodoServiceImpl.class);
+
+        assertThat(create).as("@Transactional на createTodo").isNotNull();
+        assertThat(markDone).as("@Transactional на markAsDone").isNotNull();
+        // Propagation — тоже часть предусловия, но не потому, что при NOT_SUPPORTED/NEVER
+        // пропадает синхронизация: по умолчанию SYNCHRONIZATION_ALWAYS, и afterCommit там
+        // всё равно вызовется. Дело в том, что вызовется он на выходе из области, которая
+        // работу этого метода не фиксировала, — отсрочка потеряет смысл, ради которого её
+        // делали. Поэтому пропускаем только те propagation, при которых транзакция реальна.
+        assertThat(create.getPropagationBehavior()).isIn(
+                TransactionDefinition.PROPAGATION_REQUIRED,
+                TransactionDefinition.PROPAGATION_REQUIRES_NEW,
+                TransactionDefinition.PROPAGATION_MANDATORY,
+                TransactionDefinition.PROPAGATION_NESTED);
+        assertThat(markDone.getPropagationBehavior()).isIn(
+                TransactionDefinition.PROPAGATION_REQUIRED,
+                TransactionDefinition.PROPAGATION_REQUIRES_NEW,
+                TransactionDefinition.PROPAGATION_MANDATORY,
+                TransactionDefinition.PROPAGATION_NESTED);
+    }
+
+    /**
+     * Перехват внутри afterCommit нагружен дважды, и оба назначения проверяются здесь.
+     * Первое: отказ постановки в пул (TaskRejectedException при shutdown) не должен стать
+     * пятисоткой на УЖЕ зафиксированной задаче — иначе клиент повторит успешное создание.
+     * Второе: invokeAfterCommit своего try/catch не имеет, поэтому упавший колбэк без перехвата
+     * отменил бы все зарегистрированные после него — здесь это пополнение словаря подсказок.
+     */
+    @Test
+    void createTodo_PushRejectedByPool_DoesNotThrowAndDoesNotCancelLaterCallbacks() {
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            TodoDto dto = stubCreatePathInList10();
+            doThrow(new TaskRejectedException("pool is shutting down"))
+                    .when(pushNotificationService)
+                    .notifyNewTodo(anyLong(), anyLong(), anyString(), anyString());
+
+            todoService.createTodo(dto);
+
+            assertThatCode(this::driveCommit).doesNotThrowAnyException();
+
+            // Отправку проверяем явно: иначе тест остался бы зелёным и в случае, когда пуш
+            // вообще перестал регистрироваться, — от вакуумности его спасала бы только
+            // строгость стабов Mockito, а это косвенная гарантия в чужой настройке.
+            verify(pushNotificationService).notifyNewTodo(10L, 1L, "testuser", "Молоко");
+            verify(suggestionService).track("Молоко", false, 1L);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 }

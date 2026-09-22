@@ -1,6 +1,9 @@
-# Канал алертов — VK. Одна копия токена на хост: отсюда его берут и
-# server-monitor.sh, и portfolio-monitor.sh (через VK_CONF_FILE), и соседняя
-# проба replyAI. При ротации менять одно место.
+# Канал алертов — VK. Отсюда токен берут server-monitor.sh, stats-report.sh и
+# vk-bot.sh (сорсят этот файл рядом с собой), portfolio-monitor.sh и соседняя
+# проба replyAI (через VK_CONF_FILE). Копий этого файла на проде две — рядом со
+# скриптами в /home/deploy/todo/monitoring и в /root/monitoring; полный список
+# мест, где лежит токен, и порядок ротации — в README, раздел «Обращение с
+# секретами». Файл держим в правах 600: в нём секрет.
 VK_TOKEN="your-vk-group-token-here"
 VK_PEER_ID="your-vk-peer-id-here"
 VK_GROUP_ID="your-vk-group-id-here"
@@ -18,6 +21,37 @@ JVM_HEAP_WARN=85   # % JVM Heap usage (via Actuator)
 
 # Alert cooldown (seconds) - don't repeat same alert within this period
 ALERT_COOLDOWN=1800
+
+# Где server-monitor.sh держит отметки кулдауна. По умолчанию
+# /var/lib/server-monitor/alert-state — каталог, куда пишет только root:
+# в общем /tmp чужой пользователь мог бы заглушить алерт заранее положенной
+# отметкой. Переопределять стоит только в тестах.
+#ALERT_STATE_FILE=/var/lib/server-monitor/alert-state
+
+# Таймаут запроса к VK в секундах (vk-send.sh), по умолчанию 15. Принимается
+# 1..20: ноль означал бы «без таймаута» (зависший запрос заморозил бы бота), а
+# значение больше 20 вывело бы юнит бота из его окна StartLimitIntervalSec.
+# О всякой поправке значения vk-send.sh пишет строку в лог.
+#VK_TIMEOUT=15
+
+# Где лежит выключатель авто-подъёма бота (server-monitor.sh). Пока файл есть,
+# упавший юнит не поднимают и о нём молчат — снимайте флаг, когда закончите.
+#BOT_DISABLED_FLAG=/root/monitoring/vk-bot.disabled
+
+# Ручки Long Poll у бота (vk-bot.sh). Значения по умолчанию подходят; нечисловое
+# значение игнорируется, берётся умолчание — иначе оно молча выключало бы потолок.
+# VK_LP_DEAD_AFTER   - секунд без удачного опроса до выхода, чтобы systemd увёл
+#                      юнит в failed (120)
+# VK_LP_MAX_FAILURES - неудач подряд до перевыпуска сессионного ключа (5)
+# VK_LP_RETRY_SLEEP  - пауза между попытками подключения, секунды (10)
+# VK_LP_POLL_SLEEP   - пауза между неудачными опросами, секунды (2)
+# Потолки: VK_LP_DEAD_AFTER обрезается до 150, VK_LP_RETRY_SLEEP до 30,
+# VK_LP_POLL_SLEEP до 10; нулевые паузы поднимаются до 1 с (ноль возвращает
+# долбёж VK). Под эти границы посчитано окно StartLimitIntervalSec=1500 в юните
+# бота: худшая попытка = DEAD_AFTER + (RETRY_SLEEP + 55) + RestartSec, и пять
+# таких попыток обязаны уместиться в окно, иначе юнит не дойдёт до failed.
+# Слагаемое 55 — это потолок VK_TIMEOUT (20) плюс таймаут опроса (35).
+#VK_LP_DEAD_AFTER=120
 
 # Containers to monitor
 MONITOR_CONTAINERS="todo-app postgres-db nginx-proxy todo-web"

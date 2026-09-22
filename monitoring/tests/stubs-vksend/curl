@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# Заглушка curl для тестов трёх старых отправителей (server-monitor.sh,
+# stats-report.sh, vk-bot.sh). Сеть не трогается.
+#
+# argv пишется в $STUB_STATE/curl.argv, конфиг со stdin — в $STUB_STATE/curl.cfg.
+# На этих двух файлах держатся обе проверки разом: «секрета нет в командной
+# строке» и «секрет всё-таки ушёл, просто конфигом» — без второй первая
+# проходила бы и на скрипте, который вообще перестал отправлять.
+
+[ -n "${STUB_STATE:-}" ] && printf '%s\n' "$*" >> "${STUB_STATE}/curl.argv"
+
+url=""
+from_config=0
+for a in "$@"; do
+  case "$a" in
+    -K) from_config=1 ;;
+    http://*|https://*) url="$a" ;;
+  esac
+done
+
+msg=""
+if [ "$from_config" = "1" ]; then
+  cfg="$(cat)"
+  [ -n "${STUB_STATE:-}" ] && printf '%s\n' "$cfg" >> "${STUB_STATE}/curl.cfg"
+  url="$(printf '%s\n' "$cfg" | sed -n 's/^url = "\(.*\)"$/\1/p' | head -1)"
+  msg_file="$(printf '%s\n' "$cfg" | sed -n 's/^data-urlencode = "message@\(.*\)"$/\1/p' | head -1)"
+  if [ -n "$msg_file" ] && [ -r "$msg_file" ]; then
+    msg="$(cat "$msg_file")"
+  fi
+  # Сообщение умеет уезжать и значением, а не файлом — тогда текст берём оттуда:
+  # иначе тест «сообщение дошло» был бы слеп к такой отправке.
+  if [ -z "$msg" ]; then
+    msg="$(printf '%s\n' "$cfg" | sed -n 's/^data-urlencode = "message=\(.*\)"$/\1/p' | head -1)"
+  fi
+fi
+
+# Старая форма отправки: текст приезжает аргументом. Заглушка обязана её понимать,
+# иначе мутационная проба (вернули -d access_token=…) падала бы не на том, что
+# проверяет тест, а на немом ответе заглушки.
+if [ "$from_config" = "0" ]; then
+  prev=""
+  for a in "$@"; do
+    case "$prev" in
+      --data-urlencode|-d)
+        case "$a" in
+          message=*) msg="${a#message=}" ;;
+        esac
+        ;;
+    esac
+    prev="$a"
+  done
+fi
+
+case "$url" in
+  *api.vk.com/method/messages.send*)
+    [ -n "${STUB_STATE:-}" ] && echo vk >> "${STUB_STATE}/events"
+    # curlfail — curl не смог выполнить запрос: сообщение до VK не доехало.
+    [ "${STUB_VK:-ok}" = "curlfail" ] && exit 7
+    printf '%s\n---\n' "$msg" >> "${STUB_VK_OUT:-/dev/null}"
+    case "${STUB_VK:-ok}" in
+      ok)      echo '{"response":424242}' ;;
+      reject)  echo '{"error":{"error_code":5,"error_msg":"User authorization failed"}}' ;;
+      garbage) echo 'gateway timeout' ;;
+    esac
+    ;;
+  *api.vk.com/method/groups.getLongPollServer*)
+    [ -n "${STUB_STATE:-}" ] && echo lp >> "${STUB_STATE}/events"
+    case "${STUB_LP:-ok}" in
+      ok)     echo '{"response":{"key":"lp-session-key","server":"https://lp.vk.com/wh42","ts":"175"}}' ;;
+      reject) echo '{"error":{"error_code":5,"error_msg":"User authorization failed"}}' ;;
+    esac
+    ;;
+  *lp.vk.com*)
+    # Опрос Long Poll умеет отвечать не только делом: 502 от провайдера и капча
+    # приходят текстом, а лёгший канал — пустотой. И то и другое для бота
+    # неотличимо от «обновлений нет», если он не считает неудачи.
+    case "${STUB_LPPOLL:-ok}" in
+      ok)      echo '{"ts":"176","updates":[]}' ;;
+      garbage) echo '<html><head><title>502 Bad Gateway</title></head></html>' ;;
+      # Разбираемый JSON, но не ответ Long Poll: ошибка VK, капча, прокси. Для
+      # бота он опаснее мусора — тело парсится, значит проверки «не разобрали»
+      # его пропускают, а ts в нём нет.
+      jsonerr) echo '{"error":{"error_code":5,"error_msg":"User authorization failed"}}' ;;
+      # failed 2/3 — это СОСТОЯВШИЙСЯ опрос: VK ответил штатным телом и просит
+      # перевыпустить сессию. Один такой ответ подряд, без единого удачного
+      # опроса, — патология (ключ систематически не принимается).
+      failed2) echo '{"failed":2}' ;;
+      # Рабочий канал, которому VK время от времени просит перевыпустить сессию:
+      # нечётные опросы удачные, чётные — failed=2. Счётчик в файле, потому что
+      # каждый вызов заглушки — отдельный процесс.
+      alternating)
+        n_file="${STUB_STATE:-/tmp}/lp.calls"
+        n=$(( $(cat "$n_file" 2>/dev/null || echo 0) + 1 ))
+        printf '%s' "$n" > "$n_file"
+        if [ $(( n % 2 )) = 1 ]; then
+          echo '{"ts":"176","updates":[]}'
+        else
+          echo '{"failed":2}'
+        fi
+        ;;
+      empty)   : ;;
+      fail)    exit 7 ;;
+    esac
+    ;;
+  *api/status*)
+    api_json="${STUB_API_JSON:-}"
+    [ -n "$api_json" ] || api_json='{"smtp_healthy":true,"firebase_healthy":true,"redis_healthy":true}'
+    # Скрипты зовут status с -w "\n%{http_code}": тело, перевод строки, код.
+    printf '%s\n%s' "$api_json" "${STUB_API_CODE:-200}"
+    ;;
+  *)
+    printf '%s\n%s' '' '000'
+    ;;
+esac
+exit 0
