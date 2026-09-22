@@ -10,6 +10,9 @@ import com.google.firebase.messaging.Message;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -17,6 +20,7 @@ import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.IncorrectResultSizeDataAccessException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import ru.mngerasimenko.todolist.config.I18nConfig;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.model.PushToken;
@@ -26,10 +30,21 @@ import ru.mngerasimenko.todolist.repository.PushTokenRepository;
 import ru.mngerasimenko.todolist.repository.TaskListRepository;
 import ru.mngerasimenko.todolist.repository.UserRepository;
 
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Properties;
+import java.util.Set;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -91,10 +106,7 @@ class PushNotificationServiceImplTest {
     @Test
     void sendTodoDuePush_CarriesTypeAndDeepLinkIds() throws Exception {
         when(pushTokenRepository.findByUserId(53L)).thenReturn(List.of(tokenFor(53L, "ru")));
-        TaskList list = new TaskList();
-        list.setId(86L);
-        list.setName("Теплица");
-        when(taskListRepository.findById(86L)).thenReturn(Optional.of(list));
+        when(taskListRepository.findById(86L)).thenReturn(Optional.of(listNamed(86L, "Теплица")));
 
         try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
             mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
@@ -125,10 +137,7 @@ class PushNotificationServiceImplTest {
     @Test
     void sendTodoDuePush_SetsDeterministicNotificationTag() throws Exception {
         when(pushTokenRepository.findByUserId(53L)).thenReturn(List.of(tokenFor(53L, "ru")));
-        TaskList list = new TaskList();
-        list.setId(86L);
-        list.setName("Теплица");
-        when(taskListRepository.findById(86L)).thenReturn(Optional.of(list));
+        when(taskListRepository.findById(86L)).thenReturn(Optional.of(listNamed(86L, "Теплица")));
 
         try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
             mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
@@ -147,10 +156,7 @@ class PushNotificationServiceImplTest {
     void notifyNewTodo_HasNoNotificationTag() throws Exception {
         when(pushTokenRepository.findByListIdExcludingUser(86L, 53L))
                 .thenReturn(List.of(tokenFor(53L, "ru")));
-        TaskList list = new TaskList();
-        list.setId(86L);
-        list.setName("Теплица");
-        when(taskListRepository.findById(86L)).thenReturn(Optional.of(list));
+        when(taskListRepository.findById(86L)).thenReturn(Optional.of(listNamed(86L, "Теплица")));
 
         try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
             mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
@@ -192,7 +198,7 @@ class PushNotificationServiceImplTest {
 
             ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
             verify(firebaseMessaging, times(2)).send(captor.capture());
-            assertThat(readField(captor.getAllValues().get(1), "token")).isEqualTo("fcm-token-12");
+            assertThat(sentToken(captor.getAllValues().get(1))).isEqualTo("fcm-token-12");
             // Явная проверка, что чистка шла именно по fcm-token-11, а не держится на побочном
             // эффекте strict stubs.
             verify(pushTokenRepository).findByFcmToken("fcm-token-11");
@@ -327,10 +333,503 @@ class PushNotificationServiceImplTest {
 
             ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
             verify(firebaseMessaging, times(2)).send(captor.capture());
-            assertThat(readField(captor.getAllValues().get(1), "token")).isEqualTo("fcm-token-12");
+            assertThat(sentToken(captor.getAllValues().get(1))).isEqualTo("fcm-token-12");
             verify(pushTokenRepository).findByListIdExcludingUser(86L, 53L);
             verifyNoMoreInteractions(pushTokenRepository);
         }
+    }
+
+    // === push_type: wire-контракт с Android-клиентом ===
+
+    /**
+     * push_type и list_id/list_name — то, что читает Android: по list_id он открывает список,
+     * а по todo_due — саму задачу. Проверяется СОБРАННОЕ сообщение, а не константа сервиса:
+     * ассерт на константу остался бы зелёным и у кода, который забыл положить её в payload.
+     */
+    @Test
+    void notifyNewTodo_CarriesTaskAddedTypeAndListIds() throws Exception {
+        when(pushTokenRepository.findByListIdExcludingUser(86L, 53L))
+                .thenReturn(List.of(tokenFor(11L, "ru")));
+        when(taskListRepository.findById(86L)).thenReturn(Optional.of(listNamed(86L, "Теплица")));
+
+        try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+
+            pushNotificationService.notifyNewTodo(86L, 53L, "Иван", "Хлеб");
+
+            assertThat(extractData(sentMessages(1).get(0)))
+                    .containsEntry("push_type", "task_added")
+                    .containsEntry("list_id", "86")
+                    .containsEntry("list_name", "Теплица");
+        }
+    }
+
+    /** Тексты настоящие: у этой пары ключей title как раз различается по локали. */
+    @Test
+    void notifyTodoCompleted_CarriesTaskCompletedTypeAndLocalizedText() throws Exception {
+        when(pushTokenRepository.findByListIdExcludingUser(86L, 53L))
+                .thenReturn(List.of(tokenFor(11L, "ru-RU"), tokenFor(12L, "en-US")));
+        when(taskListRepository.findById(86L)).thenReturn(Optional.of(listNamed(86L, "Теплица")));
+
+        try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+
+            serviceWithRealMessages().notifyTodoCompleted(53L, 86L, "Иван", "Хлеб");
+
+            List<Message> sent = sentMessages(2);
+            assertThat(extractData(sent.get(0)))
+                    .containsEntry("push_type", "task_completed")
+                    .containsEntry("list_id", "86")
+                    .containsEntry("list_name", "Теплица");
+            assertThat(sentToken(sent.get(0))).isEqualTo("fcm-token-11");
+            assertThat(notificationTitle(sent.get(0))).isEqualTo("Задача выполнена ✓");
+            assertThat(notificationBody(sent.get(0))).isEqualTo("Иван: Хлеб");
+            assertThat(sentToken(sent.get(1))).isEqualTo("fcm-token-12");
+            assertThat(notificationTitle(sent.get(1))).isEqualTo("Task done ✓");
+            // Английский body тоже сверяется целиком: перестановка плейсхолдеров в одном бандле
+            // («{1}: {0}») дала бы связное «Хлеб: Иван», и ни один ассерт на title её не увидит.
+            assertThat(notificationBody(sent.get(1))).isEqualTo("Иван: Хлеб");
+        }
+    }
+
+    /**
+     * {@code list_name} берётся из РЕПОЗИТОРИЯ, а не из аргумента вызова: список могли
+     * переименовать после выдачи инвайта, и в уведомлении должно стоять актуальное имя.
+     * Поэтому имя в аргументе и имя в базе здесь намеренно разные.
+     */
+    @Test
+    void notifyNewMember_CarriesMemberAddedTypeAndListNameFromRepository() throws Exception {
+        when(pushTokenRepository.findByListIdExcludingUser(86L, 53L))
+                .thenReturn(List.of(tokenFor(11L, "ru-RU"), tokenFor(12L, "en-US")));
+        when(taskListRepository.findById(86L)).thenReturn(Optional.of(listNamed(86L, "Теплица")));
+
+        try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+
+            serviceWithRealMessages().notifyNewMember(86L, 53L, "Иван", "Имя на момент инвайта");
+
+            List<Message> sent = sentMessages(2);
+            assertThat(extractData(sent.get(0)))
+                    .containsEntry("push_type", "member_added")
+                    .containsEntry("list_id", "86")
+                    .containsEntry("list_name", "Теплица");
+            assertThat(sentToken(sent.get(0))).isEqualTo("fcm-token-11");
+            assertThat(notificationTitle(sent.get(0))).isEqualTo("Новый участник");
+            // А в ТЕКСТ уведомления идёт имя из аргумента — это отдельный источник, и путать
+            // их нельзя: ассерт на одно и то же имя не различил бы подмену одного другим.
+            assertThat(notificationBody(sent.get(0))).isEqualTo("Иван: Имя на момент инвайта");
+            assertThat(sentToken(sent.get(1))).isEqualTo("fcm-token-12");
+            assertThat(notificationTitle(sent.get(1))).isEqualTo("New member");
+            assertThat(notificationBody(sent.get(1))).isEqualTo("Иван: Имя на момент инвайта");
+        }
+    }
+
+    // === Локализация текстов по локали КАЖДОГО токена ===
+
+    /**
+     * Локаль берётся у каждого токена отдельно, а не у первого: у одного пользователя телефон
+     * бывает русским, а планшет английским, и в списке рядом стоят устройства разных участников.
+     * <p>
+     * Теги здесь такие, какие реально лежат в {@code push_token.locale}: Android шлёт
+     * {@code Locale.getDefault().toLanguageTag()}, а {@code LocaleNormalizer} сохраняет регион —
+     * то есть {@code en-US}, а не {@code en}. На голых тегах тест был бы слабее: подмена
+     * {@code Locale.forLanguageTag} на {@code new Locale(тег)} резолвит {@code "en"} правильно,
+     * а {@code "en-US"} — в язык {@code "en-us"}, бандла с таким именем нет, и КАЖДОЕ английское
+     * устройство получило бы русский push. Голый {@code ru} тоже нужен: его ставит fallback
+     * {@code registerToken} старым клиентам, которые поле locale вообще не шлют.
+     * <p>
+     * Тексты настоящие, из {@code messages*.properties} — мок MessageService вернул бы null
+     * при любом ключе и пропустил бы и опечатку в имени ключа, и потерю локали.
+     */
+    @Test
+    void notifyNewTodo_TokensWithDifferentLocales_RenderTextPerTokenLocale() throws Exception {
+        when(pushTokenRepository.findByListIdExcludingUser(86L, 53L))
+                .thenReturn(List.of(tokenFor(11L, "ru-RU"), tokenFor(12L, "en-US"), tokenFor(13L, "ru")));
+        when(taskListRepository.findById(86L)).thenReturn(Optional.of(listNamed(86L, "Теплица")));
+
+        try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+
+            serviceWithRealMessages().notifyNewTodo(86L, 53L, "Иван", "Хлеб");
+
+            // Текст сверяется вместе с ТОКЕНОМ, на который он ушёл: одних title'ов мало —
+            // пересборка цикла со сдвигом индекса отправила бы английский текст на русское
+            // устройство, а число сообщений, их порядок и набор текстов остались бы теми же.
+            List<Message> sent = sentMessages(3);
+            assertThat(sentToken(sent.get(0))).isEqualTo("fcm-token-11");
+            assertThat(notificationTitle(sent.get(0))).isEqualTo("Новая задача");
+            assertThat(sentToken(sent.get(1))).isEqualTo("fcm-token-12");
+            assertThat(notificationTitle(sent.get(1))).isEqualTo("New task");
+            assertThat(sentToken(sent.get(2))).isEqualTo("fcm-token-13");
+            assertThat(notificationTitle(sent.get(2))).isEqualTo("Новая задача");
+            // Шаблон body у этого ключа одинаков в обоих бандлах («{0}: {1}»), поэтому здесь
+            // проверяется не разный текст, а то, что подстановка аргументов прошла и на
+            // английском устройстве — разный текст по локали держат тесты напоминаний ниже.
+            assertThat(notificationBody(sent.get(0))).isEqualTo("Иван: Хлеб");
+            assertThat(notificationBody(sent.get(1))).isEqualTo("Иван: Хлеб");
+        }
+    }
+
+    /**
+     * Напоминание о сроке: текст рендерится настоящий, и аргументы стоят в своём порядке.
+     * <p>
+     * Это единственная пара ключей, где перестановка двух аргументов даёт связный, но неверный
+     * текст — «25.08.2026 09:00 — до Полить теплицу». Такой свап проходил мимо всего: тесты
+     * {@code sendTodoDuePush_*} выше идут с мокнутым MessageService (title/body там null), а
+     * {@code TodoReminderSchedulerTest} держит оба строковых аргумента под {@code any()}.
+     */
+    @Test
+    void sendTodoDuePush_RendersLocalizedTextWithArgumentsInOrder() throws Exception {
+        when(pushTokenRepository.findByUserId(53L))
+                .thenReturn(List.of(tokenFor(11L, "ru-RU"), tokenFor(12L, "en-US")));
+        when(taskListRepository.findById(86L)).thenReturn(Optional.of(listNamed(86L, "Теплица")));
+
+        try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+
+            serviceWithRealMessages()
+                    .sendTodoDuePush(53L, 777L, 86L, "Полить теплицу", "25.08.2026 09:00");
+
+            List<Message> sent = sentMessages(2);
+            assertThat(sentToken(sent.get(0))).isEqualTo("fcm-token-11");
+            assertThat(notificationTitle(sent.get(0))).isEqualTo("Напоминание о задаче");
+            assertThat(sentToken(sent.get(1))).isEqualTo("fcm-token-12");
+            assertThat(notificationTitle(sent.get(1))).isEqualTo("Task reminder");
+            // Сравнение по краям, а не целиком: тире в шаблоне — типографское, и точный литерал
+            // ломался бы от правки пунктуации, ничего при этом не охраняя. Порядок аргументов
+            // такая проверка держит: при свапе body начинается с даты, а не с названия задачи.
+            assertThat(notificationBody(sent.get(0)))
+                    .startsWith("Полить теплицу")
+                    .endsWith("25.08.2026 09:00")
+                    .contains("до");
+            assertThat(notificationBody(sent.get(1)))
+                    .startsWith("Полить теплицу")
+                    .endsWith("25.08.2026 09:00")
+                    .contains("due");
+        }
+    }
+
+    /**
+     * Напоминание неактивному: имя подставляется per-token, поэтому при userName == null
+     * fallback-имя тоже обязано быть на языке устройства — иначе английский пользователь
+     * получит «друг, ...» в остальном английском тексте.
+     */
+    @Test
+    void sendInactiveReminderPush_NullUserName_UsesPerTokenFallbackName() throws Exception {
+        when(pushTokenRepository.findByUserId(7L))
+                .thenReturn(List.of(tokenFor(11L, "ru-RU"), tokenFor(12L, "en-US")));
+
+        try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+
+            serviceWithRealMessages().sendInactiveReminderPush(7L, null);
+
+            List<Message> sent = sentMessages(2);
+            assertThat(sentToken(sent.get(0))).isEqualTo("fcm-token-11");
+            assertThat(notificationTitle(sent.get(0))).isEqualTo("Мы скучаем! ✅");
+            assertThat(notificationBody(sent.get(0))).startsWith("друг,").contains("списки");
+            assertThat(sentToken(sent.get(1))).isEqualTo("fcm-token-12");
+            assertThat(notificationTitle(sent.get(1))).isEqualTo("We miss you! ✅");
+            assertThat(notificationBody(sent.get(1))).startsWith("friend,").contains("lists");
+            // Списка у напоминания нет — deep link вести некуда, и ключей list_* быть не должно.
+            assertThat(extractData(sent.get(0)))
+                    .containsEntry("push_type", "inactive_reminder")
+                    .doesNotContainKey("list_id")
+                    .doesNotContainKey("list_name");
+        }
+    }
+
+    /**
+     * Onboarding-напоминание — свой набор ключей ({@code push.onboarding.*}), а не текст
+     * inactive-напоминания: фокус на «попробуйте сейчас». Проверяется вместе с per-token
+     * fallback-именем, потому что механизм подстановки имени здесь тот же.
+     */
+    @Test
+    void sendOnboardingReminderPush_NullUserName_UsesPerTokenFallbackName() throws Exception {
+        when(pushTokenRepository.findByUserId(7L))
+                .thenReturn(List.of(tokenFor(11L, "ru-RU"), tokenFor(12L, "en-US")));
+
+        try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+
+            serviceWithRealMessages().sendOnboardingReminderPush(7L, null);
+
+            List<Message> sent = sentMessages(2);
+            assertThat(sentToken(sent.get(0))).isEqualTo("fcm-token-11");
+            assertThat(notificationTitle(sent.get(0))).isEqualTo("Готовы попробовать?");
+            assertThat(notificationBody(sent.get(0))).startsWith("друг,").contains("первый список");
+            assertThat(sentToken(sent.get(1))).isEqualTo("fcm-token-12");
+            assertThat(notificationTitle(sent.get(1))).isEqualTo("Ready to start?");
+            assertThat(notificationBody(sent.get(1))).startsWith("friend,").contains("first list");
+            assertThat(extractData(sent.get(0)))
+                    .containsEntry("push_type", "onboarding_reminder")
+                    .doesNotContainKey("list_id")
+                    .doesNotContainKey("list_name");
+        }
+    }
+
+    /**
+     * Fallback-имя берётся ТОЛЬКО когда имени нет.
+     *
+     * Без этой проверки оба теста выше оставались бы зелёными и у кода, который зовёт
+     * «другом» всех подряд — включая пользователей, чьё имя мы знаем. Оба напоминания в одном
+     * тесте потому, что подстановка имени у них общая: правило одно, точек применения две.
+     */
+    @Test
+    void reminderPushes_WithUserName_UseGivenNameNotFallback() throws Exception {
+        when(pushTokenRepository.findByUserId(7L)).thenReturn(List.of(tokenFor(11L, "ru-RU")));
+
+        try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+
+            PushNotificationServiceImpl service = serviceWithRealMessages();
+            service.sendInactiveReminderPush(7L, "Иван");
+            service.sendOnboardingReminderPush(7L, "Иван");
+
+            // Title'ы разные — иначе тест не фиксировал бы, какое из двух сообщений onboarding,
+            // и молча прошёл бы, если бы оба напоминания ушли по одним и тем же ключам.
+            List<Message> sent = sentMessages(2);
+            assertThat(notificationTitle(sent.get(0))).isEqualTo("Мы скучаем! ✅");
+            assertThat(notificationTitle(sent.get(1))).isEqualTo("Готовы попробовать?");
+            // startsWith достаточно: fallback дал бы «друг, ...». Запрета на слово «друг» в
+            // тексте нет намеренно — маркетинг вправе написать «Мы скучаем, друг!».
+            assertThat(notificationBody(sent.get(0))).startsWith("Иван,");
+            assertThat(notificationBody(sent.get(1))).startsWith("Иван,");
+        }
+    }
+
+    /**
+     * Ключи push-сообщений и арность аргументов, с какой их зовёт прод-код — единый источник
+     * для обоих сторожей ниже: прямого (ключ лежит в обоих бандлах и резолвится) и обратного
+     * (в бандлах нет push-ключа, которого нет здесь).
+     */
+    private static final Map<String, Integer> GUARDED_PUSH_KEYS = Map.ofEntries(
+            Map.entry("push.todo.created.title", 0), Map.entry("push.todo.created.body", 2),
+            Map.entry("push.todo.done.title", 0), Map.entry("push.todo.done.body", 2),
+            Map.entry("push.member.added.title", 0), Map.entry("push.member.added.body", 2),
+            Map.entry("push.inactive.title", 0), Map.entry("push.inactive.body", 1),
+            Map.entry("push.onboarding.title", 0), Map.entry("push.onboarding.body", 1),
+            Map.entry("push.todo.due.title", 0), Map.entry("push.todo.due.body", 2),
+            Map.entry("push.fallback.name", 0));
+
+    static Stream<Arguments> guardedPushKeys() {
+        return GUARDED_PUSH_KEYS.entrySet().stream()
+                .map(entry -> Arguments.of(entry.getKey(), entry.getValue()));
+    }
+
+    /**
+     * Сторож бандлов: каждый ключ, который просит сервис, ЛЕЖИТ в обоих языковых файлах и
+     * резолвится при той арности аргументов, с какой ключ зовёт прод.
+     * <p>
+     * {@link MessageService#getMessage} при отсутствии ключа не бросает, а возвращает САМ КЛЮЧ —
+     * то есть опечатка в имени или потерянная при правке {@code .properties} строка уезжает на
+     * устройство заголовком вида «push.member.added.title», и ни в логах, ни в тестах поведения
+     * этого не видно: у типа, чей текст тест не рендерит, ассертить нечего.
+     * <p>
+     * Наличие ключа проверяется ПО ФАЙЛУ, а не по результату резолва, потому что резолв не
+     * различает два случая, которые различать надо: (1) пропал весь английский файл — поиск
+     * уходит на {@code defaultLocale} и возвращает русский текст (замерено на {@code de-DE},
+     * у которого бандла нет); (2) ключ заведён только в корневом {@code messages.properties} —
+     * он находится через родительскую цепочку, и оба языка молча получают один и тот же текст.
+     * Пропажу ОДНОГО ключа из существующего бандла резолв, наоборот, ловит сам: бандл найден,
+     * ключа в нём нет, и {@code MessageService} отдаёт имя ключа.
+     * <p>
+     * Чем он не дублирует {@code EmailServiceImplTest.messageBundles_QuoteApostrophesOnlyWhereMessageFormatRuns}:
+     * тот итерирует ключи, которые в файле ЕСТЬ, и потому не видит ключ, пропавший в одном
+     * бандле из двух; здесь список идёт от прод-кода, поэтому ловится именно пропажа и опечатка.
+     * <p>
+     * Арность берётся от ключа, а не «два аргумента всем»: title'ы прод резолвит с пустым
+     * массивом, а при пустом массиве MessageFormat не запускается вовсе — значит плейсхолдер,
+     * заведённый в title, уехал бы на устройство неподставленным. Проверка на открывающую
+     * фигурную скобку ловит и это, и лишний плейсхолдер в body, а различимые значения аргументов
+     * («A0», «A1») — потерянный плейсхолдер: при шаблоне без {@code A1} аргумент исчезает молча.
+     * Заводишь push-тип — добавляй его ключи сюда с их арностью.
+     */
+    @ParameterizedTest
+    @MethodSource("guardedPushKeys")
+    void pushMessageKey_ResolvesToTextInBothBundles(String key, int argCount) {
+        MessageService messages = realMessages();
+        Object[] args = new Object[argCount];
+        Arrays.setAll(args, i -> "A" + i);
+
+        for (String tag : List.of("ru-RU", "en-US")) {
+            String language = Locale.forLanguageTag(tag).getLanguage();
+            assertThat(bundleKeys(language)).as("ключ %s в messages_%s", key, language).contains(key);
+
+            String text = messages.getMessage(key, Locale.forLanguageTag(tag), args);
+            assertThat(text).as("%s @ %s", key, tag)
+                    .isNotBlank()
+                    .isNotEqualTo(key)
+                    .doesNotContain("{");
+            for (Object arg : args) {
+                assertThat(text).as("аргумент %s у %s @ %s", arg, key, tag).contains((String) arg);
+            }
+        }
+    }
+
+    /**
+     * Обратная сторона сторожа: в бандлах нет push-ключа, которого нет в таблице выше.
+     * <p>
+     * Прямой сторож идёт от таблицы, поэтому ключ, заведённый в коде и в русском бандле, но не
+     * внесённый ни в таблицу, ни в англ. бандл, проходит мимо него целиком — а англоязычное
+     * устройство получит по такому ключу имя ключа вместо текста. Здесь проверка идёт от
+     * бандлов, так что забывчивость перестаёт быть тихой: тест краснеет при правке бандла.
+     */
+    @Test
+    void everyPushKeyInBundlesIsGuarded() {
+        for (String language : List.of("ru", "en")) {
+            assertThat(bundleKeys(language).stream().filter(key -> key.startsWith("push.")).toList())
+                    .as("push-ключи messages_%s", language)
+                    .containsExactlyInAnyOrderElementsOf(GUARDED_PUSH_KEYS.keySet());
+        }
+    }
+
+    /**
+     * Ключи бандла как они лежат в ФАЙЛЕ — резолв через {@code MessageService} про содержимое
+     * конкретного файла не говорит, он ходит по родительской цепочке и по fallback-локали.
+     * Отсутствие самого файла роняет тест сразу — это тот же дефект, только крупнее.
+     */
+    private static Set<String> bundleKeys(String language) {
+        String resource = "/messages_" + language + ".properties";
+        Properties bundle = new Properties();
+        try (Reader reader = new InputStreamReader(Objects.requireNonNull(
+                PushNotificationServiceImplTest.class.getResourceAsStream(resource),
+                "нет бандла " + resource), StandardCharsets.UTF_8)) {
+            bundle.load(reader);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Не удалось прочитать " + resource, e);
+        }
+        return bundle.stringPropertyNames();
+    }
+
+    /**
+     * Тег {@code und} («язык не определён») fallback'ом НЕ обслуживается: на устройство уходит
+     * сам ключ вместо текста. Тест фиксирует фактическое поведение как есть — это прод-дефект,
+     * и его починка (свести {@code und} к {@code ru} при регистрации токена либо не пускать тег
+     * валидацией) лежит вне зоны этого наряда и передана владельцу отдельным пунктом.
+     * <p>
+     * Механика: {@code LocaleNormalizer} такой тег возвращает как есть, а валидация пропускает
+     * (см. {@code LocaleNormalizerTest}); {@code Locale.forLanguageTag("und")} даёт
+     * {@code Locale.ROOT}, а у ROOT кандидат ровно один — намеренно пустой корневой
+     * {@code messages.properties}, — и поиск обрывается, не дойдя до {@code defaultLocale}.
+     */
+    @Test
+    void undLocale_YieldsRawKeyInsteadOfText() {
+        String key = "push.todo.created.title";
+
+        assertThat(realMessages().getMessage(key, Locale.forLanguageTag("und"))).isEqualTo(key);
+    }
+
+    /**
+     * Локаль, у которой язык вычитывается, а своего бандла нет, обслуживается русским текстом,
+     * а не сырыми ключами. Про тег без языка — тест выше: там поведение ровно обратное.
+     * <p>
+     * Путь живой: валидация принимает любой язык из двух-трёх букв, а {@code LocaleNormalizer}
+     * регион сохраняет — в {@code push_token.locale} реально уезжают {@code de-DE}, {@code zh-CN},
+     * {@code pt-BR}. Держит это {@code setDefaultLocale(ru)} в {@code I18nConfig}: без него
+     * бандлом для такого тега становится пустой корневой {@code messages.properties}, ключ не
+     * находится, и на устройство уходит уведомление с заголовком «push.todo.created.title».
+     * Остальные тесты этого не заметят — {@code ru-RU} и {@code en-US} резолвятся своими бандлами.
+     * <p>
+     * Сравнение идёт с русским резолвом, а не с литералом текста: предмет теста — механизм
+     * fallback'а, и правка самого заголовка push'а ронять его не должна. Ассерт на «это не имя
+     * ключа» нужен, иначе оба резолва, вернувшие ключ, совпали бы друг с другом.
+     */
+    @Test
+    void localeWithoutBundle_FallsBackToRussianText() {
+        MessageService messages = realMessages();
+        String key = "push.todo.created.title";
+
+        assertThat(messages.getMessage(key, Locale.forLanguageTag("de-DE")))
+                .isEqualTo(messages.getMessage(key, Locale.forLanguageTag("ru")))
+                .isNotEqualTo(key);
+    }
+
+    /**
+     * Глобальный рубильник гасит ВСЕ видимые каналы, а не только тихую синхронизацию.
+     * <p>
+     * Флаг — аварийный рычаг на случай нестабильной работы Firebase, и держится он только
+     * гардом внутри каждого метода сервиса: вызывающая сторона о флаге не знает —
+     * {@code TodoServiceImpl} зовёт {@code sendTodoDuePush} безусловно. До этого теста гард был
+     * покрыт у одного канала из семи, то есть удаление его в любом другом оставляло прогон
+     * зелёным.
+     * <p>
+     * Проверяется РЕПОЗИТОРИЙ, а не мок FirebaseMessaging: без mockStatic тот с прод-кодом не
+     * связан вовсе и упасть не может, а получателей каждый метод спрашивает сразу после гарда.
+     */
+    @Test
+    void allVisiblePushChannels_GloballyDisabled_DoNotEvenLookUpTokens() {
+        when(flagStore.isEnabled(FeatureFlag.PUSH_NOTIFICATIONS)).thenReturn(false);
+
+        pushNotificationService.notifyNewTodo(86L, 53L, "Иван", "Хлеб");
+        pushNotificationService.notifyTodoCompleted(53L, 86L, "Иван", "Хлеб");
+        pushNotificationService.notifyNewMember(86L, 53L, "Иван", "Теплица");
+        pushNotificationService.sendInactiveReminderPush(7L, "Иван");
+        pushNotificationService.sendOnboardingReminderPush(7L, "Иван");
+        pushNotificationService.sendTodoDuePush(7L, 777L, 86L, "Полить теплицу", "25.08.2026 09:00");
+
+        verifyNoInteractions(pushTokenRepository);
+    }
+
+    /**
+     * MessageService на ПРОД-конфигурации — {@code I18nConfig} зовётся, а не копируется руками:
+     * копия молча разошлась бы с продом при правке basename, defaultLocale или fallback, и тесты
+     * остались бы зелёными, пока прод отдаёт клиенту сырые ключи. Тот же приём и по той же
+     * причине — в {@code EmailServiceImplTest}.
+     */
+    private static MessageService realMessages() {
+        return new MessageService(new I18nConfig().messageSource());
+    }
+
+    /**
+     * Сервис с настоящими текстами из {@code messages*.properties}. Моком MessageService тут не
+     * обойтись: он проверяет только «какой ключ с какой локалью запросили», а текст возвращает
+     * null — то есть пропустил бы и опечатку в имени ключа (сервис отдал бы клиенту сам ключ),
+     * и пустой бандл. Остальные зависимости — те же моки, что у {@code @InjectMocks}-экземпляра.
+     */
+    private PushNotificationServiceImpl serviceWithRealMessages() {
+        return new PushNotificationServiceImpl(pushTokenRepository, userRepository,
+                taskListRepository, flagStore, realMessages());
+    }
+
+    /** Сообщения, ушедшие в FCM поштучно, в порядке отправки — по одному на токен. */
+    private List<Message> sentMessages(int expectedCount) throws FirebaseMessagingException {
+        ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
+        verify(firebaseMessaging, times(expectedCount)).send(captor.capture());
+        return captor.getAllValues();
+    }
+
+    /** Токен, на который ушло сообщение — связка «этот текст → это устройство». */
+    private String sentToken(Message message) {
+        return (String) readField(message, "token");
+    }
+
+    /** Минимальный список — нужен только чтобы sendLocalized подставил list_name. */
+    private TaskList listNamed(Long id, String name) {
+        TaskList list = new TaskList();
+        list.setId(id);
+        list.setName(name);
+        return list;
+    }
+
+    /**
+     * AndroidNotification собранного Message — читается отражением, потому что публичных
+     * читателей у AndroidConfig и AndroidNotification нет вовсе, только поля (в отличие от
+     * {@code Message.getData()}, который package-private). Возвращает null, если сообщение
+     * собрано без notification-payload (тихая синхронизация).
+     */
+    private Object androidNotification(Message message) {
+        return readField(readField(message, "androidConfig"), "notification");
+    }
+
+    /** Title из AndroidNotification. */
+    private String notificationTitle(Message message) {
+        return (String) readField(androidNotification(message), "title");
+    }
+
+    /** Body из AndroidNotification — там же, где title. */
+    private String notificationBody(Message message) {
+        return (String) readField(androidNotification(message), "body");
     }
 
     /**
@@ -339,9 +838,8 @@ class PushNotificationServiceImplTest {
      * fallback-канал FCM SDK — этот дефект в проекте уже был.
      */
     private void assertNotificationConfigured(Message message) {
-        assertThat(readField(readField(message, "androidConfig"), "notification")).isNotNull();
-        assertThat((String) readField(
-                readField(readField(message, "androidConfig"), "notification"), "channelId"))
+        assertThat(androidNotification(message)).isNotNull();
+        assertThat((String) readField(androidNotification(message), "channelId"))
                 .isEqualTo("todo_notifications_v2");
     }
 
@@ -360,34 +858,12 @@ class PushNotificationServiceImplTest {
     }
 
     /**
-     * Достаёт tag из AndroidNotification собранного Message — через reflection, потому что
-     * у AndroidConfig и AndroidNotification публичных читателей нет вовсе, только поля
-     * (в отличие от Message.getData(), который package-private).
-     *
-     * Возвращает null и когда tag не задан, и когда отсутствует сам AndroidNotification —
-     * поэтому проверять только его недостаточно, см. assertNotificationConfigured.
+     * Tag из AndroidNotification. Возвращает null и когда tag не задан, и когда отсутствует
+     * сам AndroidNotification — поэтому проверять только его недостаточно, см.
+     * assertNotificationConfigured.
      */
     private String extractNotificationTag(Message message) {
-        try {
-            java.lang.reflect.Field androidField = Message.class.getDeclaredField("androidConfig");
-            androidField.setAccessible(true);
-            Object androidConfig = androidField.get(message);
-            if (androidConfig == null) {
-                return null;
-            }
-            java.lang.reflect.Field notificationField =
-                    androidConfig.getClass().getDeclaredField("notification");
-            notificationField.setAccessible(true);
-            Object notification = notificationField.get(androidConfig);
-            if (notification == null) {
-                return null;
-            }
-            java.lang.reflect.Field tagField = notification.getClass().getDeclaredField("tag");
-            tagField.setAccessible(true);
-            return (String) tagField.get(notification);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Не удалось прочитать tag из Message", e);
-        }
+        return (String) readField(androidNotification(message), "tag");
     }
 
     /** Строит push-токен для userId с заданной локалью — минимальная фикстура для FCM-тестов. */
@@ -401,16 +877,9 @@ class PushNotificationServiceImplTest {
      * Достаёт data-payload из собранного FCM Message для проверки в тестах.
      * {@code Message.getData()} package-private в firebase-admin SDK — приходится через reflection.
      */
+    @SuppressWarnings("unchecked")
     private Map<String, String> extractData(Message message) {
-        try {
-            java.lang.reflect.Field field = Message.class.getDeclaredField("data");
-            field.setAccessible(true);
-            @SuppressWarnings("unchecked")
-            Map<String, String> data = (Map<String, String>) field.get(message);
-            return data;
-        } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(e);
-        }
+        return (Map<String, String>) readField(message, "data");
     }
 
     // === registerToken — locale handling ===
