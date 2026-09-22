@@ -641,10 +641,45 @@ t_vk_conf_mode_is_tightened() {
   printf 'VK_TOKEN=x\n' > "$TMP/conf/monitor.conf"
   /usr/bin/chmod 644 "$TMP/conf/monitor.conf" 2>/dev/null
   run_install external
-  assert_rc 0 && assert_out_contains "права сужены до 600" || { teardown; return; }
-  grep -q -- "600 $TMP/conf/monitor.conf" "$TMP/chmod.argv" 2>/dev/null \
+  assert_rc 0 || { teardown; return; }
+  # Успех объявляется по перечитанному режиму, поэтому там, где окружение права
+  # не различает, установщик честно скажет «не сузил» — проверяем факт вызова.
+  if mode_is_honored; then
+    assert_out_contains "права сужены до 600" || { teardown; return; }
+  fi
+  grep -q -- "600 -- $TMP/conf/monitor.conf" "$TMP/chmod.argv" 2>/dev/null \
     || fail "chmod 600 на конфиг не звался — <<$(cat "$TMP/chmod.argv" 2>/dev/null)>>"
   pass
+  teardown
+}
+
+# Код возврата chmod — ещё не результат: ACL, монтирование с fmask и
+# noperm-раздел дают нулевой код при неизменившемся режиме. Установщик, который
+# в этом случае рапортует «права сужены», врёт о секрете — а сверку записанного
+# он для crontab делает честно, и с правами должен так же.
+t_chmod_lying_about_success_is_reported() {
+  setup "chmod вернул ноль, а режим не изменился — установщик говорит «не сузил», а не «сужено»"
+  printf 'VK_TOKEN=x\n' > "$TMP/conf/monitor.conf"
+  /usr/bin/chmod 644 "$TMP/conf/monitor.conf" 2>/dev/null
+  export STUB_CHMOD_NOOP=1
+  run_install external
+  unset STUB_CHMOD_NOOP
+  assert_rc 0 && assert_out_contains "не сузил права" || { teardown; return; }
+  assert_out_lacks "права сужены до 600" && pass
+  teardown
+}
+
+# Каталог проходит проверку -e и не ловится -L: без -f установщик снимал бы с
+# него бит обхода для всех, кроме root, — то есть ломал бы чужой каталог, если
+# VK_CONF_FILE в конфиге хоста указывает не на файл.
+t_conf_pointing_at_directory_is_not_chmodded() {
+  setup "VK_CONF_FILE указывает на каталог — установщик его не трогает"
+  mkdir -p "$TMP/conf/monitor.conf"
+  run_install external
+  assert_rc 0 || { teardown; return; }
+  grep -q -- "600 -- $TMP/conf/monitor.conf" "$TMP/chmod.argv" 2>/dev/null \
+    && { fail "chmod 600 ушёл на каталог — он потерял бит обхода"; teardown; return; }
+  assert_out_contains "не обычный файл" && pass
   teardown
 }
 
@@ -674,7 +709,7 @@ t_second_conf_copy_beside_scripts_is_tightened() {
   /usr/bin/chmod 644 "$SRC/monitor.conf" 2>/dev/null
   run_install external
   assert_rc 0 || { teardown; return; }
-  grep -q -- "600 $SRC/monitor.conf" "$TMP/chmod.argv" 2>/dev/null     || fail "chmod 600 на копию рядом со скриптами не звался — <<$(cat "$TMP/chmod.argv" 2>/dev/null)>>"
+  grep -q -- "600 -- $SRC/monitor.conf" "$TMP/chmod.argv" 2>/dev/null     || fail "chmod 600 на копию рядом со скриптами не звался — <<$(cat "$TMP/chmod.argv" 2>/dev/null)>>"
   pass
   teardown
 }
@@ -708,6 +743,38 @@ t_legacy_setup_script_refuses_to_run() {
   grep -q "offsite-backup.sh" "$TMP/crontab" || fail "crontab тронут устаревшим установщиком — <<$(cat "$TMP/crontab")>>"
   [ -f "$TMP/crontab.writes" ] && fail "устаревший установщик писал crontab"
   pass
+  teardown
+}
+
+# ------------------------------------------------------ сверка роли хоста ---
+
+# Обе команды установки стоят рядом в README и в отказе setup-monitoring.sh, и
+# перепутать их дёшево. Роль external не ставит ни продление сертификатов, ни
+# прогон vpscan, но метку снимает со всех трёх строк — то есть один неверный
+# аргумент на проде молча уносил две чужие задачи, и установка при этом
+# отчитывалась об успехе.
+t_role_mismatch_refuses_and_keeps_lines() {
+  setup "запуск не с той ролью: установщик отказывается, чужие строки целы"
+  printf '%s
+' "$LEGACY_CERT" > "$TMP/crontab"
+  run_install peer
+  assert_rc 0 || { teardown; return; }
+  assert_cron_has "run-local.ts" || { teardown; return; }
+  run_install external
+  [ "$RC" = "0" ] && { fail "установка с чужой ролью прошла успешно — строки уже сняты"; teardown; return; }
+  assert_cron_has "certbot-renew.sh" || { teardown; return; }
+  assert_cron_has "run-local.ts" || { teardown; return; }
+  assert_out_contains "установлен как peer" && pass
+  teardown
+}
+
+# Повторная установка той же ролью — обычный путь, он обязан работать.
+t_role_match_reinstall_is_allowed() {
+  setup "повторная установка той же ролью проходит: сверка роли не мешает обычному пути"
+  run_install peer
+  assert_rc 0 || { teardown; return; }
+  run_install peer
+  assert_rc 0 && assert_cron_count 1 "portfolio-monitor.sh" && pass
   teardown
 }
 
