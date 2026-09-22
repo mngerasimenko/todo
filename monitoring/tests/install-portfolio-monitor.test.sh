@@ -888,6 +888,35 @@ t_chmod_swap_is_noticed() {
   teardown
 }
 
+# Зеркало рычага: запуск peer на хосте роли external. Там опрашивалка идёт прямо
+# из рабочей копии, а не из root-копии в CONF_DIR — по этому пути хост и опознаётся.
+# Без этой половины стейдж молча стал бы peer: девять целей портфеля перестали бы
+# опрашиваться, а маячок проду больше не клался бы.
+t_peer_on_external_host_is_refused() {
+  setup "запуск peer на хосте роли external отклоняется по самим данным crontab"
+  run_install external
+  assert_rc 0 || { teardown; return; }
+  rm -f "$TMP/conf/portfolio-monitor.conf"
+  run_install peer
+  [ "$RC" = "0" ] && { fail "peer принят на external-хосте — опрашивалка сменила бы роль молча"; teardown; return; }
+  assert_out_contains "помеченная строка чужой роли" && pass
+  teardown
+}
+
+# Снимок таблицы делается до тест-гейта, то есть за минуты до записи: чужая
+# строка, добавленная в этом окне, была бы затёрта молча.
+t_crontab_changed_during_install_is_refused() {
+  setup "чужая правка crontab во время установки — отказ, а не молчаливая затирка"
+  printf '0 4 * * * /root/monitoring/offsite-backup.sh
+' > "$TMP/crontab"
+  export STUB_CRONTAB_MUTATE='0 9 * * * /root/чужая-задача.sh'
+  run_install external
+  unset STUB_CRONTAB_MUTATE
+  [ "$RC" = "0" ] && { fail "установка прошла, затерев чужую строку"; teardown; return; }
+  assert_out_contains "crontab изменился" && pass
+  teardown
+}
+
 # ------------------------------------------------------------------ run ---
 
 echo "Тесты установщика опрашивалки"

@@ -23,7 +23,7 @@ STUBS="$HERE/stubs-vksend"
 # Набор безопасен, только пока заглушки перехватывают вызовы. Заглушка без бита
 # исполнения молча пропускается при поиске по PATH — и тест пошёл бы в сеть, к
 # настоящему VK, а на хосте ещё и к docker.
-for s in curl docker free df python3; do
+for s in curl docker free df python3 systemctl; do
   if [ "$( PATH="$STUBS:$PATH"; command -v "$s" )" != "$STUBS/$s" ]; then
     echo "ОШИБКА: заглушка $s не перехватывает вызов (нет бита исполнения?) — набор не запускается" >&2
     exit 1
@@ -186,7 +186,10 @@ t_server_monitor_reject_is_loud() {
   export STUB_VK=reject
   run_script server-monitor.sh
   assert_curl_was_called || { teardown; return; }
-  assert_err_contains "VK отверг" && pass
+  assert_err_contains "VK отверг" || { teardown; return; }
+  # Код возврата — вторая половина инварианта «отказ слышен»: без него сценарий
+  # прошёл бы и на скрипте, который сообщает об отказе и выходит нулём.
+  assert_rc 1 && pass
   teardown
 }
 
@@ -578,11 +581,14 @@ t_vk_bot_ignores_foreign_peer() {
 # Не-JSON от api.vk.com (страница провайдера, 502) — это отказ: раньше ветка
 # «ответ не разобран» не проверялась ни одним сценарием.
 t_vk_garbage_response_is_rejected() {
-  setup "нераспознанный ответ VK — отказ, а не успех"
+  setup "нераспознанный ответ VK — отказ, а не успех, и с диагнозом"
   arm_ram_alert
   export STUB_VK=garbage
   run_script server-monitor.sh
-  assert_err_contains "VK отверг" && pass
+  assert_err_contains "VK отверг" || { teardown; return; }
+  # Без диагноза строка вырождается в «VK отверг отправку:» — по ней не понять,
+  # кто ответил: у страницы 502 или капчи нет ни error_code, ни error_msg.
+  assert_err_contains "не похож на JSON VK" && pass
   teardown
 }
 
@@ -667,18 +673,34 @@ t_vk_bot_quiet_but_alive_channel_survives() {
   teardown
 }
 
-# failed=2 — это ответ VK, а не отказ: сессию перевыпускают, канал жив. Без
-# отметки живости здесь устойчивый failed объявил бы мёртвым исправный VK ровно
-# через VK_LP_DEAD_AFTER.
-t_vk_bot_failed_two_is_a_live_channel() {
-  setup "vk-bot: failed=2 — просьба перевыпустить сессию, а не смерть канала"
-  export STUB_LPPOLL=failed2
+# failed=2 ПОСЛЕ удачного опроса — это ответ VK, а не отказ: сессию
+# перевыпускают, канал жив. Без отметки живости здесь рабочий бот выходил бы
+# каждый раз, когда VK просит перевыпустить ключ.
+t_vk_bot_failed_two_after_good_poll_is_a_live_channel() {
+  setup "vk-bot: failed=2 на рабочем канале — перевыпуск сессии, а не смерть"
+  export STUB_LPPOLL=alternating
   conf_set 'VK_LP_DEAD_AFTER=1'
   conf_set 'VK_LP_POLL_SLEEP=0'
   conf_set 'VK_LP_RETRY_SLEEP=0'
   run_bot_body 12
-  [ "$RC" = "124" ] || fail "бот вышел с rc=$RC на failed=2 — исправный VK принят за мёртвый"
+  [ "$RC" = "124" ] || fail "бот вышел с rc=$RC — исправный VK принят за мёртвый"
   pass
+  teardown
+}
+
+# А вот failed=2 подряд, без единого удачного опроса, — патология: ключ
+# систематически не принимается. Отмечать живость здесь значило бы сделать отказ
+# бессмертным: цикл «выдали ключ → сразу failed → перевыпуск» крутился бы вечно,
+# юнит оставался бы зелёным, команды владельца не доходили бы.
+t_vk_bot_failed_two_without_any_good_poll_gives_up() {
+  setup "vk-bot: failed=2 без единого удачного опроса — отказ, а не вечный круг"
+  export STUB_LPPOLL=failed2
+  conf_set 'VK_LP_DEAD_AFTER=0'
+  conf_set 'VK_LP_POLL_SLEEP=0'
+  conf_set 'VK_LP_RETRY_SLEEP=0'
+  run_bot_body 30
+  [ "$RC" = "124" ] && { fail "бот крутится вечно: отказ ключа выглядит как рабочий канал"; teardown; return; }
+  assert_rc 1 && pass
   teardown
 }
 
@@ -691,12 +713,88 @@ t_utf8_cut_without_iconv_keeps_valid_utf8() {
     iconv() { return 127; }
     . "$1"
     LC_ALL=C
-    long="x$(printf "я%.0s" $(seq 1 200))"
-    vk_utf8_cut "$long" 101
+    # Эмодзи — 4 байта: на них прежний цикл `for i in 1 2 3` оставлял одинокий
+    # ведущий байт, то есть битый UTF-8. На кириллице (2 байта) разницы нет.
+    long="x$(printf '\360\237\224\264%.0s' $(seq 1 60))"
+    vk_utf8_cut "$long" 103
   ' _ "$MON/vk-send.sh" 2>/dev/null)"
   [ -n "$out" ] || { fail "запасной путь отдал пустоту"; teardown; return; }
   printf '%s' "$out" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1 \
     || { fail "запасной путь отдал битый UTF-8 — <<$(printf '%s' "$out" | tail -c 6 | od -An -tx1)>>"; teardown; return; }
+  pass
+  teardown
+}
+
+# --------------------------------------------------- юнит VK-бота ---
+
+arm_bot_unit() { conf_set "BOT_DISABLED_FLAG=$TMP/vk-bot.disabled"; }
+
+t_failed_bot_unit_is_reported_and_raised() {
+  setup "server-monitor: юнит бота в failed — сообщение владельцу и подъём"
+  arm_bot_unit
+  export STUB_UNIT_STATE=failed
+  run_script server-monitor.sh
+  assert_vk_count 1 || { teardown; return; }
+  vk_text | grep -qF "был в failed" || { fail "в сообщении нет причины — <<$(vk_text | head -c 120)>>"; teardown; return; }
+  grep -q '^start ' "$TMP/systemctl.argv" 2>/dev/null || { fail "юнит не поднимали"; teardown; return; }
+  pass
+  teardown
+}
+
+t_healthy_bot_unit_is_left_alone() {
+  setup "server-monitor: живой юнит бота не трогают и о нём не пишут"
+  arm_bot_unit
+  export STUB_UNIT_STATE=active
+  run_script server-monitor.sh
+  assert_vk_count 0 || { teardown; return; }
+  grep -q '^start ' "$TMP/systemctl.argv" 2>/dev/null && { fail "живой юнит зачем-то перезапускали"; teardown; return; }
+  pass
+  teardown
+}
+
+# reset-failed стирает единственную улику, поэтому рапорт «поднял» обязан идти
+# ПОСЛЕ проверки: иначе неудачный старт оставил бы юнит inactive, невидимый для
+# следующего прогона, а владелец прочитал бы, что всё хорошо.
+t_failed_raise_failure_is_told_as_is() {
+  setup "server-monitor: не сумел поднять юнит — так и сказано, а не «поднял»"
+  arm_bot_unit
+  export STUB_UNIT_STATE=failed STUB_UNIT_START_FAILS=1
+  run_script server-monitor.sh
+  assert_vk_count 1 || { teardown; return; }
+  vk_text | grep -qF "поднять его не удалось" || { fail "сообщение обещает подъём, которого не было — <<$(vk_text | head -c 160)>>"; teardown; return; }
+  pass
+  teardown
+}
+
+# Бота останавливают руками как раз тогда, когда он чудит, а `systemctl stop`
+# состояние failed не снимает — без выключателя сторож воскрешал бы его каждые
+# пять минут.
+t_disabled_bot_unit_is_not_raised() {
+  setup "server-monitor: выключенный владельцем бот не воскрешается"
+  arm_bot_unit
+  : > "$TMP/vk-bot.disabled"
+  export STUB_UNIT_STATE=failed
+  run_script server-monitor.sh
+  assert_vk_count 0 || { teardown; return; }
+  grep -q '^start ' "$TMP/systemctl.argv" 2>/dev/null && { fail "выключенный юнит подняли"; teardown; return; }
+  pass
+  teardown
+}
+
+# Пауза перед переподключением — починка с самым большим радиусом: без неё бот
+# долбит api.vk.com общим на портфель токеном, и ответ VK на это — rate-limit на
+# сам токен, то есть падение единственного канала оповещений.
+t_reconnect_pause_is_respected() {
+  setup "vk-bot: между переподключениями есть пауза, а не долбёж VK"
+  export STUB_LPPOLL=failed2
+  conf_set 'VK_LP_DEAD_AFTER=300'
+  conf_set 'VK_LP_POLL_SLEEP=0'
+  conf_set 'VK_LP_RETRY_SLEEP=3'
+  run_bot_body 10
+  local lp
+  lp=$(grep -c '^lp$' "$TMP/events" 2>/dev/null) || lp=0
+  [ "$lp" -le 4 ] || { fail "за 10 с выдачу Long Poll запрашивали $lp раз — паузы нет"; teardown; return; }
+  [ "$lp" -ge 1 ] || { fail "выдачу Long Poll не запрашивали ни разу — сценарий вырожден"; teardown; return; }
   pass
   teardown
 }

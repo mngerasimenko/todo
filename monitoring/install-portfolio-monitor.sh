@@ -183,6 +183,11 @@ fi
 
 # Таблицу читаем ЗДЕСЬ, до тестов и до раскладки: на ней держится вторая половина
 # защиты от чужой роли, а отказ не должен оставлять следов.
+#
+# crontab -l возвращает 1 и когда crontab пуст, и когда прочитать его не удалось
+# (права, обновление пакета cron, SELinux). Если не различить, второй случай
+# затирает ВЕСЬ crontab: на стейдже вместе с ним уехал бы offsite-бэкап, на проде —
+# replyai-probe, server-monitor и backup. Молча.
 EXISTING="$(crontab -l 2>/dev/null)"
 CRON_RC=$?
 if [ "$CRON_RC" -ne 0 ]; then
@@ -203,10 +208,19 @@ fi
 # решить до того, как на диск ляжет хоть что-нибудь — включая сам конфиг, иначе
 # «отклонённая» установка оставила бы на проде конфиг чужой роли, и опрашивалка
 # через пять минут работала бы как external, молча потеряв проверки peer.
+MANAGED_LINES="$(printf '%s\n' "$EXISTING" | grep -F -- "$TAG" | grep -v '^[[:space:]]*#')"
 if [ "$ROLE" = "external" ]; then
-  PEER_MANAGED="$(printf '%s\n' "$EXISTING" | grep -F -- "$TAG" | grep -v '^[[:space:]]*#' | grep -E 'certbot-renew\.sh|run-local\.ts' | head -1)"
-  [ -z "$PEER_MANAGED" ] || die "в crontab есть помеченная строка роли peer (${PEER_MANAGED}) — хост ставили как peer, а запущено external: эти строки снялись бы и не вернулись. Если роль хоста действительно меняется, поправь ROLE= в ${CONF} и сними лишние помеченные строки сам"
+  # Продление сертификатов и прогон vpscan ведёт только peer.
+  FOREIGN="$(printf '%s\n' "$MANAGED_LINES" | grep -E 'certbot-renew\.sh|run-local\.ts' | head -1)"
+else
+  # А у peer опрашивалка запускается из root-копии в CONF_DIR; помеченная строка
+  # с другим путём — это хост роли external, где cron идёт прямо в рабочую копию.
+  # Без этой половины запуск peer на стейдже прошёл бы молча и превратил внешнюю
+  # опрашивалку в peer: девять целей портфеля перестали бы опрашиваться вовсе, а
+  # маячок проду больше не клался бы.
+  FOREIGN="$(printf '%s\n' "$MANAGED_LINES" | grep -F 'portfolio-monitor.sh' | grep -vF "${CONF_DIR}/portfolio-monitor.sh" | head -1)"
 fi
+[ -z "$FOREIGN" ] || die "в crontab есть помеченная строка чужой роли (${FOREIGN}) — хост ставили другой ролью, а запущено ${ROLE}: эти строки снялись бы и не вернулись. Если роль хоста действительно меняется, поправь ROLE= в ${CONF} и сними лишние помеченные строки сам"
 
 SUITES=""
 [ "$DISABLED" = "0" ] && SUITES="portfolio-monitor"
@@ -372,10 +386,6 @@ LEGACY_MON='*/5 * * * * /root/monitoring/external-monitor.sh'
 LEGACY_CERT='0 */12 * * * docker exec certbot certbot renew --quiet && docker exec nginx-proxy nginx -s reload'
 LEGACY_VPSCAN='0 12 * * * docker exec vpscan-app tsx /app/src/scraper/run-local.ts >> /var/log/vpscan-scrape-local.log 2>&1'
 
-# crontab -l возвращает 1 и когда crontab пуст, и когда прочитать его не удалось
-# (права, обновление пакета cron, SELinux). Если не различить, второй случай
-# затирает ВЕСЬ crontab: на стейдже вместе с ним уехал бы offsite-бэкап, на проде —
-# replyai-probe, server-monitor и backup. Молча.
 # Снимаем только своё: незакомментированные строки с меткой в конце и прежние строки,
 # которые эта установка заменяет, — только вместе с установкой замены. Шаблон по
 # подстроке снимал бы и чужие строки с похожими именами (на проде общий certbot и
@@ -476,6 +486,11 @@ else
     [ -n "$CRON_VPSCAN_NORM" ] && [ "$line_norm" = "$CRON_VPSCAN_NORM" ] && continue
     echo "  снимаю строку crontab: ${line}"
   done
+  # Снимок таблицы сделан до тест-гейта и раскладки — это минуты. Чужая строка,
+  # добавленная в этом окне, была бы молча затёрта, а сверка ниже её не поймала
+  # бы: она сравнивает записанное с ожидаемым, а не с фактом изменения.
+  NOW="$(crontab -l 2>/dev/null)"
+  [ "$NOW" = "$EXISTING" ] || die "crontab изменился, пока шла установка — перезапусти её, чтобы не затереть чужую правку"
   printf '%s\n' "$DESIRED" | crontab - || die "crontab отверг новую таблицу, прежняя осталась на месте"
   # Сверяем записанное, а не только код возврата.
   [ "$(crontab -l 2>/dev/null)" = "$DESIRED" ] || die "crontab после записи не совпал с ожидаемым"

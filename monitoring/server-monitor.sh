@@ -155,14 +155,25 @@ fi
 # Найдя failed, он не только сообщает, но и поднимает юнит: отказ Long Poll
 # обычно переживаемый (сеть, работы у VK), а ручной reset-failed означал бы
 # «бот лежит, пока владелец не прочтёт сообщение».
-if command -v systemctl >/dev/null 2>&1 && systemctl is-failed --quiet server-monitor-bot 2>/dev/null; then
+BOT_DISABLED_FLAG="${BOT_DISABLED_FLAG:-/root/monitoring/vk-bot.disabled}"
+if command -v systemctl >/dev/null 2>&1 && [ ! -f "$BOT_DISABLED_FLAG" ] \
+   && systemctl is-failed --quiet server-monitor-bot 2>/dev/null; then
+    # Поднимаем и только ПОТОМ говорим, что получилось: reset-failed стирает
+    # единственную улику, и если старт не удался (юнит замаскирован, файл юнита
+    # снесён, нет прав), то при рапорте «поднимаю» следующий прогон уже ничего не
+    # увидел бы — is-failed на inactive-юните молчит.
+    systemctl reset-failed server-monitor-bot 2>/dev/null
+    systemctl start server-monitor-bot 2>/dev/null
+    if systemctl is-active --quiet server-monitor-bot 2>/dev/null; then
+        bot_unit_note="🔴 VK-бот был в failed — команды не доходили; поднял, сейчас работает"
+    else
+        bot_unit_note="🔴 VK-бот в failed, и поднять его не удалось — команды владельца не доходят"
+        echo "server-monitor: не смог поднять server-monitor-bot" >&2
+    fi
     if should_alert "bot_unit"; then
         alerts="${alerts}
-🔴 VK-бот был в failed — команды не доходили; поднимаю"
+${bot_unit_note}"
     fi
-    systemctl reset-failed server-monitor-bot 2>/dev/null
-    systemctl start server-monitor-bot 2>/dev/null \
-        || echo "server-monitor: не смог поднять server-monitor-bot" >&2
 fi
 
 # === 4. Проверка контейнеров ===
