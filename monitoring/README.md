@@ -299,8 +299,9 @@ nginx, не обновляется метка или пропал сам cron.
 
 ```bash
 install -m 0644 /home/deploy/todo/monitoring/server-monitor-bot.service \
-        /etc/systemd/system/server-monitor-bot.service
-systemctl daemon-reload && systemctl restart server-monitor-bot
+        /etc/systemd/system/server-monitor-bot.service \
+  && systemctl daemon-reload \
+  && systemctl reset-failed server-monitor-bot; systemctl restart server-monitor-bot
 ```
 
 **Как устроен сам ключ — проверено не до конца.** Ключ сообщества заводится в
@@ -576,9 +577,17 @@ curl». В лог и в текст сообщения токен тоже не �
 
 ```bash
 install -m 0644 /home/deploy/todo/monitoring/server-monitor-bot.service \
-        /etc/systemd/system/server-monitor-bot.service
-systemctl daemon-reload && systemctl restart server-monitor-bot
+        /etc/systemd/system/server-monitor-bot.service \
+  && systemctl daemon-reload \
+  && systemctl reset-failed server-monitor-bot; systemctl restart server-monitor-bot
 ```
+
+Команды сцеплены намеренно: если `install` не отработал (не та ветка на хосте,
+нет прав, запуск до деплоя), рестарт поднял бы бота на **прежнем** юните, и по
+двум успешным «молчаниям» это легко пропустить. `reset-failed` стоит перед
+рестартом потому, что юнит, уже упёршийся в `StartLimitBurst`, отвечает на
+`restart` отказом «start request repeated too quickly» — а это ровно то
+состояние, ради которого ветка и делалась.
 
 **`setup-monitoring.sh` больше не установщик.** Он затирал root-crontab целиком,
 когда `crontab -l` не читался, и ставил cron на каталог без `monitor.conf` и
@@ -636,11 +645,11 @@ external». Если роль хоста действительно меняет
 «15 с» в формуле ниже, и без потолка он выводил бы юнит из окна так же, как
 неограниченная пауза. Причина —
 арифметика юнита. Живость проверяется после возврата запроса, поэтому между двумя
-проверками может пройти пауза переподключения плюс два таймаута curl (15 с у
-вызова метода и 35 с у опроса). Худшая жизнь процесса равна
-`VK_LP_DEAD_AFTER + (VK_LP_RETRY_SLEEP + 50) + RestartSec`, то есть при потолках
-150 + 80 + 10 = 240 с; пять таких попыток — 1200 с, и они обязаны уместиться в
-`StartLimitIntervalSec` юнита (там 1500 с, с запасом). Не ограничить паузы — и
+проверками может пройти пауза переподключения плюс два таймаута curl (до 20 с у
+вызова метода — это потолок `VK_TIMEOUT` — и 35 с у опроса). Худшая жизнь
+процесса равна `VK_LP_DEAD_AFTER + (VK_LP_RETRY_SLEEP + 55) + RestartSec`, то
+есть при потолках 150 + 85 + 10 = 245 с; пять таких попыток — 1225 с, и они
+обязаны уместиться в `StartLimitIntervalSec` юнита (там 1500 с, с запасом). Не ограничить паузы — и
 вполне разумная настройка `VK_LP_RETRY_SLEEP=300` («не долбить общий токен»)
 снова вывела бы юнит из окна, то есть выключила бы обнаружение. Меняете ручки —
 пересчитайте окно в `server-monitor-bot.service`.
