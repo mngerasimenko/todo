@@ -72,8 +72,12 @@ MONITOR_CONTAINERS="todo-app"
 ALERT_STATE_FILE="$TMP/alert-state"
 EOF
 
-  unset STUB_VK STUB_LP STUB_RAM_PERCENT STUB_SWAP_PERCENT STUB_DISK_PERCENT \
-        STUB_CONTAINER_STATUS STUB_API_CODE STUB_API_JSON STUB_USAGESTATS STUB_ACTUATOR STUB_PG STUB_DOCKER_RESTART 2>/dev/null || true
+  # Сценарии идут в одном процессе, и `export` переживает teardown: переменная,
+  # забытая в этом списке, протекает в следующие сценарии. Набор был зелёным
+  # только из-за случайного алфавитного порядка имён.
+  unset STUB_VK STUB_LP STUB_LPPOLL STUB_RAM_PERCENT STUB_SWAP_PERCENT STUB_DISK_PERCENT \
+        STUB_CONTAINER_STATUS STUB_API_CODE STUB_API_JSON STUB_USAGESTATS STUB_ACTUATOR STUB_PG \
+        STUB_DOCKER_RESTART STUB_UNIT_STATE STUB_UNIT_START_FAILS 2>/dev/null || true
 }
 
 teardown() { [ -n "${TMP:-}" ] && rm -rf "$TMP"; }
@@ -794,6 +798,52 @@ t_reconnect_pause_is_respected() {
   local lp
   lp=$(grep -c '^lp$' "$TMP/events" 2>/dev/null) || lp=0
   [ "$lp" -le 4 ] || { fail "за 10 с выдачу Long Poll запрашивали $lp раз — паузы нет"; teardown; return; }
+  [ "$lp" -ge 1 ] || { fail "выдачу Long Poll не запрашивали ни разу — сценарий вырожден"; teardown; return; }
+  pass
+  teardown
+}
+
+# VK_TIMEOUT — четвёртая ручка той же арифметики окна юнита (она и есть «15 с» в
+# формуле), но потолка и проверки на число не имела: VK_TIMEOUT=300 выводит юнит
+# из окна так же, как это делала бы пауза переподключения, то есть выключает
+# обнаружение мёртвого бота через соседнюю строку конфига.
+t_vk_timeout_garbage_falls_back() {
+  setup "VK_TIMEOUT: нечисловое значение заменяется умолчанием"
+  conf_set 'VK_TIMEOUT=abc'
+  run_bot_func send_message "$PEER" "проверка"
+  grep -q -- "-m 15" "$TMP/curl.argv" 2>/dev/null \
+    || { fail "нечисловой VK_TIMEOUT ушёл в curl как есть — <<$(head -1 "$TMP/curl.argv")>>"; teardown; return; }
+  pass
+  teardown
+}
+
+t_vk_timeout_is_capped() {
+  setup "VK_TIMEOUT: слишком большое значение обрезается потолком"
+  conf_set 'VK_TIMEOUT=300'
+  run_bot_func send_message "$PEER" "проверка"
+  grep -q -- "-m 20" "$TMP/curl.argv" 2>/dev/null \
+    || { fail "VK_TIMEOUT=300 ушёл в curl как есть — окно юнита тогда не сходится: <<$(head -1 "$TMP/curl.argv")>>"; teardown; return; }
+  pass
+  teardown
+}
+
+# У пауз были только верхние границы, а ноль возвращает ровно тот дефект, против
+# которого они и поставлены: переподключение со скоростью сети по токену, общему
+# на пять отправителей портфеля. Ноль стоит в сценариях этого же набора — он и
+# будет первым, что скопируют в конфиг на хосте.
+t_zero_pause_is_lifted_to_one_second() {
+  setup "vk-bot: нулевая пауза переподключения поднимается до секунды"
+  export STUB_LPPOLL=failed2
+  conf_set 'VK_LP_DEAD_AFTER=300'
+  conf_set 'VK_LP_POLL_SLEEP=0'
+  conf_set 'VK_LP_RETRY_SLEEP=0'
+  run_bot_body 10
+  # Считать обращения бессмысленно: под Windows каждый вызов заглушки стоит
+  # полторы секунды, и разницу между нулём и секундой так не увидеть. Проверяем
+  # то, что действительно решает, — что значение поправлено и сказано вслух.
+  assert_err_contains "меньше 1 с — беру 1" || { teardown; return; }
+  local lp
+  lp=$(grep -c '^lp$' "$TMP/events" 2>/dev/null) || lp=0
   [ "$lp" -ge 1 ] || { fail "выдачу Long Poll не запрашивали ни разу — сценарий вырожден"; teardown; return; }
   pass
   teardown

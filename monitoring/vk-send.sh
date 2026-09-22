@@ -97,6 +97,21 @@ vk_response_ok() {
   printf '%s' "$1" | grep -q '"response"' && ! printf '%s' "$1" | grep -q '"error'
 }
 
+# Таймаут запроса. VK_TIMEOUT — ручка того же monitor.conf, и она входит в
+# арифметику окна StartLimitIntervalSec у бота: слагаемое «15 с» в его формуле —
+# это именно она. Без потолка VK_TIMEOUT=300 выводил бы юнит из окна так же, как
+# это делала бы неограниченная пауза переподключения, то есть выключал бы
+# обнаружение мёртвого бота через соседнюю строку конфига. Нормализуем на каждом
+# вызове, а не один раз при сорсинге: бот перечитывает конфиг (`reload_config`),
+# и разовая проверка значение бы не удержала.
+vk_timeout() {
+  local t="${VK_TIMEOUT:-15}"
+  case "$t" in ''|*[!0-9]*) t=15 ;; esac
+  [ "$t" -lt 1 ] && t=5
+  [ "$t" -gt 20 ] && t=20
+  printf '%s' "$t"
+}
+
 # Общая часть конфига curl для вызова метода API.
 vk_common_lines() {
   printf 'url = "https://api.vk.com/method/%s"\n' "$(vk_cfg_escape "$1")"
@@ -115,14 +130,14 @@ vk_api_post() {
     for p in "$@"; do
       printf 'data-urlencode = "%s=%s"\n' "${p%%=*}" "$(vk_cfg_escape "${p#*=}")"
     done
-  } | curl -sS -m "${VK_TIMEOUT:-15}" -K - 2>/dev/null
+  } | curl -sS -m "$(vk_timeout)" -K - 2>/dev/null
 }
 
 # GET по готовому URL — для опроса Long Poll, где в URL едет сессионный ключ.
 # Ключу в argv делать нечего ровно по той же причине, что и токену.
 vk_get_url() {
   printf 'url = "%s"\n' "$(vk_cfg_escape "$1")" \
-    | curl -sS -m "${2:-${VK_TIMEOUT:-15}}" -K - 2>/dev/null
+    | curl -sS -m "${2:-$(vk_timeout)}" -K - 2>/dev/null
 }
 
 # Отправка сообщения владельцу. 0 — VK подтвердил приём, 1 — не подтвердил, и
@@ -177,7 +192,7 @@ vk_send_message() {
              printf 'data-urlencode = "peer_id=%s"\n' "$(vk_cfg_escape "$peer")"
              printf 'data-urlencode = "random_id=%s"\n' "$(( RANDOM * 32768 + RANDOM ))"
              printf 'data-urlencode = "message@%s"\n' "$(vk_cfg_escape "$file")"
-           } | curl -sS -m "${VK_TIMEOUT:-15}" -K - 2>/dev/null )"
+           } | curl -sS -m "$(vk_timeout)" -K - 2>/dev/null )"
   rc=$?
   rm -f "$file"
   if [ "$rc" -ne 0 ]; then
