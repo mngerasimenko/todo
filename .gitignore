@@ -34,6 +34,9 @@ build/
 .env
 .env.production-*
 monitoring/monitor.conf
+# Копии конфига, снятые руками при ротации токена: в них лежит боевой секрет, а
+# каталог на проде — рабочая копия этого же публичного репозитория.
+monitoring/monitor.conf.bak-*
 firebase-service-account.json
 todolist-*-firebase-adminsdk-*.json
 /marketing/

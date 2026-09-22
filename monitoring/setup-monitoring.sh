@@ -20,16 +20,21 @@
 #   bash monitoring/install-portfolio-monitor.sh peer       # прод
 #   bash monitoring/install-portfolio-monitor.sh external   # стейдж
 # Установщик идемпотентен, метит свои строки, снимает только их, кладёт бэкап
-# crontab и сверяет записанное.
+# crontab и сверяет записанное. Но ведёт он ровно три строки: опрашивалку,
+# продление сертификатов и локальный прогон vpscan. Строки server-monitor.sh и
+# stats-report.sh и юнит server-monitor-bot он НЕ ставит — их кладут руками, и
+# точные команды тоже в README, разделе «Установка».
 
 cat >&2 <<'EOF'
 setup-monitoring.sh устарел и ничего не делает: он затирал root-crontab целиком,
 когда crontab -l не читался, и ставил cron на каталог без monitor.conf и
 vk-send.sh.
 
-Используй установщик портфельной опрашивалки — он ведёт и строку мониторинга:
+Используй установщик портфельной опрашивалки:
   bash monitoring/install-portfolio-monitor.sh peer       # прод
   bash monitoring/install-portfolio-monitor.sh external   # стейдж
-Подробности: monitoring/README.md, разделы «Установка» и «Обращение с секретами».
+Он ведёт три строки: опрашивалку, продление сертификатов и прогон vpscan. Строки
+server-monitor.sh и stats-report.sh и юнит server-monitor-bot ставятся руками —
+команды в monitoring/README.md, раздел «Установка».
 EOF
 exit 2
