@@ -1360,7 +1360,14 @@ t_fallback_fits_a_smaller_cron_wrapper() {
 
 echo "Тесты портфельной опрашивалки"
 # PM_TEST_FILTER=подстрока — прогнать только совпавшие (набор под Windows идёт минутами).
-for t in $(declare -F | awk '{print $3}' | grep '^t_' | grep -- "${PM_TEST_FILTER:-}"); do "$t"; done
+SELECTED="$(declare -F | awk '{print $3}' | grep '^t_' | grep -- "${PM_TEST_FILTER:-}")"
+if [ -n "${PM_TEST_FILTER:-}" ]; then
+  echo "ФИЛЬТР: ${PM_TEST_FILTER} — прогон частичный"
+  # Опечатка в фильтре иначе даёт «Пройдено: 0, провалено: 0» и код 0, то есть
+  # подтверждает починку, которую никто не проверял.
+  [ -n "$SELECTED" ] || { echo "ОШИБКА: фильтр «${PM_TEST_FILTER}» не выбрал ни одного сценария" >&2; exit 1; }
+fi
+for t in $SELECTED; do "$t"; done
 
 echo
 printf 'Пройдено: %d, провалено: %d\n' "$PASSED" "$FAILED"

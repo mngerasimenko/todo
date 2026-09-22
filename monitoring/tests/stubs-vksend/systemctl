@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Заглушка systemctl для набора отправки. Без неё сценарии server-monitor.sh
+# дёргали бы НАСТОЯЩИЙ systemctl: набор разрешено гонять на хосте, и прогон под
+# root снял бы `failed` с боевого юнита бота, то есть съел бы улику.
+#
+# Состояние живёт в $STUB_STATE/unit.state, начальное задаётся STUB_UNIT_STATE
+# (active | failed | inactive). STUB_UNIT_START_FAILS=1 — старт не удаётся.
+# Вызовы пишутся в $STUB_STATE/systemctl.argv.
+
+[ -n "${STUB_STATE:-}" ] && printf '%s\n' "$*" >> "${STUB_STATE}/systemctl.argv"
+
+state_file="${STUB_STATE:-/tmp}/unit.state"
+[ -f "$state_file" ] || printf '%s' "${STUB_UNIT_STATE:-active}" > "$state_file"
+state="$(cat "$state_file" 2>/dev/null)"
+
+cmd="${1:-}"
+case "$cmd" in
+  is-failed)
+    [ "$state" = "failed" ] && exit 0
+    exit 1
+    ;;
+  is-active)
+    [ "$state" = "active" ] && exit 0
+    exit 1
+    ;;
+  reset-failed)
+    # Ровно как настоящий: снимает failed, но юнит при этом не запускает.
+    [ "$state" = "failed" ] && printf '%s' "inactive" > "$state_file"
+    exit 0
+    ;;
+  start)
+    if [ "${STUB_UNIT_START_FAILS:-0}" = "1" ]; then
+      echo "Job for server-monitor-bot.service failed" >&2
+      exit 1
+    fi
+    printf '%s' "active" > "$state_file"
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac

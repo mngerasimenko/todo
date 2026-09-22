@@ -1,20 +1,81 @@
 #!/bin/bash
-# Скрипт мониторинга сервера — отправляет алерты в Telegram
-# Устанавливается через cron: */5 * * * * /root/monitoring/server-monitor.sh
+# Скрипт мониторинга сервера — отправляет алерты в VK (Telegram с российских
+# хостов заблокирован и не используется).
+#
+# Строка cron на проде (с редиректом обоих потоков в файл — MTA на машине нет,
+# и без редиректа причина несостоявшейся отправки уходила бы в никуда):
+#   */5 * * * * /home/deploy/todo/monitoring/server-monitor.sh >> /var/log/server-monitor.log 2>&1
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Конфига нет в git: на пересобранном хосте его кладут руками, и забыть это
+# легко. Без него пусты и учётка VK, и пороги: каждое сравнение падает в лог
+# «integer expression expected», ни один алерт не срабатывает, а прогон выходит
+# с нулём — то есть мониторинг выключен и молчит об этом ровно как исправный.
+if [ ! -r "${SCRIPT_DIR}/monitor.conf" ]; then
+    echo "server-monitor: нет ${SCRIPT_DIR}/monitor.conf — ни порогов, ни учётки VK" >&2
+    exit 1
+fi
 source "${SCRIPT_DIR}/monitor.conf"
-ALERT_STATE_FILE="/tmp/server-monitor-alert-state"
+# Отправка — общая с stats-report.sh и vk-bot.sh (токен мимо argv, ответ VK
+# проверяется). Без неё алерты уходить не могут: выходим громко, а не молча —
+# тихий отказ мониторинга и есть та беда, от которой он поставлен.
+if [ ! -r "${SCRIPT_DIR}/vk-send.sh" ]; then
+    echo "server-monitor: нет ${SCRIPT_DIR}/vk-send.sh — отправлять алерты нечем" >&2
+    exit 1
+fi
+# shellcheck source=monitoring/vk-send.sh
+source "${SCRIPT_DIR}/vk-send.sh"
+# Читаемость файла — ещё не пригодность: пустой или недописанный файл
+# сорсится успешно, а отправка падает с «command not found» на первом же
+# алерте. Требуем саму функцию.
+if ! declare -F vk_send_message >/dev/null; then
+    echo "server-monitor: ${SCRIPT_DIR}/vk-send.sh не дал vk_send_message — отправлять нечем" >&2
+    exit 1
+fi
+# Состояние кулдауна переопределяется конфигом (им пользуются тесты). По
+# умолчанию — каталог, куда пишет только root: в общем /tmp любой локальный
+# пользователь с shell'ом мог заранее положить отметку с датой из будущего и
+# навсегда заглушить алерт, а на симлинке — заставить root обрезать чужой файл.
+# После этого изменения отметки ещё и несут доставку (недоставленный алерт их
+# снимает), так что чужая запись сюда тем более не годится.
+# Файл на месте — это ещё не конфиг: пустой или недописанный сорсится успешно,
+# и дальше пусты и учётка, и пороги. Без учётки отправлять некому — это отказ, и
+# сказать о нём надо вслух. А вот пороги имеют осмысленные умолчания (их же
+# печатает команда бота `/config`), поэтому отсутствие порога в конфиге — не
+# ошибка: подставляем то же значение, что показывает бот. Требовать их наличия
+# нельзя — хост без swap законно обходится без SWAP_WARN, и жёсткая проверка
+# выключила бы там весь мониторинг каждые пять минут.
+if [ -z "${VK_TOKEN:-}" ] || [ -z "${VK_PEER_ID:-}" ]; then
+    echo "server-monitor: в ${SCRIPT_DIR}/monitor.conf нет учётки VK — сообщать о находках некому" >&2
+    exit 1
+fi
+RAM_WARN="${RAM_WARN:-80}"
+SWAP_WARN="${SWAP_WARN:-50}"
+DISK_WARN="${DISK_WARN:-85}"
+
+ALERT_STATE_FILE="${ALERT_STATE_FILE:-/var/lib/server-monitor/alert-state}"
+ALERT_STATE_DIR="$(dirname "$ALERT_STATE_FILE")"
+if [ ! -d "$ALERT_STATE_DIR" ]; then
+    # Не создался — говорим и работаем дальше без кулдауна: повторяющийся алерт
+    # шумен, но виден, а тихо пропущенный — нет.
+    mkdir -p "$ALERT_STATE_DIR" 2>/dev/null \
+        && chmod 700 "$ALERT_STATE_DIR" 2>/dev/null \
+        || echo "server-monitor: нет каталога состояния ${ALERT_STATE_DIR} — кулдаун алертов не работает" >&2
+fi
+
+# Ключи алертов, попавшие в это сообщение: если отправка не дойдёт, их отметки
+# кулдауна снимаются — иначе недоставленный алерт молча пропадал бы на полчаса.
+ALERTED_KEYS=()
 
 send_alert() {
-    local message="$1"
-    local random_id=$((RANDOM * RANDOM))
-    curl -s --max-time 15 -X POST "https://api.vk.com/method/messages.send" \
-        -d "access_token=${VK_TOKEN}" \
-        -d "peer_id=${VK_PEER_ID}" \
-        -d "random_id=${random_id}" \
-        --data-urlencode "message=${message}" \
-        -d "v=${VK_API_VERSION}" > /dev/null 2>&1
+    local message="$1" k
+    if vk_send_message "$message"; then
+        return 0
+    fi
+    for k in "${ALERTED_KEYS[@]}"; do
+        rm -f "${ALERT_STATE_FILE}_${k}"
+    done
+    return 1
 }
 
 # Не спамить одинаковыми алертами.
@@ -35,6 +96,7 @@ should_alert() {
         fi
     fi
     echo "$now" > "$state_file"
+    ALERTED_KEYS+=("$alert_key")
     return 0
 }
 
@@ -81,6 +143,36 @@ if [ "$disk_percent" -ge "$DISK_WARN" ]; then
     if should_alert "disk"; then
         alerts="${alerts}
 ⚠️ Disk: ${disk_percent}% (${disk_used}/${disk_total})"
+    fi
+fi
+
+# === 3.5. Юнит VK-бота ===
+# Бот с этой ветки честно выходит, когда Long Poll мёртв, и systemd после
+# нескольких попыток уводит юнит в failed. Само по себе это ничего не сообщает:
+# бот и в рабочем состоянии молчит неделями, так что мёртвый юнит неотличим от
+# исправной тишины — та самая беда, против которой поставлен весь мониторинг.
+# Смотрит за ним этот скрипт: он ходит каждые пять минут, и канал у него свой.
+# Найдя failed, он не только сообщает, но и поднимает юнит: отказ Long Poll
+# обычно переживаемый (сеть, работы у VK), а ручной reset-failed означал бы
+# «бот лежит, пока владелец не прочтёт сообщение».
+BOT_DISABLED_FLAG="${BOT_DISABLED_FLAG:-/root/monitoring/vk-bot.disabled}"
+if command -v systemctl >/dev/null 2>&1 && [ ! -f "$BOT_DISABLED_FLAG" ] \
+   && systemctl is-failed --quiet server-monitor-bot 2>/dev/null; then
+    # Поднимаем и только ПОТОМ говорим, что получилось: reset-failed стирает
+    # единственную улику, и если старт не удался (юнит замаскирован, файл юнита
+    # снесён, нет прав), то при рапорте «поднимаю» следующий прогон уже ничего не
+    # увидел бы — is-failed на inactive-юните молчит.
+    systemctl reset-failed server-monitor-bot 2>/dev/null
+    systemctl start server-monitor-bot 2>/dev/null
+    if systemctl is-active --quiet server-monitor-bot 2>/dev/null; then
+        bot_unit_note="🔴 VK-бот был в failed — команды не доходили; поднял, сейчас работает"
+    else
+        bot_unit_note="🔴 VK-бот в failed, и поднять его не удалось — команды владельца не доходят"
+        echo "server-monitor: не смог поднять server-monitor-bot" >&2
+    fi
+    if should_alert "bot_unit"; then
+        alerts="${alerts}
+${bot_unit_note}"
     fi
 fi
 

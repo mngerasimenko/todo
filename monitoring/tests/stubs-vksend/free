@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Заглушка free: в Git Bash под Windows её нет вовсе, а на хосте значения
+# настоящие и тест зависел бы от того, сколько памяти занято прямо сейчас.
+# Доли задаются STUB_RAM_PERCENT и STUB_SWAP_PERCENT.
+
+ram_total=1000000
+swap_total=1000000
+ram_used=$(( ram_total * ${STUB_RAM_PERCENT:-10} / 100 ))
+swap_used=$(( swap_total * ${STUB_SWAP_PERCENT:-0} / 100 ))
+
+# -m печатает мегабайты; скрипты берут поля по номерам, значения делим на 1024.
+if [ "${1:-}" = "-m" ]; then
+  ram_total=$(( ram_total / 1024 )); ram_used=$(( ram_used / 1024 ))
+  swap_total=$(( swap_total / 1024 )); swap_used=$(( swap_used / 1024 ))
+fi
+
+printf '%s\n' "               total        used        free      shared  buff/cache   available"
+printf 'Mem:      %10d  %10d  %10d           0           0  %10d\n' \
+  "$ram_total" "$ram_used" "$(( ram_total - ram_used ))" "$(( ram_total - ram_used ))"
+printf 'Swap:     %10d  %10d  %10d\n' "$swap_total" "$swap_used" "$(( swap_total - swap_used ))"

@@ -16,6 +16,14 @@ case "${1:-}" in
       exit 1
     fi
     cat "$f"
+    # STUB_CRONTAB_MUTATE=<строка> — таблицу правит кто-то ещё между чтением и
+    # записью. Дописываем ПОСЛЕ выдачи, чтобы первый `crontab -l` вернул прежнее
+    # содержимое, а следующий — уже изменённое: так выглядит чужая правка,
+    # попавшая в окно установки.
+    if [ -n "${STUB_CRONTAB_MUTATE:-}" ]; then
+      printf '%s\n' "$STUB_CRONTAB_MUTATE" >> "$f"
+      unset STUB_CRONTAB_MUTATE
+    fi
     ;;
   -)
     if [ "${STUB_CRONTAB:-}" = "write_error" ]; then

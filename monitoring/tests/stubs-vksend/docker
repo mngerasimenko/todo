@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Заглушка docker для тестов старых отправителей: контейнеры «живы», Postgres
+# принимает соединения, actuator отдаёт заранее заданные числа.
+
+[ -n "${STUB_STATE:-}" ] && printf '%s\n' "$*" >> "${STUB_STATE}/docker.argv"
+
+case "$1" in
+  inspect)
+    # docker inspect -f '{{.State.Status}}' <container>
+    printf '%s\n' "${STUB_CONTAINER_STATUS:-running}"
+    exit 0
+    ;;
+  exec)
+    stats_json="${STUB_USAGESTATS:-}"
+    [ -n "$stats_json" ] || stats_json='{"period_hours":24,"users":{"total":7}}'
+    for a in "$@"; do
+      case "$a" in
+        pg_isready) printf '%s\n' "${STUB_PG:-/var/run/postgresql:5432 - accepting connections}"; exit 0 ;;
+        # STUB_ACTUATOR=down — actuator не ответил: wget в скрипте отдаёт пустоту.
+        *usagestats*) [ "${STUB_ACTUATOR:-up}" = "down" ] || printf '%s\n' "$stats_json"; exit 0 ;;
+        *jvm.memory.used*area:heap*) printf '%s\n' '{"measurements":[{"statistic":"VALUE","value":1.0E8}]}'; exit 0 ;;
+        *jvm.memory.max*) printf '%s\n' '{"measurements":[{"statistic":"VALUE","value":1.0E9}]}'; exit 0 ;;
+        *jvm.memory.used*) printf '%s\n' '{"measurements":[{"statistic":"VALUE","value":1.0E7}]}'; exit 0 ;;
+      esac
+    done
+    exit 0
+    ;;
+  restart)
+    # STUB_DOCKER_RESTART=fail - демон отказался поднимать контейнер.
+    if [ "${STUB_DOCKER_RESTART:-ok}" = "fail" ]; then
+      echo "Error response from daemon: cannot restart container $2" >&2
+      exit 1
+    fi
+    printf '%s\n' "$2"
+    exit 0
+    ;;
+  logs|stats)
+    printf '%s\n' "stub"
+    exit 0
+    ;;
+esac
+exit 0
