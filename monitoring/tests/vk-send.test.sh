@@ -411,7 +411,25 @@ t_no_account_is_loud() {
   conf_set 'VK_TOKEN=""'
   run_script server-monitor.sh
   assert_vk_count 0 || { teardown; return; }
-  assert_err_contains "УЧЁТКИ" && pass
+  [ "$RC" = "0" ] && { fail "прогон без токена отработал с нулём"; teardown; return; }
+  assert_err_contains "нет учётки VK" && pass
+  teardown
+}
+
+# Ветка «НЕТ УЧЁТКИ» внутри самой отправки: скрипты до неё теперь не доходят
+# (проверка значений валит их раньше), но функция общая, и её зовут напрямую —
+# без этого сценария путь остался бы непокрытым.
+t_send_without_account_is_loud() {
+  setup "vk_send_message без токена: отказ сказан вслух и код возврата ненулевой"
+  PATH="$STUBS:$PATH" timeout 20 bash -c '
+    . "$1"
+    VK_TOKEN="" VK_PEER_ID="42"
+    vk_send_message "текст"
+  ' _ "$MON/vk-send.sh" > "$TMP/run.out" 2> "$TMP/run.err"
+  RC=$?
+  assert_rc 1 || { teardown; return; }
+  assert_vk_count 0 || { teardown; return; }
+  assert_err_contains "НЕТ УЧЁТКИ" && pass
   teardown
 }
 
@@ -462,6 +480,7 @@ t_vk_bot_longpoll_rejected_gives_up() {
   conf_set 'VK_LP_RETRY_SLEEP=0'
   conf_set 'VK_LP_MAX_FAILURES=2'
   conf_set 'VK_LP_POLL_SLEEP=0'
+  conf_set 'VK_LP_DEAD_AFTER=0'
   run_bot_body 60
   [ "$RC" = "124" ] && { fail "бот крутится вечно: юнит остаётся active, отказ не виден"; teardown; return; }
   assert_rc 1 || { teardown; return; }
@@ -478,6 +497,7 @@ t_vk_bot_longpoll_garbage_is_loud() {
   conf_set 'VK_LP_RETRY_SLEEP=0'
   conf_set 'VK_LP_MAX_FAILURES=2'
   conf_set 'VK_LP_POLL_SLEEP=0'
+  conf_set 'VK_LP_DEAD_AFTER=0'
   run_bot_body 60
   [ "$RC" = "124" ] && { fail "бот не завершился на мусорном ответе — горячий цикл без задержки"; teardown; return; }
   assert_err_contains "Long Poll" && pass
@@ -508,7 +528,10 @@ ${long}"
 t_truncated_cyrillic_stays_valid_utf8() {
   setup "обрезка кириллицы не рвёт символ: битый UTF-8 VK отверг бы целиком"
   local long
-  long="$(printf 'я%.0s' $(seq 1 4000))"
+  # Префикс нечётной длины обязателен: без него 3400 байт делятся на двухбайтную
+  # «я» нацело, разрез приходится ровно на границу символа, и сценарий остаётся
+  # зелёным даже без починки — проверено откатом 22.09.
+  long="x$(printf 'я%.0s' $(seq 1 4000))"
   # Локаль cron — C, и в ней bash режет байты, а не символы: под UTF-8-локалью
   # разработчика этот дефект не воспроизводится вовсе.
   export LC_ALL=C
@@ -560,6 +583,73 @@ t_vk_garbage_response_is_rejected() {
   export STUB_VK=garbage
   run_script server-monitor.sh
   assert_err_contains "VK отверг" && pass
+  teardown
+}
+
+# Валидный JSON, который не является ответом Long Poll: ошибка VK, ответ капчи,
+# заглушка провайдера. У него есть разбираемое тело, поэтому проверка «оба поля
+# пусты» его пропускала — и опрос возвращался мгновенно, без паузы и без строки
+# в journal. Признак настоящего ответа один: в нём есть ts.
+t_vk_bot_longpoll_json_without_ts_is_loud() {
+  setup "vk-bot: JSON без ts — это отказ, а не «обновлений нет»"
+  export STUB_LPPOLL=jsonerr
+  conf_set 'VK_LP_MAX_FAILURES=2'
+  conf_set 'VK_LP_POLL_SLEEP=0'
+  conf_set 'VK_LP_DEAD_AFTER=0'
+  run_bot_body 60
+  [ "$RC" = "124" ] && { fail "бот не завершился — горячий цикл на ответе без ts"; teardown; return; }
+  assert_err_contains "Long Poll" && pass
+  teardown
+}
+
+# Мусор в ручке потолка раньше выключал бы сам потолок: сравнение падает с
+# «integer expression expected» и трактуется как «ещё не пора».
+t_vk_bot_bad_knob_falls_back_to_default() {
+  setup "vk-bot: нечисловая ручка потолка не выключает потолок молча"
+  export STUB_LP=reject
+  conf_set 'VK_LP_MAX_FAILURES=abc'
+  conf_set 'VK_LP_RETRY_SLEEP=0'
+  conf_set 'VK_LP_DEAD_AFTER=0'
+  run_bot_body 60
+  [ "$RC" = "124" ] && { fail "бот крутится вечно: потолок выключен мусорным значением"; teardown; return; }
+  assert_rc 1 && pass
+  teardown
+}
+
+# Конфиг есть, но пустой или недописанный — обычное состояние пересобранного
+# хоста, куда его кладут руками. Пороги тогда пусты, сравнения падают в лог,
+# алерты не срабатывают ни разу, а прогон выходит с нулём.
+t_server_monitor_empty_conf_is_loud() {
+  setup "server-monitor: конфиг без порогов и токена валит прогон, а не гасит алерты"
+  : > "$CONF"
+  run_script server-monitor.sh
+  [ "$RC" = "0" ] && fail "прогон с пустым конфигом отработал с нулём"
+  assert_vk_count 0 || { teardown; return; }
+  assert_err_contains "monitor.conf" && pass
+  teardown
+}
+
+t_vk_bot_empty_conf_exits() {
+  setup "vk-bot: пустой конфиг — выход, а не вечный цикл с пустым токеном"
+  : > "$CONF"
+  run_bot_body 30
+  [ "$RC" = "124" ] && { fail "бот не завершился при пустом конфиге"; teardown; return; }
+  assert_rc 1 && pass
+  teardown
+}
+
+# Текст сообщения в лог не попадает вовсе: в суточной сводке имена новых
+# пользователей стоят третьей строкой, то есть в любую «безопасную» выдержку с
+# начала, а /var/log на обоих хостах читают все локальные учётки.
+t_truncation_log_keeps_names_out() {
+  setup "обрезка: в лог идёт длина и факт, а не текст сообщения"
+  local long
+  long="$(printf 'ПОЛЬЗОВАТЕЛЬ-%s
+' $(seq 1 400))"
+  run_bot_func send_message "$PEER" "$long"
+  assert_vk_count 1 || { teardown; return; }
+  assert_err_contains "обрезано" || { teardown; return; }
+  assert_err_lacks "ПОЛЬЗОВАТЕЛЬ-1" && pass
   teardown
 }
 

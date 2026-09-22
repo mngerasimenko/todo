@@ -30,6 +30,15 @@ if ! declare -F vk_send_message >/dev/null; then
     exit 1
 fi
 
+# Файл на месте — это ещё не конфиг: пустой или недописанный сорсится успешно,
+# и дальше пусты токен, группа и адресат. Опрос Long Poll тогда вечно
+# возвращается с ошибкой, а процесс при этом не выходит — поэтому проверяем не
+# читаемость файла, а сами значения.
+if [ -z "${VK_TOKEN:-}" ] || [ -z "${VK_PEER_ID:-}" ] || [ -z "${VK_GROUP_ID:-}" ]; then
+    echo "vk-bot: в ${SCRIPT_DIR}/monitor.conf нет учётки VK, группы или адресата" >&2
+    exit 1
+fi
+
 reload_config() {
     source "${SCRIPT_DIR}/monitor.conf"
 }
@@ -190,7 +199,9 @@ cmd_logs() {
         send_message "$peer_id" "📋 Логи пусты"
         return
     fi
-    logs=$(echo "$logs" | head -c 3500)
+    # Граница символа, а не байта: битый UTF-8 VK отвергает целиком, и ответ
+    # на /logs пропал бы вместо того, чтобы прийти обрезанным.
+    logs=$(vk_utf8_cut "$logs" 3500)
     send_message "$peer_id" "📋 Логи todo-app (последние ${lines}):
 
 ${logs}"
@@ -203,7 +214,7 @@ cmd_errors() {
         send_message "$peer_id" "✅ Ошибок не найдено (последние 200 строк)"
         return
     fi
-    errors=$(echo "$errors" | head -c 3500)
+    errors=$(vk_utf8_cut "$errors" 3500)
     send_message "$peer_id" "⚠️ Ошибки todo-app:
 
 ${errors}"
@@ -372,25 +383,47 @@ fi
 # Main loop — VK Bots Long Poll
 echo "VK-бот запущен. Слушаю команды..."
 
-# Потолок неудач подряд. Без него отказ, который сам не пройдёт — отозванный
-# токен, забаненное сообщество, подменённый адрес Long Poll, — давал вечный
-# цикл: процесс жив, значит Restart=always не срабатывает, значит и
-# StartLimitBurst в юните не считает ничего, и `systemctl status` зелёный. Выход
-# с ненулевым кодом — единственный способ довести отказ до failed, то есть до
-# того места, где его видно. Паузы вынесены в переменные, чтобы набор тестов не
-# ждал реального времени; в бою их не трогают.
+# Отказ, который сам не пройдёт — отозванный токен, забаненное сообщество,
+# заблокированный адрес Long Poll, — давал вечный цикл: процесс жив, значит
+# Restart=always не срабатывает, значит и StartLimitBurst в юните не считает
+# ничего, и `systemctl status` зелёный. Выход с ненулевым кодом — единственный
+# способ довести отказ до failed, то есть до того места, где его видно.
+#
+# Меряем ВРЕМЯ без единого удачного опроса, а не число попыток: цена попытки —
+# таймаут curl (15 с у вызова метода, 35 с у опроса), поэтому при заблокированном
+# адресе пять попыток растягиваются на минуты, один процесс живёт дольше окна
+# StartLimitIntervalSec, и пять стартов в него не помещаются никогда. По времени
+# задержка выхода предсказуема, и окно юнита можно посчитать.
+#
+# Ручки читаются из конфига хоста и потому проверяются: нечисловое значение
+# превращало бы сравнение в «integer expression expected», то есть молча
+# выключало бы сам потолок. Пустое значение безопасно — его перекроет умолчание.
 LP_MAX_FAILURES="${VK_LP_MAX_FAILURES:-5}"
 LP_RETRY_SLEEP="${VK_LP_RETRY_SLEEP:-10}"
 LP_POLL_SLEEP="${VK_LP_POLL_SLEEP:-2}"
-lp_cycle_fail=0
+LP_DEAD_AFTER="${VK_LP_DEAD_AFTER:-120}"
+case "$LP_MAX_FAILURES" in ''|*[!0-9]*|0) LP_MAX_FAILURES=5 ;; esac
+case "$LP_RETRY_SLEEP"  in ''|*[!0-9]*) LP_RETRY_SLEEP=10 ;; esac
+case "$LP_POLL_SLEEP"   in ''|*[!0-9]*) LP_POLL_SLEEP=2 ;; esac
+case "$LP_DEAD_AFTER"   in ''|*[!0-9]*) LP_DEAD_AFTER=120 ;; esac
+
+lp_last_ok="$(date +%s)"
+
+# Вызывается на каждой неудаче: и при неподнявшемся подключении, и при
+# неудавшемся опросе. Пока хоть один опрос проходит, счётчик времени сбрасывается
+# и бот работает сколько угодно долго.
+lp_give_up_if_dead() {
+    local now
+    now="$(date +%s)"
+    if [ $(( now - lp_last_ok )) -gt "$LP_DEAD_AFTER" ]; then
+        vk_log "Long Poll не отвечает дольше ${LP_DEAD_AFTER} с — выхожу, чтобы юнит перешёл в failed"
+        exit 1
+    fi
+}
 
 while true; do
     if ! fetch_longpoll_server; then
-        lp_cycle_fail=$((lp_cycle_fail + 1))
-        if [ "$lp_cycle_fail" -ge "$LP_MAX_FAILURES" ]; then
-            vk_log "Long Poll не поднимается ${lp_cycle_fail} раз подряд — выхожу, чтобы юнит перешёл в failed"
-            exit 1
-        fi
+        lp_give_up_if_dead
         echo "Ошибка получения Long Poll сервера, повтор через ${LP_RETRY_SLEEP} с..."
         sleep "$LP_RETRY_SLEEP"
         continue
@@ -401,10 +434,8 @@ while true; do
 
     echo "Long Poll подключён: ts=${lp_ts}"
 
-    # Успел ли хоть один опрос этой сессии: по нему решаем, сбрасывать ли счётчик
-    # неудачных подключений. Сессия, в которой не удалось ничего, — это отказ, а
-    # не «поработали и переподключились».
-    lp_session_ok=0
+    # Счётчик неудач подряд решает только одно — когда перевыпустить сессионный
+    # ключ. Жив ли бот вообще, решает время с последнего удачного опроса.
     lp_fail=0
 
     while true; do
@@ -417,6 +448,7 @@ while true; do
         if [ "$poll_rc" -ne 0 ] || [ -z "$response" ]; then
             lp_fail=$((lp_fail + 1))
             [ "$lp_fail" = 1 ] && vk_log "Long Poll: опрос не удался (rc=${poll_rc}, ответ пуст) — повторяю"
+            lp_give_up_if_dead
             if [ "$lp_fail" -ge "$LP_MAX_FAILURES" ]; then
                 vk_log "Long Poll: ${lp_fail} неудачных опросов подряд — переподключаюсь"
                 break
@@ -434,15 +466,19 @@ while true; do
         new_ts=$(echo "$response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ts',''))" 2>/dev/null)
         count=$(echo "$response" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('updates', [])))" 2>/dev/null)
 
-        # Ответ пришёл, но это не JSON Long Poll: страница 502 от провайдера,
-        # капча, заглушка хостера. Раньше такой ответ проваливался сквозь все три
-        # проверки и возвращал управление на опрос НЕМЕДЛЕННО — бот молотил VK без
-        # единой паузы и без строки в journal, съедая ядро машины, которую сторожит.
-        if [ -z "$new_ts" ] && [ -z "$count" ]; then
+        # Ответ пришёл, но это не ответ Long Poll: страница 502 от провайдера,
+        # капча, заглушка хостера — или разбираемый JSON с ошибкой VK. Признак
+        # один: у настоящего ответа ВСЕГДА есть ts. Судить по `updates` нельзя —
+        # для любого разобранного JSON их длина равна нулю, то есть непуста, и
+        # такой ответ проваливался сквозь все проверки, возвращая управление на
+        # опрос немедленно: бот молотил VK без пауз и без строки в journal,
+        # съедая ядро машины, которую сторожит. Ответы `failed` перехвачены выше.
+        if [ -z "$new_ts" ]; then
             lp_fail=$((lp_fail + 1))
-            [ "$lp_fail" = 1 ] && vk_log "Long Poll: ответ не разобран (не JSON) — <<$(printf '%s' "$response" | head -c 120)>>"
+            [ "$lp_fail" = 1 ] && vk_log "Long Poll: в ответе нет ts — <<$(printf '%s' "$response" | head -c 120)>>"
+            lp_give_up_if_dead
             if [ "$lp_fail" -ge "$LP_MAX_FAILURES" ]; then
-                vk_log "Long Poll: ${lp_fail} неразобранных ответов подряд — переподключаюсь"
+                vk_log "Long Poll: ${lp_fail} ответов подряд без ts — переподключаюсь"
                 break
             fi
             sleep "$LP_POLL_SLEEP"
@@ -450,7 +486,7 @@ while true; do
         fi
 
         # Опрос состоялся — значит и сессия, и подключение рабочие.
-        lp_session_ok=1
+        lp_last_ok="$(date +%s)"
         lp_fail=0
 
         if [ -n "$new_ts" ]; then
@@ -473,17 +509,7 @@ while true; do
         fi
     done
 
-    # Сессия, в которой не удалось ни одного опроса, — это отказ, а не штатное
-    # переподключение: считаем её вместе с неудачными подключениями, иначе бот
-    # вечно ходил бы по кругу «подключился — ничего не смог — переподключился».
-    if [ "$lp_session_ok" = "1" ]; then
-        lp_cycle_fail=0
-    else
-        lp_cycle_fail=$((lp_cycle_fail + 1))
-        if [ "$lp_cycle_fail" -ge "$LP_MAX_FAILURES" ]; then
-            vk_log "Long Poll: ${lp_cycle_fail} сессий подряд без единого удачного опроса — выхожу, чтобы юнит перешёл в failed"
-            exit 1
-        fi
-        sleep "$LP_RETRY_SLEEP"
-    fi
+    # Сессия кончилась переподключением. Если при этом ни один опрос так и не
+    # прошёл, время без удачи продолжает идти — выход решает оно.
+    lp_give_up_if_dead
 done

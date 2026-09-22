@@ -726,7 +726,7 @@ t_symlinked_conf_is_not_touched() {
   fi
   run_install external
   assert_rc 0 && assert_out_contains "симлинк" || { teardown; return; }
-  grep -q -- "600 $TMP/conf/monitor.conf" "$TMP/chmod.argv" 2>/dev/null     && fail "права симлинка всё-таки сузили"
+  grep -q -- "600 -- $TMP/conf/monitor.conf" "$TMP/chmod.argv" 2>/dev/null     && fail "права симлинка всё-таки сузили"
   pass
   teardown
 }
@@ -778,12 +778,78 @@ t_role_match_reinstall_is_allowed() {
   teardown
 }
 
+# Конфиг без ROLE — состояние пересобранного хоста и хоста, где конфиг положили
+# руками. Сверка по конфигу на нём молчит по построению, поэтому защита обязана
+# держаться на самих данных crontab.
+t_role_guard_holds_without_role_in_conf() {
+  setup "конфиг без ROLE: чужая роль всё равно отклоняется — защита не на конфиге"
+  printf '%s
+' "$LEGACY_CERT" > "$TMP/crontab"
+  run_install peer
+  assert_rc 0 || { teardown; return; }
+  # Убираем ROLE из конфига: так выглядит хост, которому конфиг писали руками.
+  grep -v '^ROLE=' "$TMP/conf/portfolio-monitor.conf" > "$TMP/conf/c.tmp" && mv "$TMP/conf/c.tmp" "$TMP/conf/portfolio-monitor.conf"
+  run_install external
+  [ "$RC" = "0" ] && { fail "установка с чужой ролью прошла — помеченные строки сняты и не возвращены"; teardown; return; }
+  assert_cron_has "certbot-renew.sh" || { teardown; return; }
+  assert_cron_has "run-local.ts" && pass
+  teardown
+}
+
+# Отказ не должен оставлять следов: root-копии, logrotate и отметка продления
+# раскладываются ниже по тексту, и после отказа их убирали бы руками, не зная,
+# что они появились.
+t_role_mismatch_installs_nothing() {
+  setup "отказ по роли не оставляет разложенных файлов"
+  run_install external
+  assert_rc 0 || { teardown; return; }
+  run_install peer
+  [ "$RC" = "0" ] && { fail "чужая роль принята"; teardown; return; }
+  [ -f "$TMP/conf/certbot-renew.sh" ] && { fail "root-копия certbot-renew.sh разложена, хотя установка отклонена"; teardown; return; }
+  [ -f "$TMP/logrotate/certbot-renew" ] && { fail "logrotate продления положен, хотя установка отклонена"; teardown; return; }
+  pass
+  teardown
+}
+
+# Испорченное значение роли — это сломанный конфиг, а не ошибка в команде.
+t_broken_role_in_conf_is_named_as_such() {
+  setup "испорченная роль в конфиге названа сломанным конфигом, а не ошибкой команды"
+  run_install external
+  assert_rc 0 || { teardown; return; }
+  sed -i 's/^ROLE=.*/ROLE=Externa1/' "$TMP/conf/portfolio-monitor.conf"
+  run_install external
+  [ "$RC" = "0" ] && { fail "установка с испорченной ролью прошла"; teardown; return; }
+  assert_out_contains "испорчена роль" && pass
+  teardown
+}
+
+# Фильтр, не выбравший ни одного сценария, обязан быть отказом: иначе опечатка в
+# нём даёт «Пройдено: 0, провалено: 0» и код 0 — тот самый тихий отказ, против
+# которого написан сторож «объявлено/отчиталось».
+t_empty_filter_selection_is_an_error() {
+  setup "фильтр без совпадений — ошибка набора, а не зелёный прогон"
+  local out rc
+  out="$(PM_TEST_FILTER=нетакогосценария bash "$REAL/tests/install-portfolio-monitor.test.sh" 2>&1)"
+  rc=$?
+  [ "$rc" = "0" ] && { fail "прогон с пустой выборкой вернул ноль — <<$(printf '%s' "$out" | tail -3)>>"; teardown; return; }
+  printf '%s' "$out" | grep -qF "не выбрал ни одного" || fail "нет объяснения, почему прогон пуст — <<$(printf '%s' "$out" | tail -3)>>"
+  pass
+  teardown
+}
+
 # ------------------------------------------------------------------ run ---
 
 echo "Тесты установщика опрашивалки"
 # PM_TEST_FILTER гоняет подмножество по куску имени — так закрепляют починку
 # откатом, не дожидаясь всего набора. Пустой фильтр = весь набор, как и раньше.
-for t in $(declare -F | awk '{print $3}' | grep '^t_' | grep -- "${PM_TEST_FILTER:-}"); do "$t"; done
+SELECTED="$(declare -F | awk '{print $3}' | grep '^t_' | grep -- "${PM_TEST_FILTER:-}")"
+if [ -n "${PM_TEST_FILTER:-}" ]; then
+  echo "ФИЛЬТР: ${PM_TEST_FILTER} — прогон частичный"
+  # Опечатка в фильтре иначе даёт «Пройдено: 0, провалено: 0» и код 0, то есть
+  # подтверждает починку, которую никто не проверял.
+  [ -n "$SELECTED" ] || { echo "ОШИБКА: фильтр «${PM_TEST_FILTER}» не выбрал ни одного сценария" >&2; exit 1; }
+fi
+for t in $SELECTED; do "$t"; done
 
 echo
 printf 'Пройдено: %d, провалено: %d, пропущено: %d\n' "$PASSED" "$FAILED" "$SKIPPED"

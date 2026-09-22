@@ -30,6 +30,14 @@ if ! declare -F vk_send_message >/dev/null; then
     exit 1
 fi
 
+# Файл на месте — это ещё не конфиг: пустой или недописанный сорсится успешно,
+# и дальше учётка VK пуста. Сводка тогда не уйдёт, а её отсутствие неотличимо от
+# исправной тишины — поэтому проверяем не читаемость файла, а сами значения.
+if [ -z "${VK_TOKEN:-}" ] || [ -z "${VK_PEER_ID:-}" ]; then
+    echo "stats-report: в ${SCRIPT_DIR}/monitor.conf нет учётки VK — сводку слать некому" >&2
+    exit 1
+fi
+
 # Получаем статистику из Actuator
 stats_json=$(docker exec todo-app wget -qO- "http://localhost:8091/actuator/usagestats/24" 2>/dev/null)
 

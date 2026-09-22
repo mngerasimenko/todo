@@ -31,6 +31,15 @@ ALERT_COOLDOWN=1800
 # Таймаут запроса к VK в секундах (vk-send.sh), по умолчанию 15.
 #VK_TIMEOUT=15
 
+# Ручки Long Poll у бота (vk-bot.sh). Значения по умолчанию подходят; нечисловое
+# значение игнорируется, берётся умолчание — иначе оно молча выключало бы потолок.
+# VK_LP_DEAD_AFTER   - секунд без удачного опроса до выхода, чтобы systemd увёл
+#                      юнит в failed (120)
+# VK_LP_MAX_FAILURES - неудач подряд до перевыпуска сессионного ключа (5)
+# VK_LP_RETRY_SLEEP  - пауза между попытками подключения, секунды (10)
+# VK_LP_POLL_SLEEP   - пауза между неудачными опросами, секунды (2)
+#VK_LP_DEAD_AFTER=120
+
 # Containers to monitor
 MONITOR_CONTAINERS="todo-app postgres-db nginx-proxy todo-web"
 

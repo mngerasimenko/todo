@@ -77,6 +77,10 @@ case "$url" in
     case "${STUB_LPPOLL:-ok}" in
       ok)      echo '{"ts":"176","updates":[]}' ;;
       garbage) echo '<html><head><title>502 Bad Gateway</title></head></html>' ;;
+      # Разбираемый JSON, но не ответ Long Poll: ошибка VK, капча, прокси. Для
+      # бота он опаснее мусора — тело парсится, значит проверки «не разобрали»
+      # его пропускают, а ts в нём нет.
+      jsonerr) echo '{"error":{"error_code":5,"error_msg":"User authorization failed"}}' ;;
       empty)   : ;;
       fail)    exit 7 ;;
     esac
