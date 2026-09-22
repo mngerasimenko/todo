@@ -81,6 +81,9 @@ case "$url" in
       # бота он опаснее мусора — тело парсится, значит проверки «не разобрали»
       # его пропускают, а ts в нём нет.
       jsonerr) echo '{"error":{"error_code":5,"error_msg":"User authorization failed"}}' ;;
+      # failed 2/3 — это СОСТОЯВШИЙСЯ опрос: VK ответил штатным телом и просит
+      # перевыпустить сессию. Канал при этом жив.
+      failed2) echo '{"failed":2}' ;;
       empty)   : ;;
       fail)    exit 7 ;;
     esac

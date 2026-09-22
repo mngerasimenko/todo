@@ -402,10 +402,25 @@ LP_MAX_FAILURES="${VK_LP_MAX_FAILURES:-5}"
 LP_RETRY_SLEEP="${VK_LP_RETRY_SLEEP:-10}"
 LP_POLL_SLEEP="${VK_LP_POLL_SLEEP:-2}"
 LP_DEAD_AFTER="${VK_LP_DEAD_AFTER:-120}"
-case "$LP_MAX_FAILURES" in ''|*[!0-9]*|0) LP_MAX_FAILURES=5 ;; esac
+case "$LP_MAX_FAILURES" in ''|*[!0-9]*|0|0*) LP_MAX_FAILURES=5 ;; esac
 case "$LP_RETRY_SLEEP"  in ''|*[!0-9]*) LP_RETRY_SLEEP=10 ;; esac
 case "$LP_POLL_SLEEP"   in ''|*[!0-9]*) LP_POLL_SLEEP=2 ;; esac
 case "$LP_DEAD_AFTER"   in ''|*[!0-9]*) LP_DEAD_AFTER=120 ;; esac
+# Цифры — ещё не число: значение длиннее шести знаков (промах по клавише,
+# вставленный таймстамп) переполняет сравнение, `[ … -gt … ]` падает с «integer
+# expression expected», ветка не берётся — и потолок оказывается выключен ровно
+# так же, как без валидации. Верхняя граница у DEAD_AFTER не косметическая: окно
+# StartLimitIntervalSec в юните посчитано под неё, и значение больше 150 с
+# означает, что пять рестартов перестанут умещаться в окно, то есть юнит снова
+# не дойдёт до failed. Об этой связке сказано в monitor.conf.example и README.
+[ "${#LP_MAX_FAILURES}" -gt 6 ] && LP_MAX_FAILURES=5
+[ "${#LP_RETRY_SLEEP}"  -gt 6 ] && LP_RETRY_SLEEP=10
+[ "${#LP_POLL_SLEEP}"   -gt 6 ] && LP_POLL_SLEEP=2
+[ "${#LP_DEAD_AFTER}"   -gt 6 ] && LP_DEAD_AFTER=120
+if [ "$LP_DEAD_AFTER" -gt 150 ]; then
+    vk_log "VK_LP_DEAD_AFTER=${LP_DEAD_AFTER} больше 150 с — беру 150: иначе юнит не успевает дойти до failed в своём окне"
+    LP_DEAD_AFTER=150
+fi
 
 lp_last_ok="$(date +%s)"
 
@@ -415,6 +430,11 @@ lp_last_ok="$(date +%s)"
 lp_give_up_if_dead() {
     local now
     now="$(date +%s)"
+    # Часы немонотонны: шаг NTP назад, восстановление снапшота, миграция ВМ. При
+    # отрицательной разнице потолок молча выключался бы на всю длину сдвига,
+    # поэтому отметку подтягиваем к текущему времени. Соседний сторож ловит этот
+    # же класс на маячках пира («маячок из будущего»).
+    [ "$now" -lt "$lp_last_ok" ] && lp_last_ok="$now"
     if [ $(( now - lp_last_ok )) -gt "$LP_DEAD_AFTER" ]; then
         vk_log "Long Poll не отвечает дольше ${LP_DEAD_AFTER} с — выхожу, чтобы юнит перешёл в failed"
         exit 1
@@ -459,6 +479,11 @@ while true; do
 
         failed=$(echo "$response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('failed',0))" 2>/dev/null)
         if [ "$failed" -gt 1 ] 2>/dev/null; then
+            # Это СОСТОЯВШИЙСЯ опрос: VK ответил штатным телом Long Poll, просто
+            # просит перевыпустить сессию. Отметку живости ставим до выхода из
+            # цикла — иначе устойчивый failed=2 выглядел бы как мёртвый канал, и
+            # бот через VK_LP_DEAD_AFTER объявил бы мёртвым исправный VK.
+            lp_last_ok="$(date +%s)"
             echo "Long Poll требует переподключения (failed=${failed})"
             break
         fi
@@ -506,10 +531,22 @@ while true; do
                     fi
                 fi
             done
+            # Команда владельца — это минуты работы без опросов: /status ходит в
+            # docker и psql, а зовут его как раз тогда, когда там всё висит.
+            # Без этой отметки время исполнения команды засчитывалось бы каналу
+            # в простой, и бот выходил бы посреди инцидента.
+            lp_last_ok="$(date +%s)"
         fi
     done
 
     # Сессия кончилась переподключением. Если при этом ни один опрос так и не
     # прошёл, время без удачи продолжает идти — выход решает оно.
     lp_give_up_if_dead
+    # Пауза обязательна ИМЕННО здесь. Ответ `failed: 2/3` (протухший ключ,
+    # рассинхрон ts) приходит от VK мгновенно, и выдача нового сервера — тоже:
+    # без этой строки переподключение крутилось бы со скоростью сети, долбя
+    # api.vk.com токеном, общим на пять отправителей портфеля. Ответ VK на такое
+    # — rate-limit на сам токен, то есть падение единственного канала
+    # оповещений целиком.
+    sleep "$LP_RETRY_SLEEP"
 done

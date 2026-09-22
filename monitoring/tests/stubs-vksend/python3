@@ -48,7 +48,10 @@ case "$prog" in
   *"'server'"*) field server ;;
   *"'key'"*)    field key ;;
   *"'ts'"*)     field ts ;;
-  *"'failed'"*) printf '%s\n' '0' ;;
+  # failed берём из тела, а не печатаем ноль: с константой ветка «VK просит
+  # перевыпустить сессию» была в наборе недостижима, и дефекты на ней прошли бы
+  # мимо CI, который эту ветку теперь гейтит.
+  *"'failed'"*) v="$(field failed)"; printf '%s\n' "${v:-0}" ;;
   *updates*)    printf '%s\n' '0' ;;
   *)            printf '%s\n' '' ;;
 esac

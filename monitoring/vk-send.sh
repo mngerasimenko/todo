@@ -43,6 +43,7 @@ vk_cfg_escape() {
 vk_redact() {
   local s="$1"
   [ -n "${VK_TOKEN:-}" ] && s="${s//${VK_TOKEN}/<VK_TOKEN>}"
+  [ -n "${LP_KEY:-}" ] && s="${s//${LP_KEY}/<LP_KEY>}"
   printf '%s' "$s"
 }
 
@@ -70,7 +71,7 @@ vk_utf8_cut() {
   out="$(printf '%s' "$s" | iconv -c -f UTF-8 -t UTF-8 2>/dev/null)"
   if [ -z "$out" ] && [ -n "$s" ]; then
     out="$s"
-    for i in 1 2 3; do
+    while :; do
       tail_byte="$(printf '%s' "$out" | tail -c 1 | LC_ALL=C od -An -tu1 | tr -d ' \n')"
       [ -n "$tail_byte" ] || break
       if [ "$tail_byte" -ge 192 ]; then
@@ -183,6 +184,10 @@ vk_send_message() {
   if vk_response_ok "$resp"; then
     return 0
   fi
-  vk_log "VK отверг отправку: $(printf '%s' "$resp" | head -c 200)"
+  # Не префикс тела, а только диагноз: в ответе VK на ошибку есть
+  # request_params — эхо запроса вместе с текстом сообщения, то есть именами
+  # пользователей из сводки. Тот же файл строкой выше объясняет, что ответ VK
+  # умеет процитировать часть запроса.
+  vk_log "VK отверг отправку: $(printf '%s' "$resp" | grep -o '"error_code":[0-9]*' | head -1) $(printf '%s' "$resp" | grep -o '"error_msg":"[^"]*"' | head -1)"
   return 1
 }

@@ -653,10 +653,65 @@ t_truncation_log_keeps_names_out() {
   teardown
 }
 
+# Несущая строка переделки потолка — отметка живости на удачном опросе. Без неё
+# бот выходил бы и при исправном канале, где обновлений просто нет: ложное
+# срабатывание тут дороже самого отказа, потому что оно постоянное.
+t_vk_bot_quiet_but_alive_channel_survives() {
+  setup "vk-bot: исправный опрос без обновлений не считается смертью канала"
+  export STUB_LPPOLL=ok
+  conf_set 'VK_LP_DEAD_AFTER=1'
+  conf_set 'VK_LP_POLL_SLEEP=0'
+  run_bot_body 12
+  [ "$RC" = "124" ] || fail "бот вышел с rc=$RC при живом опросе — потолок бьёт по исправному каналу"
+  pass
+  teardown
+}
+
+# failed=2 — это ответ VK, а не отказ: сессию перевыпускают, канал жив. Без
+# отметки живости здесь устойчивый failed объявил бы мёртвым исправный VK ровно
+# через VK_LP_DEAD_AFTER.
+t_vk_bot_failed_two_is_a_live_channel() {
+  setup "vk-bot: failed=2 — просьба перевыпустить сессию, а не смерть канала"
+  export STUB_LPPOLL=failed2
+  conf_set 'VK_LP_DEAD_AFTER=1'
+  conf_set 'VK_LP_POLL_SLEEP=0'
+  conf_set 'VK_LP_RETRY_SLEEP=0'
+  run_bot_body 12
+  [ "$RC" = "124" ] || fail "бот вышел с rc=$RC на failed=2 — исправный VK принят за мёртвый"
+  pass
+  teardown
+}
+
+# Запасной путь обрезки достижим только там, где нет iconv, — то есть в наборе
+# он не исполнялся ни разу, и откат этой починки прошёл бы незамеченным.
+t_utf8_cut_without_iconv_keeps_valid_utf8() {
+  setup "обрезка без iconv тоже не оставляет недописанный символ"
+  local out
+  out="$(PATH="$STUBS:$PATH" timeout 20 bash -c '
+    iconv() { return 127; }
+    . "$1"
+    LC_ALL=C
+    long="x$(printf "я%.0s" $(seq 1 200))"
+    vk_utf8_cut "$long" 101
+  ' _ "$MON/vk-send.sh" 2>/dev/null)"
+  [ -n "$out" ] || { fail "запасной путь отдал пустоту"; teardown; return; }
+  printf '%s' "$out" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1 \
+    || { fail "запасной путь отдал битый UTF-8 — <<$(printf '%s' "$out" | tail -c 6 | od -An -tx1)>>"; teardown; return; }
+  pass
+  teardown
+}
+
 # ------------------------------------------------------------------ run ---
 
 echo "Тесты отправки в VK (server-monitor, stats-report, vk-bot)"
-for t in $(declare -F | awk '{print $3}' | grep '^t_' | grep -- "${VK_TEST_FILTER:-}"); do "$t"; done
+SELECTED="$(declare -F | awk '{print $3}' | grep '^t_' | grep -- "${VK_TEST_FILTER:-}")"
+if [ -n "${VK_TEST_FILTER:-}" ]; then
+  echo "ФИЛЬТР: ${VK_TEST_FILTER} — прогон частичный"
+  # Опечатка в фильтре иначе даёт «Пройдено: 0, провалено: 0» и код 0, то есть
+  # подтверждает починку, которую никто не проверял.
+  [ -n "$SELECTED" ] || { echo "ОШИБКА: фильтр «${VK_TEST_FILTER}» не выбрал ни одного сценария" >&2; exit 1; }
+fi
+for t in $SELECTED; do "$t"; done
 
 echo
 printf 'Пройдено: %d, провалено: %d\n' "$PASSED" "$FAILED"

@@ -837,6 +837,57 @@ t_empty_filter_selection_is_an_error() {
   teardown
 }
 
+# Конфиг снесли при обслуживании, а помеченные строки в crontab остались — тогда
+# сверка по конфигу молчит, и отказ обязан прийти от самих данных. Важно, что он
+# приходит ДО раскладки: иначе «отклонённая» установка оставила бы на проде
+# конфиг чужой роли, и опрашивалка через пять минут работала бы как external,
+# молча потеряв проверки peer.
+t_role_guard_by_data_leaves_nothing_behind() {
+  setup "отказ по данным crontab приходит до раскладки: конфиг чужой роли не создан"
+  printf '%s\n' "$LEGACY_CERT" > "$TMP/crontab"
+  run_install peer
+  assert_rc 0 || { teardown; return; }
+  rm -f "$TMP/conf/portfolio-monitor.conf"
+  run_install external
+  [ "$RC" = "0" ] && { fail "установка с чужой ролью прошла"; teardown; return; }
+  [ -f "$TMP/conf/portfolio-monitor.conf" ] && { fail "создан конфиг роли external — опрашивалка сменила бы роль молча"; teardown; return; }
+  assert_cron_has "certbot-renew.sh" || { teardown; return; }
+  assert_cron_has "run-local.ts" && pass
+  teardown
+}
+
+# Выключатель сильнее придирок к конфигу: иначе выключить сломанную опрашивалку
+# было бы нельзя, пока конфиг не починишь, — а выключают её как раз потому, что
+# она сломана.
+t_broken_role_does_not_block_disabling() {
+  setup "испорченная роль при выключателе не мешает снять строку опрашивалки"
+  run_install external
+  assert_rc 0 || { teardown; return; }
+  sed -i 's/^ROLE=.*/ROLE=Externa1/' "$TMP/conf/portfolio-monitor.conf"
+  : > "$TMP/conf/portfolio-monitor.disabled"
+  run_install external
+  assert_rc 0 || { teardown; return; }
+  assert_cron_lacks "portfolio-monitor.sh" && pass
+  teardown
+}
+
+# Подмену файла между проверкой и chmod в sh не предотвратить, но она обязана
+# быть видна: каталог второй копии конфига принадлежит deploy, и «права сужены»
+# про подменённый файл было бы враньём о секрете.
+t_chmod_swap_is_noticed() {
+  setup "подмена файла во время chmod замечена, а не выдана за успех"
+  printf 'VK_TOKEN=x
+' > "$TMP/conf/monitor.conf"
+  /usr/bin/chmod 644 "$TMP/conf/monitor.conf" 2>/dev/null
+  export STUB_CHMOD_SWAP=1
+  run_install external
+  unset STUB_CHMOD_SWAP
+  assert_rc 0 || { teardown; return; }
+  assert_out_contains "подменили во время установки" || { teardown; return; }
+  assert_out_lacks "права сужены до 600" && pass
+  teardown
+}
+
 # ------------------------------------------------------------------ run ---
 
 echo "Тесты установщика опрашивалки"

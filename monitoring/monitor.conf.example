@@ -38,6 +38,8 @@ ALERT_COOLDOWN=1800
 # VK_LP_MAX_FAILURES - неудач подряд до перевыпуска сессионного ключа (5)
 # VK_LP_RETRY_SLEEP  - пауза между попытками подключения, секунды (10)
 # VK_LP_POLL_SLEEP   - пауза между неудачными опросами, секунды (2)
+# Больше 150 не принимается: окно StartLimitIntervalSec в юните бота
+# посчитано под эту величину, иначе юнит не успеет дойти до failed.
 #VK_LP_DEAD_AFTER=120
 
 # Containers to monitor

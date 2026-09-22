@@ -229,7 +229,9 @@ nginx, не обновляется метка или пропал сам cron.
 
 **Токен VK общий на весь портфель, и копий у него больше одной.** Прежняя редакция
 этого раздела утверждала «токен на хосте один» — это было неверно и служило ложным
-ориентиром при ротации. Как есть на 21.09.2026:
+ориентиром при ротации. Ниже — кто откуда читает; **полный перечень носителей
+(их шесть, включая забытый бэкап в зоне vpscan) — в таблице «Куда класть новый
+токен»** ниже по тексту. Как есть на 22.09.2026:
 
 | Где | Права | Кто читает оттуда токен VK |
 |---|---|---|
@@ -328,10 +330,17 @@ server-monitor-bot` → один прогон `install-portfolio-monitor.sh peer
    отката на два файла:
 
    ```bash
+   # на проде
    D=/root/rotation-$(date +%Y%m%d); mkdir -p "$D"
    install -m 600 /root/monitoring/monitor.conf             "$D/root-monitoring.monitor.conf"
    install -m 600 /home/deploy/todo/monitoring/monitor.conf "$D/deploy-todo.monitor.conf"
    install -m 600 /home/deploy/vpscan/.env                  "$D/vpscan.env"
+
+   # на стейдже — отдельным ssh: его конфиг тоже правится на шаге 4, и без этой
+   # копии у стейджевой опрашивалки не будет отката, а она вторая сторона
+   # взаимного сторожа
+   D=/root/rotation-$(date +%Y%m%d); mkdir -p "$D"
+   install -m 600 /root/monitoring/monitor.conf "$D/root-monitoring.monitor.conf"
    ```
 
    Рядом с оригиналом копии класть нельзя: `/home/deploy/todo` — рабочая копия
@@ -381,7 +390,9 @@ server-monitor-bot` → один прогон `install-portfolio-monitor.sh peer
      отправляет только при отказе и на здоровом хосте молчит неделями. Он читает
      тот же файл, что и `stats-report.sh`, — отдельно его не проверяют;
    - бот — `journalctl -u server-monitor-bot --since "-2 min"` **сразу после**
-     рестарта, строка `Long Poll подключён`. Без `--since` в выводе лежат
+     рестарта, строка `Long Poll подключён`. Если он всё же ушёл в `failed`,
+     его поднимет `server-monitor.sh` со следующим прогоном cron (до 5 минут) и
+     пришлёт об этом отдельное сообщение — это и есть сигнал «бот падал». Без `--since` в выводе лежат
      подключения прошлых недель, и их не отличить. С мёртвым ключом бот теперь не
      висит зелёным: он выходит по таймеру (`VK_LP_DEAD_AFTER`, по умолчанию 120 с)
      и через несколько рестартов уводит юнит в `failed` — то есть примерно через
@@ -393,18 +404,34 @@ server-monitor-bot` → один прогон `install-portfolio-monitor.sh peer
    - vpscan — локальный прогон 12:00 МСК и `/var/log/vpscan-scrape-local.log`;
      это единственная проверка, дающая ответ в тот же день.
 
-   Ждать сутки ради пульса не обязательно: работоспособность **нового ключа**
-   проверяется до раскладки read-only методом — в диалог при этом не уходит
-   ничего, запрет на тестовые сообщения не нарушается. Командой, а не
-   импровизацией (импровизация даст `curl "…?access_token=…"`, то есть токен в
-   `ps` у всех локальных пользователей):
+   **Read-only проверка ключа** — она не заменяет пульс, но отвечает сразу и
+   ничего не пишет в диалог, так что запрет на тестовые сообщения не нарушается.
+   Командой, а не импровизацией: импровизация даст `curl "…?access_token=…"`, то
+   есть токен в `ps` у всех локальных пользователей. Метод берём тот, которым
+   бот пользуется каждый день, — он заведомо работает с этим `group_id`.
+
+   Ключ, которого ещё нет в файле (шаг 3, до раскладки). Токен вводится с
+   клавиатуры и потому не попадает ни в argv, ни в историю root; порядок важен —
+   сорсинг конфига затёр бы введённое значение:
 
    ```bash
    cd /home/deploy/todo/monitoring && . ./monitor.conf && . ./vk-send.sh \
-     && vk_api_post groups.getById "group_id=${VK_GROUP_ID}"
+     && read -rsp 'новый токен: ' VK_TOKEN && echo \
+     && vk_api_post groups.getLongPollServer "group_id=${VK_GROUP_ID}"
    ```
 
-   Ответ с `"response"` и без `"error"` значит, что ключ живой. Но работоспособность **каждого читателя**
+   Ключ, уже разложенный в файл (после шага 4) — то же самое без `read`; такая
+   команда проверяет **тот ключ, что лежит в этом файле**, и ничего не говорит о
+   других копиях:
+
+   ```bash
+   cd /home/deploy/todo/monitoring && . ./monitor.conf && . ./vk-send.sh \
+     && vk_api_post groups.getLongPollServer "group_id=${VK_GROUP_ID}"
+   ```
+
+   Ответ с `"response"` и без `"error"` значит, что ключ живой. Ответ с
+   `"error_code":5` — ключ не принят; любой другой код ошибки означает спор о
+   параметрах вызова, а не мёртвый ключ. Но работоспособность **каждого читателя**
    такой вызов не доказывает: он проверяет ключ, а не то, что файл лежит там, где
    читатель его ищет.
 6. **Только когда отчитались все** — удалить старый ключ, а следом всё, где он ещё
@@ -536,9 +563,13 @@ external». Если роль хоста действительно меняет
 сколько секунд без единого удачного опроса Long Poll считать смертью и выходить,
 чтобы юнит дошёл до `failed` (120); `VK_LP_MAX_FAILURES` — сколько неудач подряд
 до перевыпуска сессионного ключа (5); `VK_LP_RETRY_SLEEP` и `VK_LP_POLL_SLEEP` —
-паузы между попытками (10 и 2). Нечисловое значение игнорируется с возвратом к
-умолчанию: иначе сравнение падало бы с «integer expression expected» и молча
-выключало бы сам потолок.
+паузы между попытками (10 и 2). Нечисловое значение и значение длиннее шести
+знаков игнорируются с возвратом к умолчанию: иначе сравнение падало бы с
+«integer expression expected» и молча выключало бы сам потолок. **`VK_LP_DEAD_AFTER`
+больше 150 с бот не примет** — обрежет до 150 и скажет в лог: окно
+`StartLimitIntervalSec` в юните посчитано под эту величину, и при большем
+значении пять рестартов перестают в него укладываться, то есть юнит снова не
+доходит до `failed`. Меняете её — пересчитайте окно в `server-monitor-bot.service`.
 
 Установщик идемпотентен. Перед раскаткой он гоняет тесты опрашивалки, а на проде —
 и продления сертификатов; в CI идут все четыре набора (джоба `test`), до сборки и деплоя.
@@ -629,7 +660,8 @@ touch /root/monitoring/portfolio-monitor.disabled
 cd /root/monitoring
 crontab -l > crontab.before-rollback                              # упала — дальше не идти
 grep -v 'portfolio-monitor:managed' crontab.before-rollback > crontab.rollback
-echo '*/5 * * * * /root/monitoring/external-monitor.sh' >> crontab.rollback
+grep -q 'external-monitor.sh' crontab.rollback \
+  || echo '*/5 * * * * /root/monitoring/external-monitor.sh' >> crontab.rollback
 diff crontab.before-rollback crontab.rollback                     # ушла строка опрашивалки, вернулась старая
 crontab crontab.rollback
 ```
@@ -640,7 +672,8 @@ crontab crontab.rollback
 cd /root/monitoring
 crontab -l > crontab.before-rollback                              # упала — дальше не идти
 grep -v 'portfolio-monitor:managed' crontab.before-rollback > crontab.rollback
-echo '0 */12 * * * docker exec certbot certbot renew --quiet && docker exec nginx-proxy nginx -s reload' >> crontab.rollback
+grep -q 'certbot renew --quiet' crontab.rollback \
+  || echo '0 */12 * * * docker exec certbot certbot renew --quiet && docker exec nginx-proxy nginx -s reload' >> crontab.rollback
 # Строка vpscan тоже помечена — без этой строки откат молча убил бы ежедневный
 # прогон сборщика тарифов, и заметили бы это только по неприходу сообщения в ВК.
 # Дописываем её, ТОЛЬКО если она не уцелела сама: пока установщик не взял её под
