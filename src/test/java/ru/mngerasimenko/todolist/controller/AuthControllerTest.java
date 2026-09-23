@@ -21,6 +21,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import static org.assertj.core.api.Assertions.assertThat;
+import ru.mngerasimenko.todolist.config.I18nConfig;
 import ru.mngerasimenko.todolist.config.TestSecurityConfig;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.dto.UserResponse;
@@ -53,7 +54,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Проверяют работу эндпоинтов аутентификации: login, register, refresh
  */
 @WebMvcTest(AuthController.class)
-@Import({ApiSecurityConfig.class, TestSecurityConfig.class})
+@Import({ApiSecurityConfig.class, TestSecurityConfig.class, I18nConfig.class})
 class AuthControllerTest {
 
     @Autowired
@@ -1023,7 +1024,10 @@ class AuthControllerTest {
         ForgotPasswordRequest request = new ForgotPasswordRequest(overlongEmail);
 
         // Act & Assert
+        // Язык сообщения задан явно: с прод-конфигурацией (I18nConfig) запрос без
+        // Accept-Language получил бы русский текст — заголовок здесь и фиксирует английский.
         mockMvc.perform(post("/api/auth/forgot-password")
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "en")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
@@ -1189,7 +1193,10 @@ class AuthControllerTest {
         ChangeEmailRequest request = new ChangeEmailRequest(overlongEmail);
 
         // Act & Assert
+        // Язык сообщения задан явно: с прод-конфигурацией (I18nConfig) запрос без
+        // Accept-Language получил бы русский текст — заголовок здесь и фиксирует английский.
         mockMvc.perform(post("/api/auth/change-email")
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "en")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())

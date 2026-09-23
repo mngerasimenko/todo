@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.web.servlet.MockMvc;
+import ru.mngerasimenko.todolist.config.I18nConfig;
 import ru.mngerasimenko.todolist.config.SuperAdminProperties;
 import ru.mngerasimenko.todolist.config.TestSecurityConfig;
 import ru.mngerasimenko.todolist.dto.SuggestionBulkResponse;
@@ -17,6 +18,9 @@ import ru.mngerasimenko.todolist.settings.SuggestionProperties;
 
 import java.util.List;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.containsStringIgnoringCase;
+import static org.hamcrest.Matchers.hasItem;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -34,7 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * что bound-валидация limit работает.
  */
 @WebMvcTest(SuggestionController.class)
-@Import({ApiSecurityConfig.class, TestSecurityConfig.class,
+@Import({ApiSecurityConfig.class, TestSecurityConfig.class, I18nConfig.class,
         ru.mngerasimenko.todolist.security.SuperAdminGuard.class})
 class SuggestionControllerTest {
 
@@ -102,6 +106,26 @@ class SuggestionControllerTest {
     void suggest_LimitAboveMax_Returns400() throws Exception {
         mockMvc.perform(get("/api/suggestions").param("prefix", "хле").param("limit", "100"))
                 .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * Второй путь валидации: параметр метода (@Validated + @Min) вместо @Valid @RequestBody.
+     * Здесь сообщение берётся из бандлов самого Hibernate Validator, но интерполятор общий —
+     * тест сторожит то, что MethodValidationPostProcessor получает валидатор из I18nConfig,
+     * а не автоконфигурируемый, и что язык ответа на этом пути тоже следует за Accept-Language.
+     */
+    @Test
+    void suggest_LimitBelowMin_MessageLanguageFollowsAcceptLanguage() throws Exception {
+        mockMvc.perform(get("/api/suggestions").param("prefix", "хле").param("limit", "0")
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "en"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Constraint Violation"))
+                .andExpect(jsonPath("$.message.*", hasItem(containsStringIgnoringCase("greater than or equal"))));
+
+        mockMvc.perform(get("/api/suggestions").param("prefix", "хле").param("limit", "0")
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "ru"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message.*", hasItem(containsString("должно быть не меньше"))));
     }
 
     @Test

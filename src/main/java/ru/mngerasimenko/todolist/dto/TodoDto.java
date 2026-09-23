@@ -31,12 +31,12 @@ public class TodoDto {
         this.userId = userId;
     }
 
-    @NotBlank(message = "Todo name is required")
-    @Size(min = 1, max = 120, message = "Todo name must be between 1 and 120 characters")
+    @NotBlank(message = "{validation.todo-name.required}")
+    @Size(min = 1, max = 120, message = "{validation.todo-name.size}")
     private String name;
 
     @JsonProperty("created_at")
-    @NotNull(message = "Created at is required")
+    @NotNull(message = "{validation.todo.created-at.required}")
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime createdAt;
 
@@ -44,7 +44,7 @@ public class TodoDto {
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime completedAt;
 
-    @NotNull(message = "Done status is required")
+    @NotNull(message = "{validation.todo.done.required}")
     private Boolean done;
 
     @JsonProperty("is_private")

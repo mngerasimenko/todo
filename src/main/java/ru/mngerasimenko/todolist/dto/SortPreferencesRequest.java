@@ -20,18 +20,18 @@ import lombok.NoArgsConstructor;
 public class SortPreferencesRequest {
 
     @Pattern(regexp = "^(MANUAL|ALPHABETICAL|CREATED_AT)$",
-            message = "Sort mode must be MANUAL, ALPHABETICAL or CREATED_AT")
+            message = "{validation.sort.mode.format}")
     private String listsSortMode;
 
     @Pattern(regexp = "^(ASC|DESC)$",
-            message = "Sort direction must be ASC or DESC")
+            message = "{validation.sort.direction.format}")
     private String listsSortDirection;
 
     @Pattern(regexp = "^(MANUAL|ALPHABETICAL|CREATED_AT)$",
-            message = "Sort mode must be MANUAL, ALPHABETICAL or CREATED_AT")
+            message = "{validation.sort.mode.format}")
     private String todosSortMode;
 
     @Pattern(regexp = "^(ASC|DESC)$",
-            message = "Sort direction must be ASC or DESC")
+            message = "{validation.sort.direction.format}")
     private String todosSortDirection;
 }

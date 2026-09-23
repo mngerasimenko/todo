@@ -17,8 +17,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class CreateListRequest {
 
-    @NotBlank(message = "List name is required")
-    @Size(min = 1, max = 128, message = "List name must be between 1 and 128 characters")
-    @Pattern(regexp = "^[^<>]*$", message = "Name contains invalid characters")
+    @NotBlank(message = "{validation.list-name.required}")
+    @Size(min = 1, max = 128, message = "{validation.list-name.size}")
+    @Pattern(regexp = "^[^<>]*$", message = "{validation.list-name.invalid-characters}")
     private String name;
 }

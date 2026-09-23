@@ -27,16 +27,16 @@ public class UserRequest {
     @Size(max = 128)
     private String authId;
 
-    @Email(message = "Invalid email format")
-    @NotBlank(message = "Email is required")
+    @Email(message = "{validation.email.format}")
+    @NotBlank(message = "{validation.email.required}")
     @Size(max = EmailValidation.MAX_LENGTH, message = EmailValidation.MAX_LENGTH_MESSAGE)
     private String email;
 
-    @NotBlank(message = "Password is required")
-    @Size(min = 5, max = 128, message = "Password must be between 5 and 128 characters")
+    @NotBlank(message = "{validation.password.required}")
+    @Size(min = 5, max = 128, message = "{validation.password.size}")
     private String password;
 
-    @NotBlank(message = "Name is required")
-    @Pattern(regexp = "^[^<>]*$", message = "Name contains invalid characters")
+    @NotBlank(message = "{validation.name.required}")
+    @Pattern(regexp = "^[^<>]*$", message = "{validation.name.invalid-characters}")
     private String name;
 }

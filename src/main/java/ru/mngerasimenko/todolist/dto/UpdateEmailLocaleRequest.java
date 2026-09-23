@@ -25,7 +25,7 @@ import ru.mngerasimenko.todolist.util.LocaleNormalizer;
 @NoArgsConstructor
 public class UpdateEmailLocaleRequest {
 
-    @NotBlank(message = "Locale is required")
+    @NotBlank(message = "{validation.locale.required}")
     @Size(max = LocaleValidation.MAX_LENGTH, message = LocaleValidation.MAX_LENGTH_MESSAGE)
     @Pattern(regexp = LocaleValidation.PATTERN, message = LocaleValidation.PATTERN_MESSAGE)
     private String locale;

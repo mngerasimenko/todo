@@ -13,6 +13,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class VerifyEmailRequest {
 
-    @NotBlank(message = "Token is required")
+    @NotBlank(message = "{validation.token.required}")
     private String token;
 }

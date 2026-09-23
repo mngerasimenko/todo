@@ -10,10 +10,10 @@ public final class EmailValidation {
     public static final int MAX_LENGTH = 128;
 
     /**
-     * Сообщение об ошибке для @Size. Плейсхолдер {max} подставляется
-     * Hibernate Validator из атрибута max= аннотации.
+     * Ключ сообщения об ошибке для @Size — текст в {@code messages_ru/en.properties}.
+     * Плейсхолдер {max} в тексте подставляется Hibernate Validator из атрибута max= аннотации.
      */
-    public static final String MAX_LENGTH_MESSAGE = "Email must not exceed {max} characters";
+    public static final String MAX_LENGTH_MESSAGE = "{validation.email.max-length}";
 
     private EmailValidation() {
     }
