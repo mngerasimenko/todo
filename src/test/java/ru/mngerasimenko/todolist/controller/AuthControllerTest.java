@@ -208,6 +208,46 @@ class AuthControllerTest {
     }
 
     @Test
+    void login_LocalizedSpringSecurityMessage_StillMasked() throws Exception {
+        // Spring Security переводит свои сообщения по Accept-Language (у него свой ru-бандл).
+        // Пока Android не слал заголовок, до нас доходило английское "Bad credentials", и
+        // подмена по строке работала. С заголовком приходит русский текст — и прежняя
+        // проверка по строке молча пропускала бы сырое сообщение фреймворка на экран входа.
+        LoginRequest loginRequest = LoginRequest.builder()
+                .email("test@example.com")
+                .password("wrongPassword")
+                .build();
+
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenThrow(new BadCredentialsException("Неверные учетные данные пользователя"));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "ru-RU")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Invalid email or password"));
+    }
+
+    @Test
+    void login_DisabledAccount_LooksExactlyLikeWrongPassword() throws Exception {
+        // Enumeration: заблокированный аккаунт не должен отличаться от неверного пароля.
+        LoginRequest loginRequest = LoginRequest.builder()
+                .email("test@example.com")
+                .password("correctPassword")
+                .build();
+
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenThrow(new org.springframework.security.authentication.DisabledException("User is disabled"));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Invalid email or password"));
+    }
+
+    @Test
     void login_InvalidCredentials_ReturnsUnauthorized() throws Exception {
         // Arrange
         LoginRequest loginRequest = LoginRequest.builder()

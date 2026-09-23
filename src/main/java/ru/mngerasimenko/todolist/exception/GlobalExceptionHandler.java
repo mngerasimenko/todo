@@ -206,12 +206,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<Map<String, Object>> handleBadCredentials(BadCredentialsException ex) {
         log.warn("Bad credentials: {}", ex.getMessage());
-        // Для логина — не раскрываем существование аккаунта
-        String message = ex.getMessage();
-        if (message != null && (message.contains("Bad credentials") || message.contains("bad credentials"))) {
-            message = "Invalid email or password";
-        }
-        return createErrorResponse(HttpStatus.UNAUTHORIZED, "Unauthorized", message);
+        // Текст не разбираем: сообщения фреймворка локализованы (у Spring Security свой
+        // ru-бандл), и подмена по английской строке молча переставала работать на запросе
+        // с Accept-Language: ru. Маскировка входа делается в AuthController, по факту
+        // неудачной аутентификации; сюда доходят уже наши собственные сообщения
+        // (refresh-токен истёк, отозван и подобные) — их и отдаём как есть.
+        return createErrorResponse(HttpStatus.UNAUTHORIZED, "Unauthorized", ex.getMessage());
     }
 
     @ExceptionHandler(AuthenticationException.class)

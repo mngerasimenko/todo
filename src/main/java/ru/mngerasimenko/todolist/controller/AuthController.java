@@ -11,6 +11,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -65,17 +66,32 @@ public class AuthController {
      * @param loginRequest данные для входа (username, password)
      * @return JWT токены и информация о пользователе
      */
+    /** Единый ответ на любую неудачу входа: существование аккаунта не раскрываем. */
+    static final String INVALID_CREDENTIALS_MESSAGE = "Invalid email or password";
+
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest loginRequest) {
         log.info("Попытка входа пользователя: {}", maskEmail(loginRequest.getEmail()));
 
         // Аутентификация пользователя (поле username содержит email)
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        loginRequest.getEmail(),
-                        loginRequest.getPassword()
-                )
-        );
+        Authentication authentication;
+        try {
+            authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            loginRequest.getEmail(),
+                            loginRequest.getPassword()
+                    )
+            );
+        } catch (AuthenticationException ex) {
+            // Маскируем здесь, а не разбором текста в GlobalExceptionHandler: текст Spring
+            // Security зависит от Accept-Language (у него свой ru-бандл), и на запросе с
+            // русским заголовком подмена по строке "Bad credentials" не срабатывала —
+            // пользователь видел сырое сообщение фреймворка. Тип исключения несёт всё
+            // нужное, язык на него не влияет. Заодно закрыт enumeration: заблокированный
+            // и несуществующий аккаунт отвечают тем же текстом, что и неверный пароль.
+            log.warn("Неудачный вход: {} ({})", maskEmail(loginRequest.getEmail()), ex.getClass().getSimpleName());
+            throw new BadCredentialsException(INVALID_CREDENTIALS_MESSAGE);
+        }
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
