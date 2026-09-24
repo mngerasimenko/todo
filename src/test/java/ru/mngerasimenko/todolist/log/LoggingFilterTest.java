@@ -146,20 +146,22 @@ class LoggingFilterTest {
     @Test
     @DisplayName("Подделка разделителей формата не дорисовывает полей")
     void separatorSpoofing_doesNotForgeFields() throws Exception {
-        String line = logLineFor("x, response status: 999", "29");
+        // Значение короче MAX_VALUE_LENGTH намеренно: длинное отсекается потолком длины, и
+        // тогда тест проходит, даже если посимвольный фильтр снять совсем.
+        String line = logLineFor("a,status: 9", "29");
 
         assertThat(line).containsOnlyOnce("response status:");
         assertThat(line).contains("app: ?/29");
-        assertThat(line).doesNotContain("999");
+        assertThat(line).doesNotContain("status: 9,");
     }
 
     @Test
     @DisplayName("Перевод строки в заголовке не создаёт вторую строку лога (log injection)")
     void newlineInHeader_isStripped() throws Exception {
-        String line = logLineFor("android", "29\nINFO подделанная строка лога");
+        // Короткий payload по той же причине, что и в тесте выше: иначе срабатывает потолок длины.
+        String line = logLineFor("android", "29\nINFO x");
 
         assertThat(line).doesNotContain("\n");
-        assertThat(line).doesNotContain("подделанная");
         assertThat(line).contains("app: android/?");
     }
 
@@ -186,6 +188,56 @@ class LoggingFilterTest {
 
         assertThat(line).contains("app: android/?");
         assertThat(line).doesNotContain("9".repeat(17));
+    }
+
+    @Test
+    @DisplayName("Метод запроса тоже недоверенный: длинный глагол помечается")
+    void longMethod_isMarked() throws Exception {
+        // Пока фильтр стоял внутри security-цепочки, нестандартный метод отбивал StrictHttpFirewall
+        // и до лога не доходил. @Order вынес фильтр наружу — и метод стал таким же клиентским
+        // полем, как заголовки: 8 КБ в request line (предел Tomcat) раздували бы каждую строку.
+        MockHttpServletRequest request = new MockHttpServletRequest("A".repeat(7000), "/api/status");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        response.setStatus(400);
+        filter.doFilter(request, response, mock(FilterChain.class));
+
+        assertThat(appender.list).hasSize(1);
+        String line = appender.list.get(0).getFormattedMessage();
+        assertThat(line.length()).isLessThan(600);
+        assertThat(line).contains("request method: ?");
+    }
+
+    @Test
+    @DisplayName("Обычные методы не трогаются")
+    void standardMethods_areKept() throws Exception {
+        assertThat(logLine(new MockHttpServletRequest("DELETE", "/api/lists/1"), 204))
+                .contains("request method: DELETE");
+    }
+
+    @Test
+    @DisplayName("Исключение из цепочки не выдаётся за успешный ответ")
+    void chainThrows_statusIsNotReportedAsOk() throws Exception {
+        // response.getStatus() в этот момент ещё 200: настоящий 500 проставит контейнер позже,
+        // уже после раскрутки фильтров. Строка «200» на упавшем запросе врёт и глазу, и скрипту,
+        // и попадает в подсчёт среднего времени ответа.
+        MockHttpServletRequest request = request("/api/lists", "android", "29");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+        doThrow(new ServletException("обрыв")).when(chain).doFilter(any(), any());
+
+        assertThatThrownBy(() -> filter.doFilter(request, response, chain))
+                .isInstanceOf(ServletException.class);
+
+        assertThat(appender.list).hasSize(1);
+        assertThat(appender.list.get(0).getFormattedMessage()).contains("response status: 500");
+    }
+
+    @Test
+    @DisplayName("Дефис как значение заголовка не притворяется его отсутствием")
+    void dashValue_isMarked() throws Exception {
+        // Дефис входит в разрешённые символы, поэтому клиент мог прислать ровно «-» и стать
+        // неотличимым от того, кто заголовок не шлёт вовсе, — то есть тихо прикинуться старой версией.
+        assertThat(logLineFor("-", "29")).contains("app: ?/29");
     }
 
     @Test

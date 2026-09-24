@@ -70,18 +70,34 @@ public class LoggingFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         long startTime = System.currentTimeMillis();
+        boolean failed = false;
 
         try {
             // Продолжить обработку запроса
             filterChain.doFilter(request, response);
+        } catch (Throwable t) {
+            failed = true;
+            throw t;
         } finally {
             // finally, а не последовательно: обрыв соединения при записи ответа и любое
             // исключение из цепочки иначе уносят строку лога — то есть ровно аварийный случай.
             long duration = System.currentTimeMillis() - startTime;
             logger.info(String.format(
                     "request method: %s, request URI: %s, response status: %d, request processing time: %d ms, app: %s",
-                    request.getMethod(), shorten(request.getRequestURI()), response.getStatus(), duration, appTag(request)));
+                    valueOf(request.getMethod()), shorten(request.getRequestURI()),
+                    statusOf(response, failed), duration, appTag(request)));
         }
+    }
+
+    /**
+     * Статус, который в итоге увидит клиент. При исключении из цепочки в ответе ещё стоит
+     * дефолтные 200: настоящие 500 проставит контейнер позже, уже после раскрутки фильтров,
+     * а второй строки на ERROR-dispatch не будет ({@code shouldNotFilterErrorDispatch}).
+     * Записать в такой ситуации 200 — значит выдать аварию за успех и испортить как поиск
+     * ошибок по логу, так и подсчёт среднего времени ответа.
+     */
+    private static int statusOf(HttpServletResponse response, boolean failed) {
+        return failed && !response.isCommitted() ? HttpServletResponse.SC_INTERNAL_SERVER_ERROR : response.getStatus();
     }
 
     /**
@@ -92,10 +108,20 @@ public class LoggingFilter extends OncePerRequestFilter {
         return valueOf(request.getHeader(HEADER_APP_PLATFORM)) + "/" + valueOf(request.getHeader(HEADER_APP_VERSION));
     }
 
-    /** Заголовок как есть, если он целиком допустим; иначе прочерк или знак негодности. */
+    /**
+     * Значение как есть, если оно целиком допустимо; иначе прочерк или знак негодности.
+     * Применяется и к методу запроса: он такой же клиентский токен из request line, а с тех пор
+     * как фильтр стоит снаружи security-цепочки, его больше не отсекает {@code StrictHttpFirewall}
+     * (тот пускает только стандартные глаголы) — нестандартный метод доезжает до лога.
+     */
     private static String valueOf(String raw) {
         if (raw == null || raw.isEmpty()) {
             return ABSENT;
+        }
+        if (ABSENT.equals(raw)) {
+            // Дефис разрешён внутри значения, но целиком равное ему значение сделало бы клиента
+            // неотличимым от того, кто заголовок не шлёт вовсе: так можно тихо прикинуться старой версией.
+            return MANGLED;
         }
         if (raw.length() > MAX_VALUE_LENGTH) {
             return MANGLED;
