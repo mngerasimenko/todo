@@ -127,7 +127,9 @@ public class ApiSecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(appProperties.getCorsOrigins());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        // X-App-* не входят в CORS-safelist: без перечисления здесь браузер отклонит
+        // запрос целиком, а не просто выбросит заголовок. Android CORS не касается.
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-App-Version", "X-App-Platform"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 

@@ -208,6 +208,159 @@ class AuthControllerTest {
     }
 
     @Test
+    void login_LocalizedSpringSecurityMessage_StillMasked() throws Exception {
+        // Spring Security переводит свои сообщения по Accept-Language (у него свой ru-бандл).
+        // Пока Android не слал заголовок, до нас доходило английское "Bad credentials", и
+        // подмена по строке работала. С заголовком приходит русский текст — и прежняя
+        // проверка по строке молча пропускала бы сырое сообщение фреймворка на экран входа.
+        //
+        // Маска при этом обязана остаться русской: клиент показывает message сервера как есть
+        // (ApiErrorParser), так что английская константа сделала бы экран входа англоязычным
+        // на русском телефоне — причём заголовок туда привозит эта же задача.
+        LoginRequest loginRequest = LoginRequest.builder()
+                .email("test@example.com")
+                .password("wrongPassword")
+                .build();
+
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenThrow(new BadCredentialsException("Неверные учетные данные пользователя"));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "ru-RU")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Неверный email или пароль"));
+    }
+
+    @Test
+    void login_EnglishRequest_GetsEnglishMask() throws Exception {
+        // Вторая ветка того же правила: язык маски задаёт запрос, а не константа в коде.
+        LoginRequest loginRequest = LoginRequest.builder()
+                .email("test@example.com")
+                .password("wrongPassword")
+                .build();
+
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenThrow(new BadCredentialsException("Bad credentials"));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "en-US")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Invalid email or password"));
+    }
+
+    @Test
+    void login_NoAcceptLanguage_GetsProjectDefaultLanguage() throws Exception {
+        // Заголовка нет — так ходит ВСЯ установленная база до 1.2.8. Язык такого ответа не должен
+        // зависеть от локали JVM в контейнере: добавят LANG в базовый образ — и текст молча
+        // перевернётся. Канон проекта (429, валидация, страница отписки) в этом случае даёт ru.
+        LoginRequest loginRequest = LoginRequest.builder()
+                .email("test@example.com")
+                .password("wrongPassword")
+                .build();
+
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenThrow(new BadCredentialsException("Bad credentials"));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Неверный email или пароль"));
+    }
+
+    @Test
+    void login_UnsupportedLanguage_GetsProjectDefaultLanguage() throws Exception {
+        // Немецкий мы не поддерживаем. Важно не то, какой язык выдан, а что он ТОТ ЖЕ, что у 429
+        // и у ошибок валидации на этом же запросе: один заголовок не должен давать два языка.
+        LoginRequest loginRequest = LoginRequest.builder()
+                .email("test@example.com")
+                .password("wrongPassword")
+                .build();
+
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenThrow(new BadCredentialsException("Bad credentials"));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "de-DE,de;q=0.9")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Неверный email или пароль"));
+    }
+
+    @Test
+    void login_HostileAcceptLanguage_StillAnswersNormally() throws Exception {
+        // Прецедент проекта: «Accept-Language: -» когда-то давал 500 на публичном /register.
+        // Логин заголовок раньше не читал, а теперь читает — значит нужен регрессионный тест.
+        LoginRequest loginRequest = LoginRequest.builder()
+                .email("test@example.com")
+                .password("wrongPassword")
+                .build();
+
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenThrow(new BadCredentialsException("Bad credentials"));
+
+        // Прямой вызов, а не MockMvc: MockHttpServletRequest.getLocale() бросает
+        // ArrayIndexOutOfBounds на заголовке без единого валидного элемента ("-", ",,,",
+        // сверхдлинный тег) — это поведение мока, живой Tomcat так не делает. Проверено
+        // запросом к staging 24.09: ",,,", "-", "zz", "ru;q=0" отвечают 401, не 500.
+        for (String hostile : new String[]{"-", "zz", "ru;q=0", ",,,", "en-US-x-" + "a".repeat(2000), ""}) {
+            String message = authController.localizedMessage(
+                    AuthController.INVALID_CREDENTIALS_KEY, AuthController.INVALID_CREDENTIALS_MESSAGE, hostile);
+
+            assertThat(message)
+                    .as("заголовок %s не должен ни ронять вход, ни менять язык ответа", hostile)
+                    .isEqualTo("Неверный email или пароль");
+        }
+    }
+
+    @Test
+    void login_InfrastructureFailure_IsNotDisguisedAsWrongPassword() throws Exception {
+        // ProviderManager заворачивает любое падение UserDetailsService (там Postgres и расшифровка
+        // AES) в InternalAuthenticationServiceException. Если ответить «неверный пароль», при упавшей
+        // БД все пользователи пойдут сбрасывать пароль, а авария не будет видна ни им, ни алерту.
+        LoginRequest loginRequest = LoginRequest.builder()
+                .email("test@example.com")
+                .password("correctPassword")
+                .build();
+
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenThrow(new org.springframework.security.authentication.InternalAuthenticationServiceException(
+                        "FATAL: connection to db refused"));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "ru-RU")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.message").value("Сервис временно недоступен, попробуйте позже"))
+                .andExpect(jsonPath("$.message", org.hamcrest.Matchers.not(containsString("db"))));
+    }
+
+    @Test
+    void login_DisabledAccount_LooksExactlyLikeWrongPassword() throws Exception {
+        // Enumeration: заблокированный аккаунт не должен отличаться от неверного пароля.
+        LoginRequest loginRequest = LoginRequest.builder()
+                .email("test@example.com")
+                .password("correctPassword")
+                .build();
+
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenThrow(new org.springframework.security.authentication.DisabledException("User is disabled"));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "ru-RU")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Неверный email или пароль"));
+    }
+
+    @Test
     void login_InvalidCredentials_ReturnsUnauthorized() throws Exception {
         // Arrange
         LoginRequest loginRequest = LoginRequest.builder()
@@ -220,6 +373,7 @@ class AuthControllerTest {
 
         // Act & Assert
         mockMvc.perform(post("/api/auth/login")
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "en-US")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isUnauthorized())
