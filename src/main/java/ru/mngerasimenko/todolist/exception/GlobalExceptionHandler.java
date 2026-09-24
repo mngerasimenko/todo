@@ -214,6 +214,17 @@ public class GlobalExceptionHandler {
         return createErrorResponse(HttpStatus.UNAUTHORIZED, "Unauthorized", ex.getMessage());
     }
 
+    /**
+     * Вход не состоялся по вине инфраструктуры (БД, шифрование), а не учётных данных.
+     * Отдельный код ответа нужен пользователю: 401 на этом месте отправляет его сбрасывать
+     * пароль, которого он не забывал. Текст приходит уже локализованным из контроллера —
+     * внутренности исключения наружу не уходят, они остаются в ERROR-строке лога со стеком.
+     */
+    @ExceptionHandler(AuthServiceUnavailableException.class)
+    public ResponseEntity<Map<String, Object>> handleAuthServiceUnavailable(AuthServiceUnavailableException ex) {
+        return createErrorResponse(HttpStatus.SERVICE_UNAVAILABLE, "Service Unavailable", ex.getMessage());
+    }
+
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<Map<String, Object>> handleAuthenticationException(AuthenticationException ex) {
         log.warn("Authentication failed: {}", ex.getMessage());

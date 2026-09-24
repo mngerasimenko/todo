@@ -15,17 +15,20 @@ import java.util.Locale;
 /**
  * Конфигурация локализации: email-шаблоны, FCM push и сообщения bean validation.
  * <p>
- * Машиночитаемые поля ответа ({@code error}, {@code status}) всегда английские. По нашим правилам
- * за {@code Accept-Language} следуют только сообщения bean validation (ответ 400
- * {@code Validation Failed}) — см. {@link AcceptLanguageMessageInterpolator}.
+ * Машиночитаемые поля ответа ({@code error}, {@code status}) всегда английские. За
+ * {@code Accept-Language} следуют сообщения bean validation (ответ 400 {@code Validation Failed}) —
+ * см. {@link AcceptLanguageMessageInterpolator} — и маска неудачного входа (401): её
+ * {@code AuthController} берёт по ключу {@code auth.invalid-credentials}, потому что Android
+ * показывает {@code message} сервера пользователю как есть.
  * <p>
  * Остальные тексты {@code message} {@code GlobalExceptionHandler} берёт из исключений как есть, и
  * единой картины там нет: сервисы бросают кто русский текст, кто английский, а тексты Spring Security
- * (401 при неверном пароле) и вовсе уже переводятся сами — по {@code LocaleContextHolder}, который
- * следует за тем же заголовком. Из-за этого {@code GlobalExceptionHandler}, узнающий неверный пароль
- * по английской строке {@code "Bad credentials"}, на запросе с {@code Accept-Language: ru} до своей
- * подмены не доходит. Это pre-existing и чинится отдельно: единый язык остальных текстов —
- * следующая задача, здесь он намеренно не трогался.
+ * (401 при неверном пароле) и вовсе переводятся сами — по {@code LocaleContextHolder}, который
+ * следует за тем же заголовком. Именно поэтому {@code GlobalExceptionHandler} больше не узнаёт
+ * неудачный вход по английской строке {@code "Bad credentials"}: на запросе с
+ * {@code Accept-Language: ru} до подмены он не доходил. Маскировка переехала в
+ * {@code AuthController}, опирается на тип исключения, а текст берёт из бандла. Единый язык
+ * остальных текстов — по-прежнему отдельная задача.
  * <p>
  * Здесь нет {@code LocaleResolver} — локаль для писем и push передаётся явно
  * через {@link ru.mngerasimenko.todolist.service.MessageService} (поскольку

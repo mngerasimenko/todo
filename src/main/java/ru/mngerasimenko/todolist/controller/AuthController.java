@@ -3,11 +3,13 @@ package ru.mngerasimenko.todolist.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.MessageSource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationServiceException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -17,7 +19,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import ru.mngerasimenko.todolist.exception.AuthServiceUnavailableException;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.dto.UserResponse;
 import ru.mngerasimenko.todolist.dto.auth.*;
@@ -49,6 +54,7 @@ public class AuthController {
     private final JwtProperties jwtProperties;
     private final RefreshTokenService refreshTokenService;
     private final TokenBlacklistService tokenBlacklistService;
+    private final MessageSource messageSource;
 
     /**
      * Имя HttpOnly-cookie с refresh-токеном (веб-клиент, #259).
@@ -60,17 +66,33 @@ public class AuthController {
     /** Язык писем по умолчанию — 79% аудитории RU (Firebase Analytics), см. I18nConfig. */
     private static final String DEFAULT_EMAIL_LOCALE = "ru";
 
+    /** Ключ единого ответа на любую неудачу входа: существование аккаунта не раскрываем. */
+    static final String INVALID_CREDENTIALS_KEY = "auth.invalid-credentials";
+
+    /** Ключ ответа, когда вход не состоялся по вине инфраструктуры, а не учётных данных. */
+    static final String SERVICE_UNAVAILABLE_KEY = "auth.service-unavailable";
+
+    /**
+     * Запасные тексты на случай пропажи ключа из бандла: вход важнее перевода, и падать
+     * пятисоткой из-за отсутствующей строки он не должен.
+     */
+    static final String INVALID_CREDENTIALS_MESSAGE = "Invalid email or password";
+    static final String SERVICE_UNAVAILABLE_MESSAGE = "Service temporarily unavailable, please try again later";
+
+    /** Языки, на которых сервер отвечает текстами для пользователя. Держать равными с RateLimitFilter. */
+    private static final Set<String> SUPPORTED_MESSAGE_LANGUAGES = Set.of("ru", "en");
+
     /**
      * Вход пользователя в систему
      *
      * @param loginRequest данные для входа (username, password)
+     * @param acceptLanguage заголовок {@code Accept-Language} — язык текстов ответа
      * @return JWT токены и информация о пользователе
      */
-    /** Единый ответ на любую неудачу входа: существование аккаунта не раскрываем. */
-    static final String INVALID_CREDENTIALS_MESSAGE = "Invalid email or password";
-
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest loginRequest) {
+    public ResponseEntity<LoginResponse> login(
+            @Valid @RequestBody LoginRequest loginRequest,
+            @RequestHeader(value = HttpHeaders.ACCEPT_LANGUAGE, required = false) String acceptLanguage) {
         log.info("Попытка входа пользователя: {}", maskEmail(loginRequest.getEmail()));
 
         // Аутентификация пользователя (поле username содержит email)
@@ -82,6 +104,15 @@ public class AuthController {
                             loginRequest.getPassword()
                     )
             );
+        } catch (AuthenticationServiceException ex) {
+            // Не учётные данные, а отказ инфраструктуры: ProviderManager заворачивает сюда любое
+            // падение UserDetailsService, а там поход в Postgres и расшифровка AES. Ответить
+            // «неверный пароль» значит послать всех пользователей сбрасывать пароль во время
+            // аварии и не дать ни одного сигнала мониторингу — поэтому ERROR со стеком и 503.
+            log.error("Сбой аутентификации (инфраструктура, не учётные данные): {}",
+                    maskEmail(loginRequest.getEmail()), ex);
+            throw new AuthServiceUnavailableException(
+                    localizedMessage(SERVICE_UNAVAILABLE_KEY, SERVICE_UNAVAILABLE_MESSAGE, acceptLanguage));
         } catch (AuthenticationException ex) {
             // Маскируем здесь, а не разбором текста в GlobalExceptionHandler: текст Spring
             // Security зависит от Accept-Language (у него свой ru-бандл), и на запросе с
@@ -90,7 +121,8 @@ public class AuthController {
             // нужное, язык на него не влияет. Заодно закрыт enumeration: заблокированный
             // и несуществующий аккаунт отвечают тем же текстом, что и неверный пароль.
             log.warn("Неудачный вход: {} ({})", maskEmail(loginRequest.getEmail()), ex.getClass().getSimpleName());
-            throw new BadCredentialsException(INVALID_CREDENTIALS_MESSAGE);
+            throw new BadCredentialsException(
+                    localizedMessage(INVALID_CREDENTIALS_KEY, INVALID_CREDENTIALS_MESSAGE, acceptLanguage));
         }
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
@@ -343,6 +375,24 @@ public class AuthController {
         Long userId = userService.getUserByEmail(userDetails.getUsername()).getId();
         userService.changeEmail(userId, request.getEmail());
         return ResponseEntity.ok(Map.of("message", "Письмо подтверждения отправлено на новый email"));
+    }
+
+    /**
+     * Текст для пользователя на языке запроса. Клиент показывает {@code message} сервера как есть,
+     * поэтому английская константа сделала бы экран входа англоязычным на русском телефоне.
+     * <p>
+     * Язык выбирается тем же разбором, что язык 429 и страницы отписки
+     * ({@link AcceptLanguageParser}), а не {@code LocaleContextHolder}: у контейнерного разбора
+     * другие правила (он не знает про наш список поддерживаемых языков и про q-веса в нашей
+     * трактовке), и один и тот же заголовок давал бы 401 и 429 на разных языках. Побочно это
+     * убирает два дефекта: язык ответа для клиента без заголовка перестаёт зависеть от локали
+     * JVM в контейнере, а в кэш {@code MessageSource} больше не попадает произвольная локаль
+     * клиента — ключей ровно два.
+     */
+    String localizedMessage(String key, String fallbackText, String acceptLanguage) {
+        String language = AcceptLanguageParser.bestSupportedLanguage(
+                acceptLanguage, SUPPORTED_MESSAGE_LANGUAGES, DEFAULT_EMAIL_LOCALE);
+        return messageSource.getMessage(key, null, fallbackText, Locale.forLanguageTag(language));
     }
 
     /**
