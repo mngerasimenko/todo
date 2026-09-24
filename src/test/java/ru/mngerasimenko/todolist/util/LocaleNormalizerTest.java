@@ -7,6 +7,8 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import ru.mngerasimenko.todolist.dto.validation.LocaleValidation;
 
+import java.util.Locale;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -129,7 +131,7 @@ class LocaleNormalizerTest {
     @DisplayName("und — «язык не определён»: возвращается как есть и, как и на master, проходит валидацию")
     void normalize_UndeterminedLanguage_ReturnedUnchanged(String raw) {
         // Locale.forLanguageTag отдаёт для und пустой язык, и нормализатор считает вход нераспознанным.
-        // PATTERN такой тег пропускает: в колонку ляжет und, письма уйдут на языке по умолчанию.
+        // PATTERN такой тег пропускает: в колонку ляжет und. Push и письма сводят его к ru через toMessageLocale.
         assertThat(LocaleNormalizer.normalize(raw)).isEqualTo(raw);
         assertThat(raw).matches(LocaleValidation.PATTERN);
     }
@@ -162,5 +164,27 @@ class LocaleNormalizerTest {
         assertThat(normalized).isEqualTo("abcdefgh-419");
         assertThat(normalized.length()).isGreaterThan(LocaleValidation.MAX_LENGTH);
         assertThat(normalized).doesNotMatch(LocaleValidation.PATTERN);
+    }
+
+    @ParameterizedTest(name = "[{index}] \"{0}\" -> ru")
+    @ValueSource(strings = {"und", "und-RU", "!!!", "", "   "})
+    @DisplayName("toMessageLocale: тег без языка сводится к языку по умолчанию, а не к Locale.ROOT")
+    void toMessageLocale_NoLanguage_FallsBackToRussian(String raw) {
+        // У Locale.ROOT MessageSource находит только пустой корневой бандл, и на устройство
+        // уходит сам ключ вместо текста — ради этого метод и заведён.
+        assertThat(LocaleNormalizer.toMessageLocale(raw)).isEqualTo(Locale.forLanguageTag("ru"));
+    }
+
+    @Test
+    @DisplayName("toMessageLocale: null — тоже язык по умолчанию, а не NPE из forLanguageTag")
+    void toMessageLocale_Null_FallsBackToRussian() {
+        assertThat(LocaleNormalizer.toMessageLocale(null)).isEqualTo(Locale.forLanguageTag("ru"));
+    }
+
+    @ParameterizedTest(name = "[{index}] \"{0}\" не трогаем")
+    @ValueSource(strings = {"ru", "en", "en-US", "de-DE", "zh-CN"})
+    @DisplayName("toMessageLocale: тег с языком разбирается как есть — fallback по бандлам остаётся за MessageSource")
+    void toMessageLocale_WithLanguage_ParsedAsIs(String raw) {
+        assertThat(LocaleNormalizer.toMessageLocale(raw)).isEqualTo(Locale.forLanguageTag(raw));
     }
 }

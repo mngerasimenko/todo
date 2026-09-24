@@ -34,6 +34,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -409,6 +410,37 @@ class EmailServiceImplTest {
                 .doesNotContainPattern(LONE_APOSTROPHE));
     }
 
+    // === Тег без языка ===
+
+    @ParameterizedTest
+    @ValueSource(strings = {"und", "und-RU"})
+    void emailsWithoutLanguage_GoOutInRussian_NotAsMessageKeys(String localeTag) throws Exception {
+        // und проходит нормализацию и валидацию и лежит в preferred_email_locale. Locale.forLanguageTag
+        // даёт для него Locale.ROOT, а у ROOT MessageSource находит только пустой messages.properties:
+        // тема письма уходила самим ключом, тело — ??email.…_??.
+        Map<String, BiConsumer<EmailServiceImpl, String>> sends = Map.of(
+                "verification", (s, tag) -> s.sendVerificationEmail("user@example.com", "tok", tag),
+                "reset", (s, tag) -> s.sendPasswordResetEmail("user@example.com", "tok", tag),
+                "invite", (s, tag) -> s.sendInviteEmail("user@example.com", "https://todo.keepware.ru/invite/abc",
+                        "Shopping", "Anna", tag),
+                "inactive", (s, tag) -> s.sendInactiveReminderEmail("user@example.com", null, 42L, tag, "tok"),
+                "onboarding", (s, tag) -> s.sendOnboardingReminderEmail("user@example.com", null, 42L, tag, "tok"),
+                "todoDue", (s, tag) -> s.sendTodoDueEmail("user@example.com", null, "Milk", "Shopping",
+                        "31.07.2026 18:00", 42L, tag, "tok"));
+
+        for (Map.Entry<String, BiConsumer<EmailServiceImpl, String>> send : sends.entrySet()) {
+            MimeMessage expected = sentMessage(s -> send.getValue().accept(s, "ru"));
+            MimeMessage actual = sentMessage(s -> send.getValue().accept(s, localeTag));
+
+            assertThat(actual.getSubject()).as(send.getKey() + ": тема")
+                    .doesNotStartWith("email.")
+                    .isEqualTo(expected.getSubject());
+            assertThat(htmlOf(actual)).as(send.getKey() + ": тело")
+                    .doesNotContain("??")
+                    .isEqualTo(htmlOf(expected));
+        }
+    }
+
     private Context capturedContext(String template) {
         ArgumentCaptor<Context> ctx = ArgumentCaptor.forClass(Context.class);
         verify(templateEngine).process(eq(template), ctx.capture());
@@ -420,6 +452,13 @@ class EmailServiceImplTest {
      * и вернуть HTML из отправленного MimeMessage.
      */
     private String renderedHtml(Consumer<EmailServiceImpl> send) throws Exception {
+        String html = htmlOf(sentMessage(send));
+        assertThat(html).as("HTML-часть письма").isNotNull();
+        return html;
+    }
+
+    /** Отправить письмо через сервис с настоящим Thymeleaf и бандлами из I18nConfig и вернуть его. */
+    private MimeMessage sentMessage(Consumer<EmailServiceImpl> send) {
         MessageSource messageSource = new I18nConfig().messageSource();
         ClassLoaderTemplateResolver resolver = new ClassLoaderTemplateResolver();
         resolver.setPrefix("templates/");
@@ -437,9 +476,7 @@ class EmailServiceImplTest {
                 new MessageService(messageSource), cryptoService));
 
         verify(mailSender).send(message);
-        String html = htmlOf(message);
-        assertThat(html).as("HTML-часть письма").isNotNull();
-        return html;
+        return message;
     }
 
     /** MimeMessageHelper кладёт HTML в единственную текстовую часть внутри multipart/mixed → related. */
