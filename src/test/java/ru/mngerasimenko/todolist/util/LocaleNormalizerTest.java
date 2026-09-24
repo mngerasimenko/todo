@@ -131,8 +131,7 @@ class LocaleNormalizerTest {
     @DisplayName("und — «язык не определён»: возвращается как есть и, как и на master, проходит валидацию")
     void normalize_UndeterminedLanguage_ReturnedUnchanged(String raw) {
         // Locale.forLanguageTag отдаёт для und пустой язык, и нормализатор считает вход нераспознанным.
-        // PATTERN такой тег пропускает: в колонку ляжет und. Push сводит его к ru через toMessageLocale;
-        // письма — нет: EmailServiceImpl.resolveLocale отдаёт Locale.ROOT, и вместо текста уходят ключи.
+        // PATTERN такой тег пропускает: в колонку ляжет und. Push и письма сводят его к ru через toMessageLocale.
         assertThat(LocaleNormalizer.normalize(raw)).isEqualTo(raw);
         assertThat(raw).matches(LocaleValidation.PATTERN);
     }

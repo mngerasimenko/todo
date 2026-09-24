@@ -14,6 +14,7 @@ import org.thymeleaf.context.Context;
 import org.thymeleaf.spring6.SpringTemplateEngine;
 import ru.mngerasimenko.todolist.crypto.CryptoService;
 import ru.mngerasimenko.todolist.settings.EmailProperties;
+import ru.mngerasimenko.todolist.util.LocaleNormalizer;
 
 import java.util.Locale;
 import java.util.Map;
@@ -33,11 +34,6 @@ import static ru.mngerasimenko.todolist.util.LogUtils.maskEmail;
 @RequiredArgsConstructor
 @Slf4j
 public class EmailServiceImpl implements EmailService {
-
-    /**
-     * Fallback-локаль для писем — используется если caller передал null/blank.
-     */
-    private static final String DEFAULT_LOCALE_TAG = "ru";
 
     private final JavaMailSender mailSender;
     private final EmailProperties emailProperties;
@@ -201,14 +197,11 @@ public class EmailServiceImpl implements EmailService {
     }
 
     /**
-     * Резолв локали из BCP-47 строки. Null/blank → "ru". Невалидный тэг (e.g. "*")
-     * остаётся как есть — MessageSource сам сделает fallback на default.
+     * Резолв локали из BCP-47 строки. Тег без языка (null, blank, {@code und}, мусор) → "ru",
+     * иначе письмо ушло бы с ключами вместо текста — см. {@link LocaleNormalizer#toMessageLocale}.
      */
     private Locale resolveLocale(String localeTag) {
-        if (localeTag == null || localeTag.isBlank()) {
-            return Locale.forLanguageTag(DEFAULT_LOCALE_TAG);
-        }
-        return Locale.forLanguageTag(localeTag);
+        return LocaleNormalizer.toMessageLocale(localeTag);
     }
 
     @Override
