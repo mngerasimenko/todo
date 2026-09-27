@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationServiceException;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.ProviderNotFoundException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
@@ -104,11 +105,16 @@ public class AuthController {
                             loginRequest.getPassword()
                     )
             );
-        } catch (AuthenticationServiceException ex) {
-            // Не учётные данные, а отказ инфраструктуры: ProviderManager заворачивает сюда любое
-            // падение UserDetailsService, а там поход в Postgres и расшифровка AES. Ответить
-            // «неверный пароль» значит послать всех пользователей сбрасывать пароль во время
-            // аварии и не дать ни одного сигнала мониторингу — поэтому ERROR со стеком и 503.
+        } catch (AuthenticationServiceException | ProviderNotFoundException ex) {
+            // Не учётные данные, а отказ инфраструктуры: DaoAuthenticationProvider заворачивает сюда
+            // любое исключение UserDetailsService, кроме UsernameNotFoundException (включая прочие
+            // AuthenticationException), а там Postgres, HMAC blind index и расшифровка email. Поэтому
+            // статусы аккаунта (заблокирован и т. п.) проверять в UserDetailsChecker, а не бросать из
+            // UserDetailsService — иначе они уйдут сюда, в 503. ProviderNotFoundException — поломка
+            // конфигурации: появился свой AuthenticationProvider, не поддерживающий логин-пароль, и
+            // Spring перестал собирать DaoAuthenticationProvider — тогда падает КАЖДЫЙ вход. Ответить «неверный пароль»
+            // значит послать всех пользователей сбрасывать пароль во время аварии и не дать ни
+            // одного сигнала мониторингу — поэтому ERROR со стеком и 503.
             log.error("Сбой аутентификации (инфраструктура, не учётные данные): {}",
                     maskEmail(loginRequest.getEmail()), ex);
             throw new AuthServiceUnavailableException(
@@ -118,8 +124,8 @@ public class AuthController {
             // Security зависит от Accept-Language (у него свой ru-бандл), и на запросе с
             // русским заголовком подмена по строке "Bad credentials" не срабатывала —
             // пользователь видел сырое сообщение фреймворка. Тип исключения несёт всё
-            // нужное, язык на него не влияет. Заодно закрыт enumeration: заблокированный
-            // и несуществующий аккаунт отвечают тем же текстом, что и неверный пароль.
+            // нужное, язык на него не влияет. Заодно закрыт enumeration: несуществующий аккаунт
+            // (и любой будущий статус вроде заблокированного) отвечает тем же текстом, что и неверный пароль.
             log.warn("Неудачный вход: {} ({})", maskEmail(loginRequest.getEmail()), ex.getClass().getSimpleName());
             throw new BadCredentialsException(
                     localizedMessage(INVALID_CREDENTIALS_KEY, INVALID_CREDENTIALS_MESSAGE, acceptLanguage));

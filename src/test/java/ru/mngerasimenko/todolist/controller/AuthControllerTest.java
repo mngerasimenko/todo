@@ -319,9 +319,50 @@ class AuthControllerTest {
     }
 
     @Test
+    void realProviderManager_WrapsUserLookupFailureInAuthenticationServiceException() {
+        // Посылка ветки 503, проверенная на настоящем провайдере, а не на моке AuthenticationManager:
+        // остальные тесты входа бросают исключение сами и держались бы, даже если бы Spring
+        // перестал заворачивать падение UserDetailsService в AuthenticationServiceException.
+        org.springframework.security.authentication.dao.DaoAuthenticationProvider provider =
+                new org.springframework.security.authentication.dao.DaoAuthenticationProvider(username -> {
+                    throw new org.springframework.dao.DataAccessResourceFailureException("connection refused");
+                });
+        org.springframework.security.authentication.ProviderManager manager =
+                new org.springframework.security.authentication.ProviderManager(provider);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> manager.authenticate(
+                        new UsernamePasswordAuthenticationToken("test@example.com", "password")))
+                .isInstanceOf(org.springframework.security.authentication.AuthenticationServiceException.class);
+    }
+
+    @Test
+    void login_NoProviderForToken_IsServiceFailureNotWrongPassword() throws Exception {
+        // Поломка конфигурации, а не учётных данных: появится бин AuthenticationProvider, не
+        // поддерживающий логин-пароль, —
+        // и Spring Security перестанет сам собирать DaoAuthenticationProvider. Тогда каждый вход
+        // падает ProviderNotFoundException, и без отдельной ветки это выглядело бы как массовый
+        // «неверный пароль» с WARN в логе вместо ERROR.
+        LoginRequest loginRequest = LoginRequest.builder()
+                .email("test@example.com")
+                .password("correctPassword")
+                .build();
+
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenThrow(new org.springframework.security.authentication.ProviderNotFoundException(
+                        "No AuthenticationProvider found"));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "en")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.message").value("Service temporarily unavailable, please try again later"));
+    }
+
+    @Test
     void login_InfrastructureFailure_IsNotDisguisedAsWrongPassword() throws Exception {
-        // ProviderManager заворачивает любое падение UserDetailsService (там Postgres и расшифровка
-        // AES) в InternalAuthenticationServiceException. Если ответить «неверный пароль», при упавшей
+        // ProviderManager заворачивает любое падение UserDetailsService (там запрос в Postgres)
+        // в InternalAuthenticationServiceException. Если ответить «неверный пароль», при упавшей
         // БД все пользователи пойдут сбрасывать пароль, а авария не будет видна ни им, ни алерту.
         LoginRequest loginRequest = LoginRequest.builder()
                 .email("test@example.com")
