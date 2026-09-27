@@ -28,7 +28,6 @@ import ru.mngerasimenko.todolist.model.TaskList;
 import ru.mngerasimenko.todolist.model.User;
 import ru.mngerasimenko.todolist.repository.PushTokenRepository;
 import ru.mngerasimenko.todolist.repository.TaskListRepository;
-import ru.mngerasimenko.todolist.repository.UserRepository;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -62,9 +61,6 @@ class PushNotificationServiceImplTest {
 
     @Mock
     private PushTokenRepository pushTokenRepository;
-
-    @Mock
-    private UserRepository userRepository;
 
     @Mock
     private TaskListRepository taskListRepository;
@@ -703,26 +699,133 @@ class PushNotificationServiceImplTest {
     }
 
     /**
-     * Тег {@code und} («язык не определён») fallback'ом НЕ обслуживается: на устройство уходит
-     * сам ключ вместо текста. Тест фиксирует фактическое поведение как есть — это прод-дефект,
-     * и его починка (свести {@code und} к {@code ru} при регистрации токена либо не пускать тег
-     * валидацией) лежит вне зоны этого наряда и передана владельцу отдельным пунктом.
+     * Токен с тегом {@code und} («язык не определён») получает текст, а не сам ключ.
      * <p>
-     * Механика: {@code LocaleNormalizer} такой тег возвращает как есть, а валидация пропускает
-     * (см. {@code LocaleNormalizerTest}); {@code Locale.forLanguageTag("und")} даёт
-     * {@code Locale.ROOT}, а у ROOT кандидат ровно один — намеренно пустой корневой
-     * {@code messages.properties}, — и поиск обрывается, не дойдя до {@code defaultLocale}.
+     * Тег живой: {@code LocaleNormalizer.normalize} возвращает его как есть, а валидация
+     * пропускает (см. {@code LocaleNormalizerTest}), так что в {@code push_token.locale} он лежит.
+     * Сам по себе {@code Locale.forLanguageTag("und")} даёт {@code Locale.ROOT}, а у ROOT кандидат
+     * ровно один — намеренно пустой корневой {@code messages.properties}, — и поиск обрывается,
+     * не дойдя до {@code defaultLocale}: на устройство уходило «push.todo.created.title».
+     * Проверяются оба места, где сервис резолвит текст по локали токена: заголовок в общей
+     * отправке и fallback-имя в напоминаниях.
      */
     @Test
-    void undLocale_YieldsRawKeyInsteadOfText() {
+    void undLocale_ReceivesRussianTextNotRawKey() throws Exception {
+        when(pushTokenRepository.findByListIdExcludingUser(86L, 53L)).thenReturn(List.of(tokenFor(11L, "und")));
+        when(taskListRepository.findById(86L)).thenReturn(Optional.of(listNamed(86L, "Теплица")));
+        when(pushTokenRepository.findByUserId(7L)).thenReturn(List.of(tokenFor(12L, "und")));
         String key = "push.todo.created.title";
 
-        assertThat(realMessages().getMessage(key, Locale.forLanguageTag("und"))).isEqualTo(key);
+        try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+
+            PushNotificationServiceImpl service = serviceWithRealMessages();
+            service.notifyNewTodo(86L, 53L, "Иван", "Хлеб");
+            service.sendInactiveReminderPush(7L, null);
+            service.sendOnboardingReminderPush(7L, null);
+
+            List<Message> sent = sentMessages(3);
+            assertThat(notificationTitle(sent.get(0)))
+                    .isEqualTo(realMessages().getMessage(key, Locale.forLanguageTag("ru")))
+                    .isNotEqualTo(key);
+            assertThat(notificationBody(sent.get(1))).startsWith("друг,");
+            assertThat(notificationBody(sent.get(2))).startsWith("друг,");
+        }
+    }
+
+    /**
+     * Сбой резолва текста у одного получателя не обрывает рассылку остальным.
+     * <p>
+     * Резолв идёт по локали каждого токена, и бросить он может только на своём бандле:
+     * кривой шаблон в одном языке — {@code IllegalArgumentException} из {@code MessageFormat}.
+     * Каналов два вида: общая отправка (текст резолвится в цикле по токенам) и напоминания
+     * (там ещё и fallback-имя резолвится per-token до отправки) — проверяются все.
+     */
+    @Test
+    void textResolveFailureForOneRecipient_OthersStillReceivePush() throws Exception {
+        List<PushToken> recipients = List.of(tokenFor(11L, "en"), tokenFor(12L, "ru"));
+        when(pushTokenRepository.findByListIdExcludingUser(86L, 53L)).thenReturn(recipients);
+        when(pushTokenRepository.findByUserId(7L)).thenReturn(recipients);
+        when(taskListRepository.findById(86L)).thenReturn(Optional.of(listNamed(86L, "Теплица")));
+        MessageService brokenEnglish = new MessageService(new I18nConfig().messageSource()) {
+            @Override
+            public String getMessage(String key, Locale locale, Object... args) {
+                if ("en".equals(locale.getLanguage())) {
+                    throw new IllegalArgumentException("can't parse argument number: name");
+                }
+                return super.getMessage(key, locale, args);
+            }
+        };
+        PushNotificationServiceImpl service = new PushNotificationServiceImpl(pushTokenRepository,
+                taskListRepository, flagStore, brokenEnglish);
+
+        try (MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+
+            assertThatCode(() -> {
+                service.notifyNewTodo(86L, 53L, "Иван", "Хлеб");
+                service.notifyTodoCompleted(53L, 86L, "Иван", "Хлеб");
+                service.notifyNewMember(86L, 53L, "Иван", "Теплица");
+                service.sendTodoDuePush(7L, 777L, 86L, "Полить теплицу", "25.08.2026 09:00");
+                service.sendInactiveReminderPush(7L, null);
+                service.sendOnboardingReminderPush(7L, null);
+            }).doesNotThrowAnyException();
+
+            // Шесть каналов — по одному сообщению каждый, и все на русское устройство.
+            assertThat(sentMessages(6)).allSatisfy(message ->
+                    assertThat(sentToken(message)).isEqualTo("fcm-token-12"));
+        }
+    }
+
+    /** Чужой device_id не удаляет токен: отвязать устройство может только его владелец. */
+    @Test
+    void removeToken_ForeignDevice_KeepsToken() {
+        PushToken foreign = tokenFor(11L, "ru");
+        when(pushTokenRepository.findByDeviceId("device-11")).thenReturn(Optional.of(foreign));
+
+        pushNotificationService.removeToken(99L, "device-11");
+
+        verify(pushTokenRepository, never()).delete(any());
+    }
+
+    /** Своё устройство отвязывается — иначе тест выше прошёл бы и у метода, не удаляющего ничего. */
+    @Test
+    void removeToken_OwnDevice_DeletesToken() {
+        PushToken own = tokenFor(11L, "ru");
+        when(pushTokenRepository.findByDeviceId("device-11")).thenReturn(Optional.of(own));
+
+        pushNotificationService.removeToken(11L, "device-11");
+
+        verify(pushTokenRepository).delete(own);
+    }
+
+    /**
+     * {@code isFirebaseHealthy} отдаёт результат последней {@code checkFirebaseHealth}, а не
+     * константу: поднятый Firebase переводит кеш в true, упавший — обратно в false.
+     */
+    @Test
+    void isFirebaseHealthy_FollowsLastHealthCheck() {
+        assertThat(pushNotificationService.isFirebaseHealthy()).isFalse();
+
+        try (MockedStatic<com.google.firebase.FirebaseApp> mockedApp = mockStatic(com.google.firebase.FirebaseApp.class);
+             MockedStatic<FirebaseMessaging> mockedFirebaseMessaging = mockStatic(FirebaseMessaging.class)) {
+            mockedFirebaseMessaging.when(FirebaseMessaging::getInstance).thenReturn(firebaseMessaging);
+            mockedApp.when(com.google.firebase.FirebaseApp::getInstance).thenReturn(null);
+
+            pushNotificationService.checkFirebaseHealth();
+            assertThat(pushNotificationService.isFirebaseHealthy()).isTrue();
+
+            mockedApp.when(com.google.firebase.FirebaseApp::getInstance)
+                    .thenThrow(new IllegalStateException("FirebaseApp with name [DEFAULT] doesn't exist."));
+
+            pushNotificationService.checkFirebaseHealth();
+            assertThat(pushNotificationService.isFirebaseHealthy()).isFalse();
+        }
     }
 
     /**
      * Локаль, у которой язык вычитывается, а своего бандла нет, обслуживается русским текстом,
-     * а не сырыми ключами. Про тег без языка — тест выше: там поведение ровно обратное.
+     * а не сырыми ключами. Про тег без языка — тест выше: он сводится к русскому явно.
      * <p>
      * Путь живой: валидация принимает любой язык из двух-трёх букв, а {@code LocaleNormalizer}
      * регион сохраняет — в {@code push_token.locale} реально уезжают {@code de-DE}, {@code zh-CN},
@@ -788,7 +891,7 @@ class PushNotificationServiceImplTest {
      * и пустой бандл. Остальные зависимости — те же моки, что у {@code @InjectMocks}-экземпляра.
      */
     private PushNotificationServiceImpl serviceWithRealMessages() {
-        return new PushNotificationServiceImpl(pushTokenRepository, userRepository,
+        return new PushNotificationServiceImpl(pushTokenRepository,
                 taskListRepository, flagStore, realMessages());
     }
 

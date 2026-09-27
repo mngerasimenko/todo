@@ -53,6 +53,9 @@ public final class LocaleNormalizer {
      */
     static final int MAX_PARSED_LENGTH = 64;
 
+    /** Язык текстов для тега без языка — тот же, что {@code defaultLocale} в {@code I18nConfig}. */
+    static final String DEFAULT_MESSAGE_LANGUAGE = "ru";
+
     private LocaleNormalizer() {
     }
 
@@ -79,5 +82,20 @@ public final class LocaleNormalizer {
         }
         String region = parsed.getCountry();
         return region.isEmpty() ? language : language + '-' + region;
+    }
+
+    /**
+     * Локаль для резолва текста через {@code MessageSource} по тегу, сохранённому в БД.
+     * <p>
+     * Тег без языка — {@code und}, {@code und-RU} (их {@link #normalize} пропускает, а валидация
+     * принимает), мусор, пустая строка, {@code null} — сводится к {@link #DEFAULT_MESSAGE_LANGUAGE}.
+     * {@code Locale.forLanguageTag} дал бы для них {@code Locale.ROOT}, а у ROOT {@code MessageSource}
+     * находит только пустой корневой {@code messages.properties} и до {@code defaultLocale} не доходит:
+     * вместо текста клиенту уходит сам ключ. Тег с языком разбирается как есть — язык без своего
+     * бандла {@code MessageSource} сам сводит к {@code defaultLocale}.
+     */
+    public static Locale toMessageLocale(String languageTag) {
+        Locale parsed = languageTag == null ? Locale.ROOT : Locale.forLanguageTag(languageTag);
+        return parsed.getLanguage().isEmpty() ? Locale.forLanguageTag(DEFAULT_MESSAGE_LANGUAGE) : parsed;
     }
 }

@@ -21,7 +21,7 @@ import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.model.PushToken;
 import ru.mngerasimenko.todolist.repository.PushTokenRepository;
-import ru.mngerasimenko.todolist.repository.UserRepository;
+import ru.mngerasimenko.todolist.util.LocaleNormalizer;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -40,7 +40,6 @@ import java.util.Map;
 public class PushNotificationServiceImpl implements PushNotificationService {
 
     private final PushTokenRepository pushTokenRepository;
-    private final UserRepository userRepository;
     private final ru.mngerasimenko.todolist.repository.TaskListRepository taskListRepository;
     private final FeatureFlagStore flagStore;
     private final MessageService messageService;
@@ -281,11 +280,14 @@ public class PushNotificationServiceImpl implements PushNotificationService {
                 : "";
 
         for (PushToken pt : tokens) {
-            Locale locale = Locale.forLanguageTag(pt.getLocale());
-            String title = messageService.getMessage(titleKey, locale, titleArgs);
-            String body = messageService.getMessage(bodyKey, locale, bodyArgs);
-            String fcmToken = pt.getFcmToken();
             try {
+                // Текст резолвится внутри try: он зависит от бандла локали этого токена, и сбой
+                // на нём (кривой шаблон одного языка) не должен оборвать рассылку остальным.
+                Locale locale = LocaleNormalizer.toMessageLocale(pt.getLocale());
+                String title = messageService.getMessage(titleKey, locale, titleArgs);
+                String body = messageService.getMessage(bodyKey, locale, bodyArgs);
+                String fcmToken = pt.getFcmToken();
+
                 // Tag — часть контракта с Android-клиентом, а не косметика. При закрытом
                 // приложении onMessageReceived НЕ вызывается: уведомление рисует сам FCM SDK
                 // через notify(tag, 0, ...). Без нашего tag он подставляет свой,
@@ -332,8 +334,8 @@ public class PushNotificationServiceImpl implements PushNotificationService {
                     log.warn("Ошибка отправки push: {}", e.getMessage());
                 }
             } catch (RuntimeException e) {
-                // Неподнятый Firebase (IllegalStateException из getInstance) и сбои сборки
-                // сообщения. Без этого catch исключение обрывало цикл и уходило в обработчик
+                // Неподнятый Firebase (IllegalStateException из getInstance), сбои резолва текста
+                // и сборки сообщения. Без этого catch исключение обрывало цикл и уходило в обработчик
                 // необработанных исключений @Async, мимо нашего лога. Токен при этом не трогаем:
                 // удаляем только по UNREGISTERED.
                 log.warn("Не удалось отправить push {} на устройство {}: {}",
@@ -378,20 +380,7 @@ public class PushNotificationServiceImpl implements PushNotificationService {
             return;
         }
 
-        // Имя локализуется per-token: если userName == null, fallback name берётся
-        // на языке каждого устройства (push.fallback.name). Поэтому для каждого
-        // токена строим body отдельно через одиночный sendLocalized.
-        for (PushToken pt : tokens) {
-            Locale locale = Locale.forLanguageTag(pt.getLocale());
-            String displayName = userName != null
-                    ? userName
-                    : messageService.getMessage("push.fallback.name", locale);
-            sendLocalized(
-                    List.of(pt), PUSH_TYPE_INACTIVE_REMINDER,
-                    "push.inactive.title", new Object[]{},
-                    "push.inactive.body", new Object[]{displayName},
-                    null);
-        }
+        sendReminder(tokens, PUSH_TYPE_INACTIVE_REMINDER, "push.inactive.title", "push.inactive.body", userName);
         log.info("Push-напоминание отправлено userId={} на {} устройств(а)", userId, tokens.size());
     }
 
@@ -406,19 +395,37 @@ public class PushNotificationServiceImpl implements PushNotificationService {
             return;
         }
 
-        // Per-token локализация имени, как в sendInactiveReminderPush.
-        for (PushToken pt : tokens) {
-            Locale locale = Locale.forLanguageTag(pt.getLocale());
-            String displayName = userName != null
-                    ? userName
-                    : messageService.getMessage("push.fallback.name", locale);
-            sendLocalized(
-                    List.of(pt), PUSH_TYPE_ONBOARDING_REMINDER,
-                    "push.onboarding.title", new Object[]{},
-                    "push.onboarding.body", new Object[]{displayName},
-                    null);
-        }
+        sendReminder(tokens, PUSH_TYPE_ONBOARDING_REMINDER, "push.onboarding.title", "push.onboarding.body", userName);
         log.info("Onboarding push-напоминание отправлено userId={} на {} устройств(а)", userId, tokens.size());
+    }
+
+    /**
+     * Напоминание пользователю на все его устройства. Имя локализуется per-token: если
+     * {@code userName == null}, fallback-имя берётся на языке каждого устройства
+     * ({@code push.fallback.name}), поэтому body строится для каждого токена отдельно
+     * через одиночный {@link #sendLocalized}.
+     * <p>
+     * Fallback-имя резолвится до {@code sendLocalized} и его защиты, поэтому сбой здесь ловится
+     * своим catch: иначе он оборвал бы напоминание остальным устройствам.
+     */
+    private void sendReminder(List<PushToken> tokens, String pushType,
+                              String titleKey, String bodyKey, String userName) {
+        for (PushToken pt : tokens) {
+            try {
+                String displayName = userName != null
+                        ? userName
+                        : messageService.getMessage("push.fallback.name",
+                                LocaleNormalizer.toMessageLocale(pt.getLocale()));
+                sendLocalized(
+                        List.of(pt), pushType,
+                        titleKey, new Object[]{},
+                        bodyKey, new Object[]{displayName},
+                        null);
+            } catch (RuntimeException e) {
+                log.warn("Не удалось отправить push {} на устройство {}: {}",
+                        pushType, pt.getDeviceId(), e.toString());
+            }
+        }
     }
 
     /**
