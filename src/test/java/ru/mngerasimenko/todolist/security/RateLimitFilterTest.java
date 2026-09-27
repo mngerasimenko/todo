@@ -6,6 +6,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -13,8 +14,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.http.HttpHeaders;
+import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.web.filter.ForwardedHeaderFilter;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.service.RedisHealthService;
@@ -63,6 +66,13 @@ class RateLimitFilterTest {
         return request;
     }
 
+    /** Запрос в том виде, в каком его видит фильтр за настоящим {@link ForwardedHeaderFilter}. */
+    private static HttpServletRequest throughForwardedHeaderFilter(MockHttpServletRequest raw) throws Exception {
+        MockFilterChain chain = new MockFilterChain();
+        new ForwardedHeaderFilter().doFilter(raw, new MockHttpServletResponse(), chain);
+        return (HttpServletRequest) chain.getRequest();
+    }
+
     // --- Тесты лимита на login ---
 
     @Nested
@@ -101,6 +111,40 @@ class RateLimitFilterTest {
             assertThat(response.getContentAsString()).contains("Too Many Requests");
 
             // filterChain НЕ вызывается для заблокированного запроса
+            verify(filterChain, times(3)).doFilter(any(), any());
+        }
+
+        @Test
+        @DisplayName("X-Forwarded-Prefix от клиента лимит не обходит")
+        void forwardedPrefix_DoesNotBypassLimit() throws Exception {
+            // Замер на стейдже 27.09: ForwardedHeaderFilter (forward-headers-strategy=framework)
+            // дописывает префикс в getRequestURI, маршрутизация его не видит, а проверка
+            // startsWith("/api/") видела — и подбор пароля шёл без лимита.
+            MockHttpServletResponse response = null;
+            for (int i = 0; i < 4; i++) {
+                MockHttpServletRequest raw = createRequest("POST", "/api/auth/login");
+                raw.addHeader("X-Forwarded-Prefix", "/x");
+                response = new MockHttpServletResponse();
+                filter.doFilterInternal(throughForwardedHeaderFilter(raw), response, filterChain);
+            }
+
+            assertThat(response.getStatus()).isEqualTo(429);
+            verify(filterChain, times(3)).doFilter(any(), any());
+        }
+
+        @Test
+        @DisplayName("Процент-кодированный путь лимит не обходит")
+        void percentEncodedPath_DoesNotBypassLimit() throws Exception {
+            // /%61pi/auth/login и /api/auth/%6Cogin MVC маршрутизирует в login, а сравнение по сырому
+            // URI их не узнавало: первый шёл вовсе без лимита, второй — в общую корзину.
+            String[] variants = {"/%61pi/auth/login", "/api/auth/%6Cogin", "/api/auth/login", "/%61pi/auth/%6Cogin"};
+            MockHttpServletResponse response = null;
+            for (String uri : variants) {
+                response = new MockHttpServletResponse();
+                filter.doFilterInternal(createRequest("POST", uri), response, filterChain);
+            }
+
+            assertThat(response.getStatus()).isEqualTo(429);
             verify(filterChain, times(3)).doFilter(any(), any());
         }
 

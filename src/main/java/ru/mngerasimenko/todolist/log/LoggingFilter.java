@@ -8,6 +8,7 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import ru.mngerasimenko.todolist.util.RequestPaths;
 
 import java.io.IOException;
 
@@ -84,7 +85,7 @@ public class LoggingFilter extends OncePerRequestFilter {
             long duration = System.currentTimeMillis() - startTime;
             logger.info(String.format(
                     "request method: %s, request URI: %s, response status: %d, request processing time: %d ms, app: %s",
-                    valueOf(request.getMethod()), shorten(request.getRequestURI()),
+                    valueOf(request.getMethod()), shorten(RequestPaths.rawPathWithinApplication(request)),
                     statusOf(response, failed), duration, appTag(request)));
         }
     }
@@ -136,18 +137,28 @@ public class LoggingFilter extends OncePerRequestFilter {
         return raw;
     }
 
-    /** Обрезает длинный URI, не разрывая суррогатную пару. */
+    /**
+     * Путь для строки лога: всё вне печатного ASCII заменено на {@code ?}, длина ограничена.
+     * <p>
+     * Берётся путь внутри приложения, а не {@code getRequestURI()}: в последний
+     * {@code ForwardedHeaderFilter} дописывает {@code X-Forwarded-Prefix} от клиента, а в заголовке
+     * допустимы пробелы, двоеточия и Latin-1 (включая управляющие C1). Префиксом можно было
+     * нарисовать в строке фальшивые «response status» и «app», а длинным — вытеснить обрезкой
+     * настоящий путь. Посимвольная замена — на случай, если такой символ придёт иным путём.
+     */
     private static String shorten(String uri) {
         if (uri == null) {
             return ABSENT;
         }
-        if (uri.length() <= MAX_URI_LENGTH) {
-            return uri;
+        int length = Math.min(uri.length(), MAX_URI_LENGTH);
+        StringBuilder safe = new StringBuilder(length + 1);
+        for (int i = 0; i < length; i++) {
+            char c = uri.charAt(i);
+            safe.append(c > ' ' && c < 127 ? c : '?');
         }
-        int cut = MAX_URI_LENGTH;
-        if (Character.isHighSurrogate(uri.charAt(cut - 1))) {
-            cut--;
+        if (uri.length() > MAX_URI_LENGTH) {
+            safe.append(ELLIPSIS);
         }
-        return uri.substring(0, cut) + ELLIPSIS;
+        return safe.toString();
     }
 }

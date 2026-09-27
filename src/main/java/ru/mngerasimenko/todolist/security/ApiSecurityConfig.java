@@ -18,6 +18,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import ru.mngerasimenko.todolist.security.jwt.JwtAuthenticationFilter;
 import ru.mngerasimenko.todolist.settings.AppProperties;
+import ru.mngerasimenko.todolist.util.RequestPaths;
 
 import java.util.List;
 
@@ -94,7 +95,7 @@ public class ApiSecurityConfig {
                         })
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
                             // Скрываем существование /api/admin — возвращаем 404 вместо 403
-                            if (request.getRequestURI().startsWith("/api/admin")) {
+                            if (RequestPaths.pathWithinApplication(request).startsWith("/api/admin")) {
                                 response.setStatus(HttpServletResponse.SC_NOT_FOUND);
                                 response.setContentType("application/json");
                                 response.setCharacterEncoding("UTF-8");

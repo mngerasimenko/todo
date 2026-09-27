@@ -268,17 +268,13 @@ class LoggingFilterTest {
     }
 
     @Test
-    @DisplayName("Фильтр объявлен снаружи security-цепочки, иначе 401 и 429 в лог не попадают")
-    void filter_isOrderedOutsideSecurityChain() {
-        // Замер на стейдже 23.09: без этого запрос с битым JWT отдаёт 401 и не оставляет
-        // ни одной строки лога — цепочка Spring Security (порядок −100) отбивает его раньше.
-        org.springframework.core.annotation.Order order =
-                LoggingFilter.class.getAnnotation(org.springframework.core.annotation.Order.class);
+    @DisplayName("Пробелы, управляющие и не-ASCII символы в пути заменяются на «?»")
+    void unsafeUriChars_areReplaced() throws Exception {
+        // Строку лога клиент подделать не должен: перевод строки начал бы фальшивую запись,
+        // C1 (NEL, CSI) ломает терминал при чтении лога.
+        String line = logLine(request("/api/a b\r\nfake\u0085\u009bé", "android", "29"), 404);
 
-        assertThat(order).as("у фильтра должен быть @Order").isNotNull();
-        assertThat(order.value())
-                .as("порядок обязан быть меньше −100 — приоритета цепочки Spring Security")
-                .isLessThan(-100);
+        assertThat(line).contains("request URI: /api/a?b??fake???,");
     }
 
     @Test

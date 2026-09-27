@@ -75,4 +75,23 @@ class LoggingFilterOrderTest {
                 .contains("response status: 401")
                 .contains("app: android/29");
     }
+
+    @Test
+    @DisplayName("X-Forwarded-Prefix от клиента не подменяет путь в строке лога")
+    void forwardedPrefix_DoesNotReplaceLoggedPath() throws Exception {
+        // ForwardedHeaderFilter стоит раньше нас и дописывает префикс в getRequestURI. Префикс
+        // приходит из заголовка, где разрешены пробелы, двоеточия и Latin-1: им можно нарисовать
+        // в строке фальшивые «response status» и «app», а длинным — вытеснить обрезкой настоящий путь.
+        String forged = "/response status: 200, request processing time: 1 ms, app: android/99" + "/a".repeat(200);
+
+        mockMvc.perform(get("/api/lists")
+                        .header("X-Forwarded-Prefix", forged))
+                .andExpect(status().isUnauthorized());
+
+        String line = appender.list.get(appender.list.size() - 1).getFormattedMessage();
+        assertThat(line)
+                .contains("request URI: /api/lists,")
+                .doesNotContain("android/99")
+                .containsOnlyOnce("response status:");
+    }
 }
