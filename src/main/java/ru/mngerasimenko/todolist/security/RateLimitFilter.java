@@ -20,6 +20,7 @@ import ru.mngerasimenko.todolist.featureflags.FeatureFlag;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagStore;
 import ru.mngerasimenko.todolist.service.RedisHealthService;
 import ru.mngerasimenko.todolist.util.AcceptLanguageParser;
+import ru.mngerasimenko.todolist.util.RequestPaths;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -98,7 +99,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
 
-        String uri = request.getRequestURI();
+        // Не getRequestURI: при forward-headers-strategy=framework в него попадает X-Forwarded-Prefix
+        // от клиента, маршрутизация префикс не видит, а проверки ниже видели — и лимит обходился
+        // одним заголовком (замер на стейдже 27.09). Сверяемся с путём, по которому запрос реально уйдёт.
+        String uri = RequestPaths.pathWithinApplication(request);
 
         // Rate limiting отключён — пропускаем все запросы
         if (!flagStore.isEnabled(FeatureFlag.RATE_LIMIT)) {
@@ -258,10 +262,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
 
         // Fail-safe: любой прочий путь под /api/suggestions/ — в (более строгий) suggestions-bucket,
-        // а НЕ в general. Exact-сравнение выше использует raw URI, тогда как роутинг Spring нормализует
-        // путь — если нормализация когда-нибудь пропустит вариант, которого exact не поймал, он не должен
-        // утекать в более щедрый general (100/60). Сейчас StrictHttpFirewall закрывает такие варианты,
-        // но защита fail-safe не должна на это полагаться.
+        // а НЕ в general. Exact-сравнение выше идёт по декодированному пути (RequestPaths), как и роутинг
+        // Spring, — но если их нормализации когда-нибудь разойдутся, вариант, которого exact не поймал,
+        // не должен утекать в более щедрый general (100/60). StrictHttpFirewall здесь не опора: закодированные
+        // буквы (/%61pi/...) он пропускает — на этом 27.09 и обходился лимит на вход.
         if ("GET".equalsIgnoreCase(method) && uri.startsWith("/api/suggestions/")) {
             return "suggestions:" + clientIp;
         }

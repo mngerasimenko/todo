@@ -20,6 +20,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import ru.mngerasimenko.todolist.featureflags.FeatureFlagNotFoundException;
+import ru.mngerasimenko.todolist.util.RequestPaths;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -193,7 +194,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException ex,
                                                                    HttpServletRequest request) {
         // Для /api/admin/** скрываем существование эндпоинта — возвращаем 404 вместо 403
-        if (request.getRequestURI().startsWith("/api/admin")) {
+        if (RequestPaths.pathWithinApplication(request).startsWith("/api/admin")) {
             return createErrorResponse(HttpStatus.NOT_FOUND, "Not Found", null);
         }
         log.warn("Access denied: {}", ex.getMessage());
@@ -206,12 +207,23 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<Map<String, Object>> handleBadCredentials(BadCredentialsException ex) {
         log.warn("Bad credentials: {}", ex.getMessage());
-        // Для логина — не раскрываем существование аккаунта
-        String message = ex.getMessage();
-        if (message != null && (message.contains("Bad credentials") || message.contains("bad credentials"))) {
-            message = "Invalid email or password";
-        }
-        return createErrorResponse(HttpStatus.UNAUTHORIZED, "Unauthorized", message);
+        // Текст не разбираем: сообщения фреймворка локализованы (у Spring Security свой
+        // ru-бандл), и подмена по английской строке молча переставала работать на запросе
+        // с Accept-Language: ru. Маскировка входа делается в AuthController, по факту
+        // неудачной аутентификации; сюда доходят уже наши собственные сообщения
+        // (refresh-токен истёк, отозван и подобные) — их и отдаём как есть.
+        return createErrorResponse(HttpStatus.UNAUTHORIZED, "Unauthorized", ex.getMessage());
+    }
+
+    /**
+     * Вход не состоялся по вине инфраструктуры (БД, конфигурация провайдеров), а не учётных данных.
+     * Отдельный код ответа нужен пользователю: 401 на этом месте отправляет его сбрасывать
+     * пароль, которого он не забывал. Текст приходит уже локализованным из контроллера —
+     * внутренности исключения наружу не уходят, они остаются в ERROR-строке лога со стеком.
+     */
+    @ExceptionHandler(AuthServiceUnavailableException.class)
+    public ResponseEntity<Map<String, Object>> handleAuthServiceUnavailable(AuthServiceUnavailableException ex) {
+        return createErrorResponse(HttpStatus.SERVICE_UNAVAILABLE, "Service Unavailable", ex.getMessage());
     }
 
     @ExceptionHandler(AuthenticationException.class)
