@@ -27,11 +27,12 @@ REST API бэкенд для совместного управления спи�
   <img src="https://render.gitanimals.org/lines/mngerasimenko?pet-id=843814633071056111" width="30%" height="100"/>  
 </a>
 
-## Demo (staging)
+## Demo
 
 | Клиент | URL | Логин |
 |--------|-----|-------|
-| REST API | `http://185.244.172.45:8090/api/` | JWT |
+| Web | **[todo.keepware.ru](https://todo.keepware.ru)** | `testuser@todolist.ru` / `testUser` |
+| REST API | `https://todo.keepware.ru/api/` | JWT |
 | Android | **[todolist-android](https://github.com/mngerasimenko/todolist-android)** | `testuser@todolist.ru` / `testUser` |
 
 ---
