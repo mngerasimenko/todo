@@ -24,7 +24,7 @@ services:
       - MAIL_PORT=${MAIL_PORT:-465}
       - MAIL_USERNAME=${MAIL_USERNAME:-}
       - MAIL_PASSWORD=${MAIL_PASSWORD:-}
-      - MAIL_FROM=${MAIL_FROM:-todo-noreply@keepware.ru}
+      - MAIL_FROM=${MAIL_FROM:-noreply@keepware.ru}
       - APP_BASE_URL=http://185.244.172.45:8090
       - APP_VERSION=staging
       - APP_FIREBASE_ENABLED=true
