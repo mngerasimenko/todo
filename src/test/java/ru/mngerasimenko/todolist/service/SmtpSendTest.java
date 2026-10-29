@@ -52,7 +52,7 @@ class SmtpSendTest {
         props.put("mail.smtp.timeout", "10000");
 
         EmailProperties emailProperties = new EmailProperties();
-        emailProperties.setFrom("todo-noreply@keepware.ru");
+        emailProperties.setFrom("noreply@keepware.ru");
         emailProperties.setBaseUrl("https://todo.keepware.ru");
         emailProperties.setVerificationTokenTtlHours(24);
         emailProperties.setResetTokenTtlHours(1);

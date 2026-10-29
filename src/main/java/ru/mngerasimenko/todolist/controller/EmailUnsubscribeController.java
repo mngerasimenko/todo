@@ -141,7 +141,7 @@ public class EmailUnsubscribeController {
     }
 
     private String alreadyUnsubscribedHtml(Locale locale) {
-        String contactEmail = "todo-noreply@keepware.ru";
+        String contactEmail = "noreply@keepware.ru";
         return pageHtml(
                 locale,
                 messageService.getMessage("unsubscribe.invalid.title", locale),
