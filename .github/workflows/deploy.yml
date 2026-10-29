@@ -299,6 +299,10 @@ jobs:
             SUPER_ADMIN_EMAILS=${{ secrets.SUPER_ADMIN_EMAILS }}
             MAIL_USERNAME=${{ secrets.MAIL_USERNAME }}
             MAIL_PASSWORD=${{ secrets.MAIL_PASSWORD }}
+            # Адрес отправителя. Без этой строки compose брал фоллбек
+            # todo-noreply@keepware.ru, и смена ящика в секретах до прода не доезжала:
+            # письма уходили с адреса, под который SMTP не авторизован (28.10.2026).
+            MAIL_FROM=${{ secrets.MAIL_FROM }}
             FIREBASE_ENABLED=true
             INACTIVE_REMINDER_ENABLED=${INACTIVE_REMINDER_ENABLED:-true}
             # Break-glass клиентских feature-флагов. Источник — repository variables, потому что
