@@ -66,6 +66,8 @@ docs/superpowers/
 # Private agent infra — versioned separately in a private repo (#260),
 # kept co-located so Claude Code resolves them from the project root.
 .claude/
+# Project memory lives in the private infra repo, not the public todo repo.
+/memory/
 .superpowers/
 # Git dir of the co-located private repo (never tracked by the public repo).
 /.private-git/
