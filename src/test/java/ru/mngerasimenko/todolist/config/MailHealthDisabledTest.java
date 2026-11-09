@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,7 +46,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * склейка {@code \<EOL>}-продолжений строк свойств, декодирование
  * {@code \\uXXXX}, снятие properties-эскейпов {@code \.}, срез #-комментариев
  * только вне кавычек и !-комментариев только в начале строки) — иначе Spring
- * резолвит management_health_mail_enabled, management:/health:/mail:,
+ * резолвит management_health_mail_enabled, management:health:mail,
  * flow-форму, escape-написание и строки с литеральным # в кавычках так,
  * что guard их не видит. Граница:
  * всё, что вне git-файлов — живой {@code .env}, host-local compose/override,
@@ -63,6 +64,18 @@ class MailHealthDisabledTest {
     private static final Path BASE_PROPERTIES = Path.of("src/main/resources/application.properties");
     /** База сканирования: флаг может жить в любом application-конфиге, кроме base. */
     private static final Path RESOURCES_DIR = Path.of("src/main/resources");
+    /**
+     * Файлы деплоя, которые лежат в git. Пропажа любого ослепляет сканер,
+     * поэтому отсутствие — падение, а не пропуск.
+     */
+    private static final List<Path> REQUIRED_DEPLOY_FILES = List.of(
+            Path.of("docker-compose.yml"),
+            Path.of("docker-compose.staging.yml"),
+            Path.of("Dockerfile"),
+            Path.of(".env.example"),
+            Path.of(".github/workflows/deploy.yml"));
+    /** Локальный override на машине, в git его нет. Отсутствие — не ошибка. */
+    private static final Path OPTIONAL_COMPOSE_OVERRIDE = Path.of("docker-compose.override.yml");
 
     @Autowired
     private ApplicationContext context;
@@ -91,7 +104,14 @@ class MailHealthDisabledTest {
                 .as("флаг отключения mail health лежит в application.properties")
                 .containsPattern("management\\.health\\.mail\\.enabled\\s*=\\s*false");
 
+        assertThat(missingRequiredDeployFiles(Files::exists))
+                .as("файлы деплоя из контракта сканера лежат в репозитории; "
+                        + "пропажа оставляет тест зелёным и сканер слепым")
+                .isEmpty();
+
         for (Path file : filesToScan()) {
+            // Обязательные файлы уже проверены выше. Сюда доходит только
+            // отсутствующий docker-compose.override.yml — его в git нет.
             if (!Files.exists(file)) {
                 continue;
             }
@@ -120,6 +140,15 @@ class MailHealthDisabledTest {
                     .doesNotContain("spring.application.json")
                     .doesNotContain("spring.config.");
         }
+    }
+
+    @Test
+    void missingRequiredDeployFileIsReportedAndOverrideStaysOptional() {
+        Path deploy = Path.of(".github/workflows/deploy.yml");
+        Path override = Path.of("docker-compose.override.yml");
+        List<Path> missing = missingRequiredDeployFiles(path -> !path.equals(deploy));
+        assertThat(missing).containsExactly(deploy);
+        assertThat(missing).doesNotContain(override);
     }
 
     /**
@@ -153,14 +182,13 @@ class MailHealthDisabledTest {
      * + векторы доставки env. Base в список попадает, но проверяется отдельно
      * (только spring.*) — см. {@link #flagLivesOnlyInBasePropertiesAndIsNotOverridden()}.
      */
+    private static List<Path> missingRequiredDeployFiles(Predicate<Path> exists) {
+        return REQUIRED_DEPLOY_FILES.stream().filter(path -> !exists.test(path)).toList();
+    }
+
     private static List<Path> filesToScan() {
-        List<Path> files = new ArrayList<>(List.of(
-                Path.of("docker-compose.yml"),
-                Path.of("docker-compose.staging.yml"),
-                Path.of("docker-compose.override.yml"),
-                Path.of("Dockerfile"),
-                Path.of(".env.example"),
-                Path.of(".github/workflows/deploy.yml")));
+        List<Path> files = new ArrayList<>(REQUIRED_DEPLOY_FILES);
+        files.add(OPTIONAL_COMPOSE_OVERRIDE);
         try (Stream<Path> resources = Files.walk(RESOURCES_DIR)) {
             resources.filter(Files::isRegularFile)
                     .filter(p -> {
