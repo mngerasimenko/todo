@@ -76,16 +76,18 @@ jobs:
       # integration (см. excludedGroups в pom.xml), а долговечность нельзя проверить на моках —
       # правка, из-за которой падала каждая запись в БД, проходила весь unit-набор зелёной.
       # Testcontainers поднимает Postgres; на linux-раннере сокет, а не TCP-хост из-под Windows.
-      # Демон раннера с 2026-11 отвергает API 1.32 (минимум 1.40). Клиент docker-java
-      # по умолчанию говорит 1.32 и получает 400, Testcontainers считает, что Docker нет.
+      # Демон раннера с 2026-11 отвергает API 1.32 (минимум 1.40). Затенённый
+      # docker-java внутри Testcontainers 1.21.3 переменную DOCKER_API_VERSION не читает
+      # (прогон 0dbf295: переменная стояла, клиент всё равно слал 1.32). Версию
+      # берёт из ~/.docker-java.properties и системного свойства api.version.
       - name: Run feature-flag durability tests (Testcontainers)
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
-          DOCKER_API_VERSION: "1.44"
         run: |
           # Удаляем прошлый отчёт: проверка ниже не должна засчитать файл от предыдущего прогона.
           rm -f target/surefire-reports/TEST-ru.mngerasimenko.todolist.featureflags.FeatureFlagOverrideDurabilityTest.xml
-          mvn test -Pintegration -Dtest='FeatureFlagOverrideDurabilityTest' -Djacoco.skip=true
+          printf 'api.version=1.44\n' > "$HOME/.docker-java.properties"
+          mvn test -Pintegration -Dtest='FeatureFlagOverrideDurabilityTest' -Djacoco.skip=true -Dapi.version=1.44
 
       # Проверка на «зелёный ноль»: с -Dtest шаблон удовлетворяет surefire по имени класса, а
       # групповой фильтр может оставить 0 тестов — и шаг, созданный ловить регрессию, сам молча
