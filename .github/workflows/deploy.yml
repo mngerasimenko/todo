@@ -76,9 +76,12 @@ jobs:
       # integration (см. excludedGroups в pom.xml), а долговечность нельзя проверить на моках —
       # правка, из-за которой падала каждая запись в БД, проходила весь unit-набор зелёной.
       # Testcontainers поднимает Postgres; на linux-раннере сокет, а не TCP-хост из-под Windows.
+      # Демон раннера с 2026-11 отвергает API 1.32 (минимум 1.40). Клиент docker-java
+      # по умолчанию говорит 1.32 и получает 400, Testcontainers считает, что Docker нет.
       - name: Run feature-flag durability tests (Testcontainers)
         env:
           DOCKER_HOST: unix:///var/run/docker.sock
+          DOCKER_API_VERSION: "1.44"
         run: |
           # Удаляем прошлый отчёт: проверка ниже не должна засчитать файл от предыдущего прогона.
           rm -f target/surefire-reports/TEST-ru.mngerasimenko.todolist.featureflags.FeatureFlagOverrideDurabilityTest.xml
