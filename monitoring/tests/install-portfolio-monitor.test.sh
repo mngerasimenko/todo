@@ -142,6 +142,8 @@ EOF
     && assert_cron_has "backup.sh" && assert_cron_has "stats-report.sh" && assert_cron_has "server-monitor.sh" \
     && assert_cron_has "restore-drill.sh" && assert_cron_has "vpscan-app" && assert_cron_has "replyai-probe.sh" \
     || { teardown; return; }
+  grep -qF -- "$VPSCAN_CANONICAL # portfolio-monitor:managed" "$TMP/crontab" \
+    || { fail "строка vpscan в чужой таблице не стала каноном — <<$(cat "$TMP/crontab")>>"; teardown; return; }
   [ -f "$TMP/conf/portfolio-monitor.sh" ] && [ -f "$TMP/conf/certbot-renew.sh" ] \
     || fail "root-копии скриптов не положены в $TMP/conf — <<$(ls "$TMP/conf")>>"
   pass
@@ -568,14 +570,18 @@ t_second_sourcing_does_not_leak_state_dir() {
 
 # ------------------------------------------ локальный прогон vpscan (прод) ---
 
-# Как строка стоит в root-crontab прода (сверено 21.09.2026).
+# Строка без флага — то, что стояло до 2026-11-11. Установщик всё ещё узнаёт её
+# и заменяет каноном, а не оставляет рядом.
 VPSCAN_LINE='0 12 * * * docker exec vpscan-app tsx /app/src/scraper/run-local.ts >> /var/log/vpscan-scrape-local.log 2>&1'
+# Канон с 2026-11-11: -e у docker exec, иначе следующий peer-запуск сотрёт
+# RUN_SOURCE и штатный крон после патча run-local станет manual.
+VPSCAN_CANONICAL='0 12 * * * docker exec -e RUN_SOURCE=prod_cron vpscan-app tsx /app/src/scraper/run-local.ts >> /var/log/vpscan-scrape-local.log 2>&1'
 
 t_peer_installs_vpscan_local_cron() {
   setup "прод: строка локального прогона vpscan ставится с меткой — после пересборки хоста её есть чем вернуть"
   run_install peer
   assert_rc 0 && assert_cron_count 1 "run-local.ts" || { teardown; return; }
-  grep -qF -- "$VPSCAN_LINE # portfolio-monitor:managed" "$TMP/crontab" \
+  grep -qF -- "$VPSCAN_CANONICAL # portfolio-monitor:managed" "$TMP/crontab" \
     || fail "строка vpscan не в каноничном виде с меткой — <<$(cat "$TMP/crontab")>>"
   pass
   teardown
@@ -585,7 +591,32 @@ t_peer_adopts_existing_vpscan_line_without_duplicating() {
   setup "прод: стоявшая руками строка vpscan заменяется своей, а не задваивается"
   printf '%s\n' "$VPSCAN_LINE" > "$TMP/crontab"
   run_install peer
-  assert_rc 0 && assert_cron_count 1 "run-local.ts" && assert_out_lacks "не совпавшая с ожидаемой" && pass
+  assert_rc 0 && assert_cron_count 1 "run-local.ts" && assert_out_lacks "не совпавшая с ожидаемой" || { teardown; return; }
+  grep -qF -- "$VPSCAN_CANONICAL # portfolio-monitor:managed" "$TMP/crontab" \
+    || fail "старая строка vpscan не заменена каноном с RUN_SOURCE — <<$(cat "$TMP/crontab")>>"
+  pass
+  teardown
+}
+
+t_peer_adopts_canonical_with_tab_before_tag() {
+  setup "прод: таб перед меткой канона vpscan схлопывается в одну строку, а не задваивается"
+  printf '0 12 * * * docker exec -e RUN_SOURCE=prod_cron vpscan-app tsx /app/src/scraper/run-local.ts >> /var/log/vpscan-scrape-local.log 2>&1\t# portfolio-monitor:managed\n' > "$TMP/crontab"
+  run_install peer
+  assert_rc 0 && assert_cron_count 1 "run-local.ts" && assert_out_lacks "не совпавшая с ожидаемой" || { teardown; return; }
+  grep -qF -- "$VPSCAN_CANONICAL # portfolio-monitor:managed" "$TMP/crontab" \
+    || fail "таб перед меткой не схлопнут в один канон — <<$(cat "$TMP/crontab")>>"
+  pass
+  teardown
+}
+
+t_peer_adopts_untagged_canonical_vpscan_line() {
+  setup "прод: канон vpscan без метки заменяется помеченной строкой, а не задваивается"
+  printf '%s\n' "$VPSCAN_CANONICAL" > "$TMP/crontab"
+  run_install peer
+  assert_rc 0 && assert_cron_count 1 "run-local.ts" && assert_out_lacks "не совпавшая с ожидаемой" || { teardown; return; }
+  grep -qF -- "$VPSCAN_CANONICAL # portfolio-monitor:managed" "$TMP/crontab" \
+    || fail "канон без метки не заменён одной помеченной строкой — <<$(cat "$TMP/crontab")>>"
+  pass
   teardown
 }
 
@@ -593,7 +624,10 @@ t_peer_vpscan_line_with_extra_whitespace_is_replaced() {
   setup "прод: строка vpscan с лишними пробелами и табом тоже снимается — иначе прогон задвоился бы"
   printf '0 12  *  * *\tdocker exec vpscan-app tsx /app/src/scraper/run-local.ts >> /var/log/vpscan-scrape-local.log 2>&1   \n' > "$TMP/crontab"
   run_install peer
-  assert_rc 0 && assert_cron_count 1 "run-local.ts" && pass
+  assert_rc 0 && assert_cron_count 1 "run-local.ts" || { teardown; return; }
+  grep -qF -- "$VPSCAN_CANONICAL # portfolio-monitor:managed" "$TMP/crontab" \
+    || fail "строка vpscan с лишними пробелами не стала каноном — <<$(cat "$TMP/crontab")>>"
+  pass
   teardown
 }
 
@@ -602,7 +636,10 @@ t_peer_rerun_keeps_single_vpscan_line() {
   printf '%s\n' "$VPSCAN_LINE" > "$TMP/crontab"
   run_install peer
   run_install peer
-  assert_rc 0 && assert_writes 1 && assert_cron_count 1 "run-local.ts" && pass
+  assert_rc 0 && assert_writes 1 && assert_cron_count 1 "run-local.ts" || { teardown; return; }
+  grep -qF -- "$VPSCAN_CANONICAL # portfolio-monitor:managed" "$TMP/crontab" \
+    || fail "повторная установка не оставила канон vpscan — <<$(cat "$TMP/crontab")>>"
+  pass
   teardown
 }
 
@@ -698,7 +735,10 @@ t_vpscan_line_with_leading_space_is_replaced() {
   printf ' %s
 ' "$VPSCAN_LINE" > "$TMP/crontab"
   run_install peer
-  assert_rc 0 && assert_cron_count 1 "run-local.ts" && pass
+  assert_rc 0 && assert_cron_count 1 "run-local.ts" || { teardown; return; }
+  grep -qF -- "$VPSCAN_CANONICAL # portfolio-monitor:managed" "$TMP/crontab" \
+    || fail "строка vpscan с ведущим пробелом не стала каноном — <<$(cat "$TMP/crontab")>>"
+  pass
   teardown
 }
 
