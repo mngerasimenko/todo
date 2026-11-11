@@ -207,9 +207,20 @@ public class SuggestionReseedServiceImpl implements SuggestionReseedService {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    Cache cache = cacheManager.getCache(RedisCacheConfig.SUGGESTIONS);
-                    if (cache != null) {
-                        cache.clear();
+                    try {
+                        Cache cache = cacheManager.getCache(RedisCacheConfig.SUGGESTIONS);
+                        if (cache != null) {
+                            cache.clear();
+                        }
+                    } catch (RuntimeException ex) {
+                        // try/catch обязателен: Spring зовёт afterCommit УЖЕ после коммита
+                        // и пробрасывает исключение вызывающему — сбой Redis стал бы HTTP 500
+                        // на уже применённом reseed. Второе назначение — изоляция: фаза
+                        // afterCommit в Spring идёт без try/catch между колбэками, упавший clear
+                        // обрывал бы все зарегистрированные после него. Лог со стектрейсом
+                        // (ex последним аргументом slf4j): ловится обёртка, важна её причина.
+                        // Ловим только RuntimeException: Error проходит насквозь сознательно.
+                        log.warn("[suggestions-cache] afterCommit failed", ex);
                     }
                 }
             });

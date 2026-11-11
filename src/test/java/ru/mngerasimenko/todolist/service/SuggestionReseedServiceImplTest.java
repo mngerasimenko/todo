@@ -1,18 +1,26 @@
 package ru.mngerasimenko.todolist.service;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.cache.CacheManager;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import ru.mngerasimenko.todolist.config.RedisCacheConfig;
 import ru.mngerasimenko.todolist.crypto.CryptoService;
 import ru.mngerasimenko.todolist.dto.admin.SuggestionReseedReport;
 import ru.mngerasimenko.todolist.model.Todo;
 import ru.mngerasimenko.todolist.repository.TaskSuggestionRepository;
 import ru.mngerasimenko.todolist.repository.TodoRepository;
 import ru.mngerasimenko.todolist.settings.SuggestionProperties;
+import ru.mngerasimenko.todolist.util.TransactionCommitTestUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,7 +30,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -313,5 +323,52 @@ class SuggestionReseedServiceImplTest {
         service.reseed(true);
 
         verify(suggestionRepository, never()).tryReseedAdvisoryLock(anyLong());
+    }
+
+    // ===== устойчивость afterCommit-колбэка к сбою Redis =====
+
+    /**
+     * Сбой Redis в afterCommit-колбэке {@code registerCacheEvictAfterCommit} (clear словаря
+     * подсказок) не должен ни пробрасываться наружу (Spring зовёт {@code afterCommit} уже
+     * после коммита — исключение стало бы HTTP 500 на применённом reseed), ни срывать
+     * следующие колбэки: фаза {@code afterCommit} в Spring идёт без try/catch между ними.
+     */
+    @Test
+    void reseed_AfterCommitRedisFailureIsLoggedAndDoesNotPropagate() {
+        givenTodos(todo("молоко", 1L), todo("молоко", 2L), todo("молоко", 3L));
+
+        org.springframework.cache.Cache suggestions = mock(org.springframework.cache.Cache.class);
+        doThrow(new RedisConnectionFailureException("connection refused"))
+                .when(suggestions).clear();
+        lenient().when(cacheManager.getCache(RedisCacheConfig.SUGGESTIONS)).thenReturn(suggestions);
+
+        Logger logger = (Logger) LoggerFactory.getLogger(SuggestionReseedServiceImpl.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.reseed(false);
+
+            // Без перехвата исключения в колбэке упавший clear обрывает фазу afterCommit
+            // и исключение уходит вызывающему (HTTP 500 на уже применённом reseed).
+            TransactionCommitTestUtils.driveCommit();
+
+            verify(suggestions).clear();
+
+            ILoggingEvent failure = appender.list.stream()
+                    .filter(e -> e.getFormattedMessage().contains("afterCommit failed"))
+                    .reduce((first, second) -> second)
+                    .orElseThrow(() -> new AssertionError(
+                            "сбой Redis в afterCommit не залогирован; лог: " + appender.list));
+            assertThat(failure.getThrowableProxy()).isNotNull();
+            assertThat(failure.getThrowableProxy().getClassName())
+                    .isEqualTo(RedisConnectionFailureException.class.getName());
+            assertThat(failure.getThrowableProxy().getStackTraceElementProxyArray()).isNotEmpty();
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+            logger.detachAppender(appender);
+        }
     }
 }

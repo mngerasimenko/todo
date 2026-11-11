@@ -1,5 +1,8 @@
 package ru.mngerasimenko.todolist.service;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -7,7 +10,13 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import ru.mngerasimenko.todolist.config.RedisCacheConfig;
+import ru.mngerasimenko.todolist.util.TransactionCommitTestUtils;
 import ru.mngerasimenko.todolist.dto.TodoDto;
 import ru.mngerasimenko.todolist.dto.list.InviteInfoResponse;
 import ru.mngerasimenko.todolist.dto.list.InviteResponse;
@@ -37,6 +46,7 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -1083,6 +1093,110 @@ class TaskListServiceImplTest {
 
         assertThatThrownBy(() -> taskListService.acceptInvite(rawToken, 1L))
                 .isInstanceOf(TokenExpiredException.class);
+    }
+
+    // ===== устойчивость afterCommit-колбэков к сбою Redis =====
+
+    /**
+     * Сбой Redis в afterCommit-колбэке eviction'а не должен ни пробрасываться наружу
+     * (Spring зовёт {@code afterCommit} уже после коммита — исключение стало бы HTTP 500
+     * на применённой правке), ни срывать СЛЕДУЮЩИЙ зарегистрированный колбэк: фаза
+     * {@code afterCommit} в Spring идёт без try/catch между колбэками.
+     *
+     * <p>Второй колбэк регистрируется вручную сразу после мутации — ровно такая очередь
+     * синхронизаций и гоняется при коммите.
+     */
+    @Test
+    void updatePersonalization_AfterCommitRedisFailureIsLoggedAndNextCallbackStillRuns() {
+        ListResponse expectedResponse = ListResponse.builder()
+                .id(10L).name("TestList").color("#22C55E").role("ADMIN").build();
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
+                .thenReturn(Optional.of(testTaskListUser));
+        when(taskListUserRepository.saveAndFlush(testTaskListUser)).thenReturn(testTaskListUser);
+        when(taskListMapper.toResponse(testTaskList, TaskListRole.ADMIN, 0, "#22C55E"))
+                .thenReturn(expectedResponse);
+
+        org.springframework.cache.Cache taskLists = mock(org.springframework.cache.Cache.class);
+        doThrow(new RedisConnectionFailureException("connection refused"))
+                .when(taskLists).evict(any());
+        lenient().when(cacheManager.getCache(RedisCacheConfig.TASK_LISTS)).thenReturn(taskLists);
+
+        Logger logger = (Logger) LoggerFactory.getLogger(TaskListServiceImpl.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            taskListService.updatePersonalization(10L, 1L, "#22C55E");
+
+            // Независимый колбэк ПОСЛЕ колбэка сервиса: без перехвата исключения
+            // в первом он обрывает фазу и до этого не доходит.
+            AtomicBoolean nextCallbackRan = new AtomicBoolean(false);
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    nextCallbackRan.set(true);
+                }
+            });
+
+            TransactionCommitTestUtils.driveCommit();
+
+            assertThat(nextCallbackRan)
+                    .as("сбой Redis в первом колбэке не должен срывать следующий")
+                    .isTrue();
+
+            ILoggingEvent failure = appender.list.stream()
+                    .filter(e -> e.getFormattedMessage().contains("afterCommit failed"))
+                    .reduce((first, second) -> second)
+                    .orElseThrow(() -> new AssertionError(
+                            "сбой Redis в afterCommit не залогирован; лог: " + appender.list));
+            assertThat(failure.getThrowableProxy()).isNotNull();
+            assertThat(failure.getThrowableProxy().getClassName())
+                    .isEqualTo(RedisConnectionFailureException.class.getName());
+            assertThat(failure.getThrowableProxy().getStackTraceElementProxyArray()).isNotEmpty();
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+            logger.detachAppender(appender);
+        }
+    }
+
+    /**
+     * Сбой Redis на первом участнике не должен оставлять кэш остальных:
+     * внутри одного колбэка ключи идут циклом, и один try на весь цикл
+     * обрывает его так же, как Spring обрывает фазу между колбэками.
+     */
+    @Test
+    void deleteList_AfterCommitFailureOnFirstMemberStillEvictsTheRest() {
+        User other = new User();
+        other.setId(2L);
+        TaskListUser otherMembership = new TaskListUser();
+        otherMembership.setId(new TaskListUserId(10L, 2L));
+        otherMembership.setUser(other);
+        otherMembership.setTaskList(testTaskList);
+        otherMembership.setRole(TaskListRole.USER);
+
+        when(taskListUserRepository.findByIdListIdAndIdUserId(10L, 1L))
+                .thenReturn(Optional.of(testTaskListUser));
+        when(taskListUserRepository.findByIdListId(10L))
+                .thenReturn(List.of(testTaskListUser, otherMembership));
+
+        org.springframework.cache.Cache taskLists = mock(org.springframework.cache.Cache.class);
+        doThrow(new RedisConnectionFailureException("connection refused"))
+                .when(taskLists).evict(1L);
+        lenient().when(cacheManager.getCache(RedisCacheConfig.TASK_LISTS)).thenReturn(taskLists);
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            taskListService.deleteList(10L, 1L);
+            TransactionCommitTestUtils.driveCommit();
+
+            verify(taskLists).evict(1L);
+            verify(taskLists).evict(2L);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
 }
