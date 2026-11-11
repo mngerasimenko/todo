@@ -671,7 +671,7 @@ external». Если роль хоста действительно меняет
 виде (по укороченной цитате установщик строку не узнает и поставит рядом вторую):
 
 ```
-0 12 * * * docker exec vpscan-app tsx /app/src/scraper/run-local.ts >> /var/log/vpscan-scrape-local.log 2>&1
+0 12 * * * docker exec -e RUN_SOURCE=prod_cron vpscan-app tsx /app/src/scraper/run-local.ts >> /var/log/vpscan-scrape-local.log 2>&1
 ```
 
 Последняя
@@ -679,8 +679,11 @@ external». Если роль хоста действительно меняет
 ходит: он поднимает контейнер из-под своей учётки и crontab'ом не управляет. До
 21.09.2026 строка существовала только на живом хосте и при пересборке машины
 исчезла бы молча — поэтому её ведёт установщик, точно так же, как раньше подобрал
-строку reload'а certbot. Стоявшую руками строку он забирает себе по точному тексту
-(с точностью до пробелов), а не ставит вторую. Выключатель опрашивалки эту строку
+строку reload'а certbot. Строку, которая стояла руками до 2026-11-11 (тот же текст без
+`-e RUN_SOURCE=prod_cron`), он забирает по точному тексту, с точностью до пробелов, и
+ставит вместо неё канон выше. Тот же канон без метки (как в блоке выше) он тоже
+забирает и ставит одну помеченную строку: иначе в 12:00 сборщик пошёл бы дважды.
+Выключатель опрашивалки эту строку
 не трогает: он выключает наблюдение, а не чужую ежедневную задачу.
 
 Crontab переписывается, **только если он действительно меняется**, и перед этим
@@ -762,8 +765,9 @@ grep -q 'certbot renew --quiet' crontab.rollback \
 # Дописываем её, ТОЛЬКО если она не уцелела сама: пока установщик не взял её под
 # метку (первый прогон после 22.09.2026), grep выше её сохраняет, и безусловный
 # echo дал бы вторую — сборщик пошёл бы в 12:00 дважды и дважды написал в ВК.
+# Возвращаем канон с -e и с меткой: после отката строка уже такая, какую пишет peer.
 grep -q 'run-local.ts' crontab.rollback \
-  || echo '0 12 * * * docker exec vpscan-app tsx /app/src/scraper/run-local.ts >> /var/log/vpscan-scrape-local.log 2>&1' >> crontab.rollback
+  || echo '0 12 * * * docker exec -e RUN_SOURCE=prod_cron vpscan-app tsx /app/src/scraper/run-local.ts >> /var/log/vpscan-scrape-local.log 2>&1 # portfolio-monitor:managed' >> crontab.rollback
 diff crontab.before-rollback crontab.rollback                     # ушли строки опрашивалки и продления, вернулись старые
 crontab crontab.rollback
 ```

@@ -370,7 +370,10 @@ CRON_CERT=""
 # всё остальное. Контейнера на машине может не быть: тогда строка будет писать
 # ошибку docker в свой лог — это видно, в отличие от её отсутствия.
 CRON_VPSCAN=""
-[ "$ROLE" = "peer" ] && CRON_VPSCAN="0 12 * * * docker exec vpscan-app tsx /app/src/scraper/run-local.ts >> /var/log/vpscan-scrape-local.log 2>&1 ${TAG}"
+# -e у самого docker exec: форма RUN_SOURCE=prod_cron docker exec в контейнер не попадает.
+# Без флага следующий peer-запуск стёр бы правку crontab от 2026-11-11, и после патча
+# run-local штатный крон писал бы source=manual.
+[ "$ROLE" = "peer" ] && CRON_VPSCAN="0 12 * * * docker exec -e RUN_SOURCE=prod_cron vpscan-app tsx /app/src/scraper/run-local.ts >> /var/log/vpscan-scrape-local.log 2>&1 ${TAG}"
 
 # Строка cron зовёт скрипт напрямую: без бита исполнения cron падает с «Permission
 # denied», а лог этого никто не читает — так внутренний монитор прода однажды молча
@@ -385,6 +388,10 @@ CRON_VPSCAN=""
 LEGACY_MON='*/5 * * * * /root/monitoring/external-monitor.sh'
 LEGACY_CERT='0 */12 * * * docker exec certbot certbot renew --quiet && docker exec nginx-proxy nginx -s reload'
 LEGACY_VPSCAN='0 12 * * * docker exec vpscan-app tsx /app/src/scraper/run-local.ts >> /var/log/vpscan-scrape-local.log 2>&1'
+# Канон без метки — та же команда, что CRON_VPSCAN, но без хвоста. Иначе строка из
+# README (её цитируют без метки) остаётся, а рядом встаёт вторая.
+VPSCAN_BARE=""
+[ -n "$CRON_VPSCAN" ] && VPSCAN_BARE="${CRON_VPSCAN% ${TAG}}"
 
 # Снимаем только своё: незакомментированные строки с меткой в конце и прежние строки,
 # которые эта установка заменяет, — только вместе с установкой замены. Шаблон по
@@ -396,7 +403,7 @@ LEGACY_VPSCAN='0 12 * * * docker exec vpscan-app tsx /app/src/scraper/run-local.
 filter_crontab() {
   printf '%s\n' "$EXISTING" | awk -v mode="$1" -v tag=" ${TAG}" \
       -v mon="${CRON_MON:+$LEGACY_MON}" -v cert="${CRON_CERT:+$LEGACY_CERT}" \
-      -v vps="${CRON_VPSCAN:+$LEGACY_VPSCAN}" '
+      -v vps="${CRON_VPSCAN:+$LEGACY_VPSCAN}" -v vpsbare="$VPSCAN_BARE" '
     { line = $0; sub(/[ \t\r]+$/, "", line)
       # Ведущие пробелы снимаем тоже: cron такую строку принимает, а сравнение
       # с ожидаемым текстом на ней не сходилось — и вместо замены рядом вставала
@@ -405,7 +412,7 @@ filter_crontab() {
       tagged = length(line) >= length(tag) && substr(line, length(line) - length(tag) + 1) == tag
       commented = line ~ /^[ \t]*#/
       managed = (tagged && !commented) || (mon != "" && norm == mon) || (cert != "" && norm == cert) \
-                || (vps != "" && norm == vps) }
+                || (vps != "" && norm == vps) || (vpsbare != "" && (norm == vpsbare || norm == vpsbare tag)) }
     (mode == "keep" && !managed) || (mode == "drop" && managed) || (mode == "commented" && tagged && commented) { print }'
 }
 
