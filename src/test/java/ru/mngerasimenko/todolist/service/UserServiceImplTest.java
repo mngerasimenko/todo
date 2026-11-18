@@ -1,5 +1,8 @@
 package ru.mngerasimenko.todolist.service;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -7,8 +10,13 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import ru.mngerasimenko.todolist.config.RedisCacheConfig;
+import ru.mngerasimenko.todolist.util.TransactionCommitTestUtils;
 import ru.mngerasimenko.todolist.dto.UserDto;
 import ru.mngerasimenko.todolist.exception.TokenExpiredException;
 import ru.mngerasimenko.todolist.exception.UserNotFoundException;
@@ -1299,5 +1307,80 @@ class UserServiceImplTest {
 
         assertThatThrownBy(() -> userService.changePassword(1L, "password", "newSecret"))
                 .isInstanceOf(RuntimeException.class);
+    }
+
+    // ===== устойчивость afterCommit-колбэков к сбою Redis =====
+
+    /**
+     * Сбой Redis в ПЕРВОМ afterCommit-колбэке не должен ни ронять ответ (Spring зовёт
+     * {@code afterCommit} уже после коммита и пробрасывает исключение вызывающему →
+     * HTTP 500 на успешно применённой правке), ни срывать ВТОРОЙ колбэк: фаза
+     * {@code afterCommit} в Spring идёт без try/catch между колбэками.
+     *
+     * <p>Смена email регистрирует ровно два evict-колбэка — по старому и по новому email —
+     * поэтому проверка «второй всё равно вызван» здесь натуральная, а не ручная
+     * регистрацией синхронизации.
+     */
+    @Test
+    void updateUser_ChangedEmail_AfterCommitRedisFailureIsLoggedAndSecondCallbackStillRuns() {
+        User updated = new User();
+        updated.setId(1L);
+        updated.setName("user");
+        updated.setEmail("new@mail.ru");
+        updated.setPassword("ENC(newpass)");
+
+        when(repository.findById(1L)).thenReturn(Optional.of(user));
+        when(repository.findByEmailHash(anyString())).thenReturn(null); // новый email не занят
+        when(passwordEncoder.encode("newpass")).thenReturn("ENC(newpass)");
+        when(repository.save(any(User.class))).thenReturn(updated);
+        when(mapper.toDto(updated)).thenReturn(userDto);
+
+        org.springframework.cache.Cache usersMe = mock(org.springframework.cache.Cache.class);
+        org.springframework.cache.Cache userAuth = mock(org.springframework.cache.Cache.class);
+        // Падает evict users-me. user-auth того же колбэка всё равно должен быть вызван:
+        // это другой ключ, а не другой колбэк.
+        doThrow(new RedisConnectionFailureException("connection refused"))
+                .when(usersMe).evict(any());
+        lenient().when(cacheManager.getCache(RedisCacheConfig.USERS_ME)).thenReturn(usersMe);
+        lenient().when(cacheManager.getCache(RedisCacheConfig.USER_AUTH)).thenReturn(userAuth);
+
+        Logger logger = (Logger) LoggerFactory.getLogger(UserServiceImpl.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            UserDto dto = new UserDto();
+            dto.setEmail("new@mail.ru");
+            dto.setPassword("newpass");
+            dto.setName("user");
+
+            userService.updateUser(1L, dto);
+
+            // Прогоняет фазы коммита как Spring; без перехвата в колбэке упавший
+            // eviction обрывает фазу и второй колбэк не вызывается.
+            TransactionCommitTestUtils.driveCommit();
+
+            // 1) Сбой залогирован со стектрейсом (throwable в событии — не текст один)
+            ILoggingEvent failure = appender.list.stream()
+                    .filter(e -> e.getFormattedMessage().contains("afterCommit failed"))
+                    .reduce((first, second) -> second)
+                    .orElseThrow(() -> new AssertionError(
+                            "сбой Redis в afterCommit не залогирован; лог: " + appender.list));
+            assertThat(failure.getThrowableProxy()).isNotNull();
+            assertThat(failure.getThrowableProxy().getClassName())
+                    .isEqualTo(RedisConnectionFailureException.class.getName());
+            assertThat(failure.getThrowableProxy().getStackTraceElementProxyArray()).isNotEmpty();
+
+            // 2) Второй колбэк (evict по НОВОМУ email) вызван несмотря на сбой первого.
+            //    user-auth обоих колбэков тоже: сбой users-me не должен оставлять старый hash.
+            verify(usersMe).evict("new@mail.ru");
+            verify(userAuth).evict("user@mail.ru");
+            verify(userAuth).evict("new@mail.ru");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+            logger.detachAppender(appender);
+        }
     }
 }
