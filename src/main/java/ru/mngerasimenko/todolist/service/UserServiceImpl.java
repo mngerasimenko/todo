@@ -128,19 +128,44 @@ public class UserServiceImpl implements UserService {
         String normalizedEmail = email.toLowerCase();
         Runnable evict = () -> {
             Cache userMe = cacheManager.getCache(RedisCacheConfig.USERS_ME);
-            if (userMe != null) userMe.evict(normalizedEmail);
+            evictOne(userMe, normalizedEmail);
             Cache userAuth = cacheManager.getCache(RedisCacheConfig.USER_AUTH);
-            if (userAuth != null) userAuth.evict(normalizedEmail);
+            evictOne(userAuth, normalizedEmail);
         };
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    evict.run();
+                    try {
+                        evict.run();
+                    } catch (RuntimeException ex) {
+                        // try/catch обязателен: Spring зовёт afterCommit УЖЕ после коммита
+                        // и пробрасывает исключение вызывающему — сбой Redis стал бы HTTP 500
+                        // на применённой правке. Второе назначение — изоляция: фаза afterCommit
+                        // в Spring идёт без try/catch между колбэками, упавший eviction обрывал
+                        // бы все зарегистрированные после него. Лог со стектрейсом (ex последним
+                        // аргументом slf4j): ловится обёртка, важна её причина. Ловим только
+                        // RuntimeException: Error проходит насквозь сознательно.
+                        log.warn("[user-cache] afterCommit failed", ex);
+                    }
                 }
             });
         } else {
             evict.run();
+        }
+    }
+
+    /**
+     * Один ключ — один try. Сбой Redis на {@code users-me} не должен оставлять
+     * {@code user-auth}: это другой ключ того же колбэка, а не следующий колбэк.
+     * Email в лог не пишем.
+     */
+    private void evictOne(Cache cache, Object key) {
+        if (cache == null) return;
+        try {
+            cache.evict(key);
+        } catch (RuntimeException ex) {
+            log.warn("[user-cache] afterCommit failed", ex);
         }
     }
 

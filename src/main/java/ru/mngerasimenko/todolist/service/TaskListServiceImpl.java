@@ -512,12 +512,33 @@ public class TaskListServiceImpl implements TaskListService {
             Cache cache = cacheManager.getCache(RedisCacheConfig.TASK_LISTS);
             if (cache == null) return;
             for (Long uid : userIds) {
-                if (uid != null) cache.evict(uid);
+                if (uid == null) continue;
+                try {
+                    cache.evict(uid);
+                } catch (RuntimeException ex) {
+                    // Один участник — один try: сбой на первом не оставляет
+                    // остальным призрак списка до TTL.
+                    log.warn("[task-lists-cache] afterCommit failed, userId={}", uid, ex);
+                }
             }
         };
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override public void afterCommit() { evict.run(); }
+                @Override
+                public void afterCommit() {
+                    try {
+                        evict.run();
+                    } catch (RuntimeException ex) {
+                        // try/catch обязателен: Spring зовёт afterCommit УЖЕ после коммита
+                        // и пробрасывает исключение вызывающему — сбой Redis стал бы HTTP 500
+                        // на применённой правке. Второе назначение — изоляция: фаза afterCommit
+                        // в Spring идёт без try/catch между колбэками, упавший eviction обрывал
+                        // бы все зарегистрированные после него. Лог со стектрейсом (ex последним
+                        // аргументом slf4j): ловится обёртка, важна её причина. Ловим только
+                        // RuntimeException: Error проходит насквозь сознательно.
+                        log.warn("[task-lists-cache] afterCommit failed", ex);
+                    }
+                }
             });
         } else {
             evict.run();
